@@ -1,23 +1,49 @@
 # Build status
 
-## Done
-- Chapter 99 rate-line parser — 565/565 lines, 0 misparsed
-- HTS tree + rate inheritance — 19,949 leaf codes
-- U.S. Notes scope extractor — 67 headings, 10,982 product codes
-- Duty stack resolver — base + overlays + MPF/HMF, fully cited
-- IEEPA refund segregation
+## Working end to end
 
-## Next
-1. CROSS ingest (221,616 rulings) -> Postgres + full-text index
-2. Classifier: retrieval over rulings + GRI reasoning (Claude)
-3. Federal Register poller -> change alerts
-4. FastAPI service + Next.js app
-5. Catalog upload -> portfolio audit -> defensible binder export
-6. Programmatic SEO: /hts/{code}, /tariff/{country}/{chapter}, /changes
+| Component | State |
+|---|---|
+| Chapter 99 rate-line parser | 565/565 lines, 0 misparsed |
+| HTS tree + rate inheritance | 19,949 leaf codes |
+| U.S. Notes scope extractor | 67 headings, 12,362 heading/code pairs |
+| Duty stack resolver | base + remedies + MPF/HMF, every line cited |
+| IEEPA segregation | struck-down duty reported as refundable |
+| CROSS ingest | 200,962 rulings, 267,738 code links |
+| Classifier | retrieval + optional GRI reasoning |
+| Federal Register monitor | 1,364 actions, full-text HTS extraction |
+| API | 10 endpoints |
+| Web | 6 pages + 19,954-URL sitemap |
+
+## Classifier accuracy (400 held-out CBP rulings)
+
+| Metric | Retrieval only |
+|---|---|
+| top-1 heading (4-digit) | 61.8% |
+| top-1 subheading (6-digit) | 49.5% |
+| top-3 heading | 83.2% |
+
+Retrieval recall ceiling is 99.5% — the correct heading is almost always among
+the ruling votes, so ranking is where the remaining accuracy lives. The GRI
+reasoning layer picks from the top-3 set, so 83.2% is the ceiling it works
+against. That layer needs an API key and has not been measured yet.
 
 ## Known gaps
-- ~78 remedy headings still unscoped (notes use prose, not enumeration)
-- Note 20(s)(ii)-style "described in" scope needs LLM interpretation
-- Specific/compound duties (cents/kg) need quantity data
+
+- Reasoning layer unmeasured (no API key set)
+- ~78 remedy headings still unscoped: their notes describe goods in prose
+  rather than enumerating codes, which needs the reasoning layer
+- Specific and compound duties (cents/kg) need quantity data to be exact
 - Suspension detection covers footnote-declared cases only
-- AD/CVD orders not yet integrated (separate CBP dataset)
+- AD/CVD orders not integrated (separate CBP dataset)
+- Federal Register HTS extraction has occasional false positives from
+  non-tariff numerics
+- Ruling bodies still loading; accuracy should improve as coverage grows
+
+## Not built
+
+- Accounts, billing, saved catalogues (needs Postgres — SQLite is reference
+  data only)
+- Entry-summary (CBP 7501) ingest for the overpayment audit
+- Duty drawback eligibility
+- Change alerts wired to a customer catalogue
