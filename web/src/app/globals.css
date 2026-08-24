@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #ffffff;
+  --surface: #f7f8f9;
+  --border: #e3e6e8;
+  --ink: #10161c;
+  --muted: #5d6b78;
+  --accent: #0f5c4a;
+  --accent-soft: #e8f2ef;
+  --warn: #8a5a00;
+  --warn-soft: #fdf5e3;
+  --danger: #9b2c2c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117;
+    --surface: #151b23;
+    --border: #262d36;
+    --ink: #e6edf3;
+    --muted: #93a1af;
+    --accent: #4cc4a4;
+    --accent-soft: #12241f;
+    --warn: #e0b341;
+    --warn-soft: #241d0e;
+    --danger: #f28b82;
+  }
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "cv05" 1;
+  line-height: 1.55;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+.scroll-x { overflow-x: auto; }

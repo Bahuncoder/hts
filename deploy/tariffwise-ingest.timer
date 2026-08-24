@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh tariff data daily
+
+[Timer]
+# Tariff actions publish on business mornings; refresh before the US workday.
+OnCalendar=*-*-* 09:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

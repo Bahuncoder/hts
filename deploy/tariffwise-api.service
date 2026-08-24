@@ -1,0 +1,21 @@
+[Unit]
+Description=Tariffwise API
+After=network.target
+
+[Service]
+Type=simple
+User=tariffwise
+WorkingDirectory=/opt/tariffwise
+Environment=PYTHONUNBUFFERED=1
+# Set ANTHROPIC_API_KEY here to enable GRI reasoning in the classifier.
+EnvironmentFile=-/etc/tariffwise/api.env
+ExecStart=/opt/tariffwise/.venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8099 --workers 2
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
