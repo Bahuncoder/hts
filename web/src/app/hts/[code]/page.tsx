@@ -151,7 +151,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
           <h2 className="text-xl font-semibold tracking-tight">CBP rulings on this code</h2>
           <div className="space-y-1.5">
             {d.rulings.map((r) => (
-              <div key={r.ruling_number} className="text-[14px]">
+              <div key={r.ruling_number} className="clamp-1 text-[14px]">
                 <a href={r.url} target="_blank" rel="noopener noreferrer"
                    className="font-medium hover:underline" style={{ color: "var(--accent)" }}>
                   {r.ruling_number}

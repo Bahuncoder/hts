@@ -145,7 +145,8 @@ def _search_rulings(conn: sqlite3.Connection, query: str, limit: int) -> list[sq
         return []
     return conn.execute(
         """SELECT r.ruling_number, r.subject, r.ruling_date, r.tariffs, r.revoked,
-                  r.url, bm25(ruling_fts) AS rank
+                  r.url, substr(COALESCE(r.body, ''), 1, 900) AS body_head,
+                  bm25(ruling_fts) AS rank
              FROM ruling_fts f JOIN ruling r ON r.ruling_number = f.ruling_number
             WHERE ruling_fts MATCH ?
             ORDER BY rank LIMIT ?""",
@@ -200,7 +201,14 @@ def retrieve(conn: sqlite3.Connection, query: str, *, limit: int = 8) -> list[Ca
     seen_rulings: dict[str, set[str]] = {}
 
     for row in _search_rulings(conn, query, limit=120):
-        cov = _coverage(terms, row["subject"] or "")
+        # Score against the opening of the ruling as well as its subject. The
+        # subject names the goods; the opening paragraphs describe them, which
+        # is where material and construction — the facts classification turns
+        # on — actually appear.
+        cov = max(
+            _coverage(terms, row["subject"] or ""),
+            _coverage(terms, row["subject"] or "", row["body_head"] or ""),
+        )
         if cov < 0.34:
             continue
         # Cubing coverage separates a close match from a loose one decisively;

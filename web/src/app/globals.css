@@ -41,3 +41,13 @@ body {
 .tabular { font-variant-numeric: tabular-nums; }
 
 .scroll-x { overflow-x: auto; }
+
+/* Source data is uneven: some CBP ruling subjects carry the whole letter.
+   Clamp so a bad record degrades the line, not the page. */
+.clamp-1, .clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clamp-1 { -webkit-line-clamp: 1; }
+.clamp-2 { -webkit-line-clamp: 2; }

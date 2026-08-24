@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,25 @@ SEARCH = "https://rulings.cbp.gov/api/search"
 DETAIL = "https://rulings.cbp.gov/api/ruling/{}"
 PAGE_SIZE = 100
 UA = "tariffwise-ingest/0.1 (+public data research)"
+
+# CROSS subject lines are not consistently subjects. Some carry the whole
+# ruling letter, capped at 1000 characters, with the body running on after the
+# salutation. Left alone they swamp the retrieval scoring and render as walls
+# of text, so the letter is trimmed back to the actual subject.
+_SALUTATION = re.compile(
+    r"\s*(?:Dear\s+(?:Mr|Ms|Mrs|Miss|Sir|Madam|Messrs)\b"
+    r"|In your letter dated"
+    r"|RE:\s)", re.I)
+
+
+def clean_subject(text: str) -> str:
+    s = re.sub(r"[\x00-\x1f]+", " ", text or "")
+    s = _SALUTATION.split(s, maxsplit=1)[0]
+    s = re.sub(r"\s+", " ", s).strip()
+    if len(s) > 220:
+        cut = s.rfind(" ", 0, 220)
+        s = s[: cut if cut > 120 else 220].rstrip(" ,;:") + "…"
+    return s
 
 
 async def _get(client: httpx.AsyncClient, url: str, params=None, tries: int = 4):
@@ -55,7 +75,7 @@ def _store_meta(conn, rulings: list[dict]) -> int:
             continue
         tariffs = r.get("tariffs") or []
         rows.append((
-            num, r.get("subject") or "", (r.get("rulingDate") or "")[:10],
+            num, clean_subject(r.get("subject") or ""), (r.get("rulingDate") or "")[:10],
             r.get("collection") or "", r.get("categories") or "",
             json.dumps(tariffs),
             int(bool(r.get("operationallyRevoked") or r.get("revokedBy"))),

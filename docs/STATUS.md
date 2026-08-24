@@ -19,9 +19,17 @@
 
 | Metric | Retrieval only |
 |---|---|
-| top-1 heading (4-digit) | 61.8% |
-| top-1 subheading (6-digit) | 49.5% |
-| top-3 heading | 83.2% |
+| top-1 heading (4-digit) | 58.2% |
+| top-1 subheading (6-digit) | 46.2% |
+| top-3 heading | 83.0% |
+
+Measured across four runs while iterating. Heading-level precedent voting was
+the one change that mattered, taking top-3 from 53% to 83%. Cleaning the ruling
+subjects cost about 2.5 points of top-1 — the malformed subjects had been
+carrying body text that happened to help matching — and scoring against ruling
+bodies has so far been neutral, because only ~13% of bodies are loaded. Both
+are worth re-measuring once the body ingest completes. Differences under about
+2.5 points at n=400 are noise.
 
 Retrieval recall ceiling is 99.5% — the correct heading is almost always among
 the ruling votes, so ranking is where the remaining accuracy lives. The GRI

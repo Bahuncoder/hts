@@ -73,7 +73,7 @@ export default async function ClassifyPage({
             </div>
 
             <p className="mt-3 font-medium">{c.description}</p>
-            <p className="mt-1 text-[13px]" style={{ color: "var(--muted)" }}>{c.full_path}</p>
+            <p className="clamp-2 mt-1 text-[13px]" style={{ color: "var(--muted)" }}>{c.full_path}</p>
 
             {c.reasoning ? <p className="mt-3 text-[14px]">{c.reasoning}</p> : null}
 
@@ -83,7 +83,7 @@ export default async function ClassifyPage({
                   Precedent
                 </div>
                 {c.rulings.map((r) => (
-                  <div key={r.ruling} className="text-[13px]">
+                  <div key={r.ruling} className="clamp-1 text-[13px]">
                     <a href={r.url} target="_blank" rel="noopener noreferrer"
                        className="font-medium hover:underline" style={{ color: "var(--accent)" }}>
                       {r.ruling}
