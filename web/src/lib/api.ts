@@ -105,6 +105,7 @@ export const getChanges = (days = 90) =>
       html_url: string;
       abstract: string;
       hts_mentions: string[];
+      tariff_action: boolean;
     }[];
   }>(`/api/changes?days=${days}`, 900);
 

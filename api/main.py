@@ -314,19 +314,35 @@ def ruling(number: str, conn=Depends(db), _=Depends(guard("cheap"))):
 @app.get("/api/changes")
 def changes(days: int = Query(90, ge=1, le=3650),
             limit: int = Query(50, ge=1, le=200),
+            all_documents: bool = Query(False,
+                description="Include documents that merely mention a tariff term"),
             conn=Depends(db), _=Depends(guard("cheap"))):
+    """Tariff actions published in the Federal Register.
+
+    Searching the Register for "Section 232" also returns foreign-trade-zone
+    notifications, agency meeting notices and, observed in practice, a
+    mushroom council membership adjustment. Only scored tariff actions are
+    returned by default.
+    """
+    where = "publication_date >= date('now', ?)"
+    params: list = [f"-{days} days"]
+    if not all_documents:
+        where += " AND tariff_action = 1"
+
     rows = conn.execute(
-        """SELECT document_number, title, doc_type, publication_date, html_url,
-                  abstract, hts_mentions
-             FROM fr_document
-            WHERE publication_date >= date('now', ?)
-            ORDER BY publication_date DESC LIMIT ?""",
-        (f"-{days} days", limit),
+        f"""SELECT document_number, title, doc_type, publication_date, html_url,
+                   abstract, hts_mentions, tariff_action
+              FROM fr_document
+             WHERE {where}
+             ORDER BY publication_date DESC LIMIT ?""",
+        (*params, limit),
     ).fetchall()
+
     out = []
     for r in rows:
         d = dict(r)
         d["hts_mentions"] = json.loads(d.get("hts_mentions") or "[]")
+        d["tariff_action"] = bool(d["tariff_action"])
         out.append(d)
     return {"days": days, "count": len(out), "changes": out}
 

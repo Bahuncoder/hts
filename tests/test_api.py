@@ -172,6 +172,20 @@ def _():
     assert s == 404, s
 
 
+@check("changes feed excludes documents that merely mention a term")
+def _():
+    s, d = call("/api/changes?days=120&limit=100")
+    assert s == 200, s
+    assert all(c["tariff_action"] for c in d["changes"]), "unfiltered document surfaced"
+    # Searching the Register for tariff terms returns FTZ notices, agency
+    # meetings and council memberships; none belong in a rate-change feed.
+    bad = [c["title"] for c in d["changes"]
+           if any(w in c["title"].lower()
+                  for w in ("foreign-trade zone", "sunshine act",
+                            "information collection", "membership adjustment"))]
+    assert not bad, bad[:3]
+
+
 @check("security headers are present")
 def _():
     req = urllib.request.Request(f"{BASE}/api/health")

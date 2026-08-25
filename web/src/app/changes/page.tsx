@@ -17,9 +17,10 @@ export default async function ChangesPage() {
       <div className="max-w-2xl space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Tariff changes</h1>
         <p style={{ color: "var(--muted)" }}>
-          Rates move several times a week. This is every tariff action published in
-          the Federal Register in the last 90 days, with the HTS codes each names —
-          so you can tell in seconds whether it touches your catalogue.
+          Rates move several times a week. These are the tariff actions published
+          in the Federal Register in the last 90 days, with the HTS codes each
+          names — so you can tell in seconds whether one touches your catalogue.
+          Documents that merely mention a tariff term are filtered out.
         </p>
       </div>
 
@@ -47,6 +48,11 @@ export default async function ChangesPage() {
               {c.abstract ? (
                 <p className="mt-2 text-[14px]" style={{ color: "var(--muted)" }}>
                   {c.abstract.slice(0, 280)}
+                </p>
+              ) : null}
+              {c.hts_mentions.length === 0 ? (
+                <p className="mt-2 text-[12px]" style={{ color: "var(--muted)" }}>
+                  Names no specific HTS codes — most actions describe scope in prose.
                 </p>
               ) : null}
               {c.hts_mentions.length ? (
