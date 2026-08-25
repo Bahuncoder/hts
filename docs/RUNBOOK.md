@@ -114,6 +114,13 @@ remedies whose scope lives in the Chapter 99 U.S. Notes are withheld rather
 than guessed; the response lists them in `scope_unverified` and says so in
 `warnings`. Under-stating with disclosure beats inventing duty.
 
+**A copy or layout change does not appear after a build.** Next persists
+prerendered pages and ISR output under `web/.next`. An incremental build reuses
+them, so an edit can compile successfully and still serve the previous text —
+observed with the `/changes` copy, where the build reported success and the old
+sentence kept rendering. `make build` clears `.next` first. A running
+`next start` also keeps serving its old output, so restart it after building.
+
 **A rate looks wrong.** Check `/api/hts/{code}` — every component carries its
 authority. Compare against the current HTS at hts.usitc.gov. If the schedule
 moved, run `make refresh`.

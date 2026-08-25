@@ -38,8 +38,11 @@ api:
 web:
 	cd web && npm run dev
 
+# Next persists prerendered pages and ISR output under .next. An incremental
+# build reuses them, so an edit to page copy can compile successfully and
+# still serve the previous text. Clear it.
 build:
-	cd web && npm run build
+	cd web && rm -rf .next && npm run build
 
 # --- verify -----------------------------------------------------------------
 test: test-duty test-api
