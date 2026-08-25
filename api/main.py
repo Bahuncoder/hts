@@ -7,33 +7,61 @@ to provision and starts cold in milliseconds.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
+import time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from api.security import (ANON_AUDIT_ITEMS, KEYED_AUDIT_ITEMS, MAX_TEXT,
+                          clean_text, guard)
 from core.classify import classify as run_classify
 from core.engine import TariffEngine
 from store.db import connect, get_meta
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Wall-clock ceiling on a single audit, whatever the item count.
+AUDIT_BUDGET_SECONDS = float(os.environ.get("TARIFFWISE_AUDIT_BUDGET", "45"))
 app = FastAPI(
     title="Tariffwise API",
     version="0.1.0",
     description="Duty calculation and HTS classification for US importers.",
 )
+# Deny cross-origin by default. An explicit origin list is required to enable
+# it, so a misconfigured deployment fails closed rather than open.
+_origins = [o.strip() for o in os.environ.get("TARIFFWISE_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.environ.get("TARIFFWISE_ORIGINS", "*").split(","),
+    allow_origins=_origins,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["content-type", "x-api-key"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception):
+    """Return an opaque error. Exception text leaks internals — an invalid
+    value was surfacing `decimal.InvalidOperation` to callers."""
+    logging.exception("unhandled error on %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal error"})
 
 _engine: TariffEngine | None = None
 
@@ -57,23 +85,25 @@ def db():
 # --------------------------------------------------------------------------- models
 
 class QuoteRequest(BaseModel):
-    hts: str = Field(..., description="10-digit HTS code")
-    country: str = Field(..., description="Country of origin")
-    value: float = Field(..., gt=0, description="Entered value in USD")
+    hts: str = Field(..., max_length=20, description="10-digit HTS code")
+    country: str = Field(..., max_length=MAX_TEXT, description="Country of origin")
+    # Capped below the point where Decimal arithmetic overflows; an unbounded
+    # float was surfacing decimal.InvalidOperation to the caller.
+    value: float = Field(..., gt=0, le=1e12, description="Entered value in USD")
     fta_claimed: bool = False
     by_vessel: bool = True
 
 
 class CatalogItem(BaseModel):
-    sku: str = ""
-    description: str
-    country: str
-    value: float = Field(..., gt=0)
-    hts: str | None = None
+    sku: str = Field("", max_length=64)
+    description: str = Field(..., max_length=MAX_TEXT)
+    country: str = Field(..., max_length=MAX_TEXT)
+    value: float = Field(..., gt=0, le=1e12)
+    hts: str | None = Field(None, max_length=20)
 
 
 class AuditRequest(BaseModel):
-    items: list[CatalogItem]
+    items: list[CatalogItem] = Field(..., min_length=1, max_length=KEYED_AUDIT_ITEMS)
 
 
 # --------------------------------------------------------------------------- routes
@@ -95,8 +125,12 @@ def health(conn=Depends(db)):
 
 
 @app.get("/api/hts/{code}")
-def hts_detail(code: str, country: str = "China", value: float = 10000.0,
-               conn=Depends(db)):
+def hts_detail(code: str,
+               country: str = Query("China", max_length=MAX_TEXT),
+               value: float = Query(10000.0, gt=0, le=1e12),
+               conn=Depends(db), _=Depends(guard("cheap"))):
+    if len(code) > 20:
+        raise HTTPException(404, f"HTS code not found")
     row = conn.execute("SELECT * FROM hts WHERE hts = ?", (code,)).fetchone()
     if not row:
         raise HTTPException(404, f"HTS code {code} not found")
@@ -141,9 +175,11 @@ def hts_detail(code: str, country: str = "China", value: float = 10000.0,
 
 
 @app.get("/api/search")
-def search(q: str = Query(..., min_length=2), limit: int = 20, conn=Depends(db)):
+def search(q: str = Query(..., min_length=2, max_length=MAX_TEXT),
+           limit: int = Query(20, ge=1, le=100),
+           conn=Depends(db), _=Depends(guard("cheap"))):
     from core.classify import _fts_query
-    fts = _fts_query(q)
+    fts = _fts_query(clean_text(q, "q"))
     if not fts:
         return {"query": q, "results": []}
     rows = conn.execute(
@@ -156,13 +192,14 @@ def search(q: str = Query(..., min_length=2), limit: int = 20, conn=Depends(db))
 
 
 @app.get("/api/classify")
-def classify_endpoint(q: str = Query(..., min_length=3), limit: int = 6,
-                      conn=Depends(db)):
-    return run_classify(conn, q, limit=limit).as_dict()
+def classify_endpoint(q: str = Query(..., min_length=3, max_length=MAX_TEXT),
+                      limit: int = Query(6, ge=1, le=20),
+                      conn=Depends(db), _=Depends(guard("classify"))):
+    return run_classify(conn, clean_text(q, "q"), limit=limit).as_dict()
 
 
 @app.post("/api/quote")
-def quote(req: QuoteRequest, conn=Depends(db)):
+def quote(req: QuoteRequest, conn=Depends(db), _=Depends(guard("cheap"))):
     row = conn.execute("SELECT is_leaf FROM hts WHERE hts = ?", (req.hts,)).fetchone()
     if not row:
         raise HTTPException(404, f"HTS code {req.hts} not found")
@@ -177,18 +214,35 @@ def quote(req: QuoteRequest, conn=Depends(db)):
 
 
 @app.post("/api/audit")
-def audit(req: AuditRequest, conn=Depends(db)):
-    """Score a product catalogue: duty owed, refundable duty, and gaps."""
-    if not req.items:
-        raise HTTPException(400, "no items supplied")
-    if len(req.items) > 5000:
-        raise HTTPException(413, "catalogue exceeds 5000 items")
+def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audit"))):
+    """Score a product catalogue: duty owed, refundable duty, and gaps.
+
+    Classification costs ~175 ms per item, so an unbounded catalogue is a
+    denial-of-service rather than a feature: 5,000 items occupied a worker for
+    fourteen minutes. Anonymous callers get enough to judge the output; a key
+    raises the ceiling, and a wall-clock budget caps even that.
+    """
+    ceiling = KEYED_AUDIT_ITEMS if keyed else ANON_AUDIT_ITEMS
+    if len(req.items) > ceiling:
+        raise HTTPException(
+            413,
+            f"{len(req.items)} items exceeds the limit of {ceiling}. "
+            + ("Split the catalogue across requests."
+               if keyed else
+               "Supply an API key in X-API-Key to raise the limit."),
+        )
 
     eng, lines = engine(), []
     total_value = total_duty = total_refundable = Decimal("0")
     unclassified = flagged = 0
+    started = time.monotonic()
+    truncated = False
 
     for item in req.items:
+        if time.monotonic() - started > AUDIT_BUDGET_SECONDS:
+            truncated = True
+            break
+
         hts, confidence, suggested = item.hts, "given", []
         if not hts:
             cls = run_classify(conn, item.description, limit=3)
@@ -204,8 +258,9 @@ def audit(req: AuditRequest, conn=Depends(db)):
 
         try:
             q = eng.quote(hts=hts, country=item.country, value=item.value)
-        except Exception as exc:
-            lines.append({"sku": item.sku, "hts": hts, "error": str(exc)})
+        except Exception:
+            lines.append({"sku": item.sku, "hts": hts,
+                          "error": "could not price this line"})
             continue
 
         total_value += q.entered_value
@@ -226,7 +281,9 @@ def audit(req: AuditRequest, conn=Depends(db)):
 
     return {
         "summary": {
-            "items": len(req.items),
+            "items": len(lines),
+            "submitted": len(req.items),
+            "truncated": truncated,
             "entered_value": float(total_value),
             "duty": float(total_duty),
             "effective_rate_pct": float(
@@ -241,7 +298,9 @@ def audit(req: AuditRequest, conn=Depends(db)):
 
 
 @app.get("/api/rulings/{number}")
-def ruling(number: str, conn=Depends(db)):
+def ruling(number: str, conn=Depends(db), _=Depends(guard("cheap"))):
+    if len(number) > 32:
+        raise HTTPException(404, "ruling not found")
     row = conn.execute("SELECT * FROM ruling WHERE ruling_number = ?",
                        (number,)).fetchone()
     if not row:
@@ -253,7 +312,9 @@ def ruling(number: str, conn=Depends(db)):
 
 
 @app.get("/api/changes")
-def changes(days: int = 90, limit: int = 50, conn=Depends(db)):
+def changes(days: int = Query(90, ge=1, le=3650),
+            limit: int = Query(50, ge=1, le=200),
+            conn=Depends(db), _=Depends(guard("cheap"))):
     rows = conn.execute(
         """SELECT document_number, title, doc_type, publication_date, html_url,
                   abstract, hts_mentions
@@ -271,7 +332,8 @@ def changes(days: int = 90, limit: int = 50, conn=Depends(db)):
 
 
 @app.get("/api/sitemap")
-def sitemap(chunk: int = 0, size: int = 5000, conn=Depends(db)):
+def sitemap(chunk: int = Query(0, ge=0, le=100),
+            size: int = Query(5000, ge=1, le=10000), conn=Depends(db)):
     """Leaf HTS codes for sitemap generation, in stable chunks."""
     rows = conn.execute(
         "SELECT hts FROM hts WHERE is_leaf = 1 ORDER BY hts LIMIT ? OFFSET ?",

@@ -19,6 +19,8 @@ type Line = {
 type Result = {
   summary: {
     items: number;
+    submitted: number;
+    truncated: boolean;
     entered_value: number;
     duty: number;
     effective_rate_pct: number;
@@ -67,7 +69,7 @@ function parseCsv(text: string): Record<string, string>[] {
   return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? "").trim()])));
 }
 
-export default function AuditClient({ apiBase }: { apiBase: string }) {
+export default function AuditClient() {
   const [text, setText] = useState(SAMPLE);
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,16 +96,21 @@ export default function AuditClient({ apiBase }: { apiBase: string }) {
         return;
       }
 
-      const res = await fetch(`${apiBase}/api/audit`, {
+      const res = await fetch("/api/audit", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ items }),
       });
+      const payload = await res.json();
       if (!res.ok) {
-        setError(`Audit failed (${res.status}). Is the API running?`);
+        setError(
+          typeof payload?.detail === "string"
+            ? payload.detail
+            : `Audit failed (${res.status}).`,
+        );
         return;
       }
-      setResult((await res.json()) as Result);
+      setResult(payload as Result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unexpected error");
     } finally {
@@ -154,9 +161,19 @@ export default function AuditClient({ apiBase }: { apiBase: string }) {
 
       {s ? (
         <>
+          {s.truncated ? (
+            <p className="rounded border-l-2 py-2 pl-3 text-[14px]"
+               style={{ borderColor: "var(--warn)", background: "var(--warn-soft)", color: "var(--warn)" }}>
+              Time budget reached: {s.items} of {s.submitted} lines were priced.
+              The totals below cover only those lines. Split the catalogue to
+              price the rest.
+            </p>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              ["Entered value", money(s.entered_value), `${s.items} lines`],
+              ["Entered value", money(s.entered_value),
+               s.truncated ? `${s.items} of ${s.submitted} lines` : `${s.items} lines`],
               ["Duty and fees", money(s.duty), `${s.effective_rate_pct}% effective`],
               ["Potentially refundable", money(s.potentially_refundable), "IEEPA, struck down"],
               ["Needs review", String(s.needs_scope_review + s.unclassified), "scope or classification"],

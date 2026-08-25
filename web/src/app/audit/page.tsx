@@ -17,7 +17,7 @@ export default function AuditPage() {
           needs confirming. Leave the HTS column blank and it will be classified.
         </p>
       </div>
-      <AuditClient apiBase={process.env.NEXT_PUBLIC_TARIFFWISE_API ?? "http://127.0.0.1:8099"} />
+      <AuditClient />
     </div>
   );
 }
