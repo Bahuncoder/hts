@@ -15,6 +15,7 @@ help:
 	@echo "  make test       duty unit tests + API security regressions"
 	@echo "  make test-duty  duty engine only (no server needed)"
 	@echo "  make test-api   API contract + security (needs a running API)"
+	@echo "  make test-journey  browser walk-through of the customer journey"
 	@echo "  make eval       held-out classifier accuracy"
 	@echo ""
 	@echo "Jobs"
@@ -60,7 +61,7 @@ test-api:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-api test-billing test-catalogues test-email eval
+check: build test-duty test-api test-billing test-catalogues test-email test-journey eval
 
 test-billing:
 	@cd web && node tests/billing.test.mjs
@@ -70,6 +71,11 @@ test-catalogues:
 
 test-email:
 	@cd web && node tests/email.test.mjs
+
+# Drives a real browser through the customer journey. Needs the API and web
+# app running, and a Chrome on the machine.
+test-journey:
+	@cd web && node tests/journey.test.mjs
 
 diff:
 	@curl -fsS -X POST http://127.0.0.1:3000/api/admin/diff \

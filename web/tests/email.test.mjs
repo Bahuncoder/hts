@@ -13,10 +13,45 @@
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import path from "node:path";
+import Database from "better-sqlite3";
 
 const BASE = process.env.HTSDESK_TEST_WEB ?? "http://127.0.0.1:3000";
 const TOKEN = process.env.HTSDESK_ADMIN_TOKEN ?? "admin-test-token";
 const SECRET = process.env.HTSDESK_EMAIL_SECRET ?? "test-email-secret";
+
+/** Seeds its own fixtures rather than relying on data left by another run.
+ *  A test that depends on ambient state passes until someone tidies up. */
+const DB = process.env.HTSDESK_ACCOUNTS_DB
+  ?? path.join(process.cwd(), "..", "data", "accounts.db");
+const PAID = `email-paid-${Date.now()}`;
+const FREE = `email-free-${Date.now()}`;
+
+function seed() {
+  const d = new Database(DB);
+  const now = new Date().toISOString();
+  for (const [id, plan] of [[PAID, "growth"], [FREE, "free"]]) {
+    d.prepare("INSERT OR IGNORE INTO account(id,email,password_hash,created_at) VALUES(?,?,?,?)")
+      .run(id, `${id}@example.test`, "scrypt$0$0", now);
+    d.prepare("INSERT OR IGNORE INTO subscription(account_id,plan,status,updated_at) VALUES(?,?,?,?)")
+      .run(id, plan, "active", now);
+    for (const [dg, h] of [["2804610000", "2804.61.00.00"], ["1301900000", "1301.90.00.00"]]) {
+      d.prepare("INSERT OR IGNORE INTO watched_code VALUES(?,?,?,NULL,?)").run(id, dg, h, now);
+    }
+  }
+  d.prepare("DELETE FROM diff_state").run();
+  d.close();
+}
+
+function cleanup() {
+  const d = new Database(DB);
+  d.exec("PRAGMA foreign_keys=ON");
+  for (const id of [PAID, FREE]) d.prepare("DELETE FROM account WHERE id=?").run(id);
+  d.prepare("DELETE FROM diff_state").run();
+  d.close();
+}
+
+seed();
 
 const results = [];
 const check = async (name, fn) => {
@@ -45,14 +80,23 @@ await check("diff runner refuses a wrong token", async () => {
   assert.equal(res.status, 401);
 });
 
+await check("the diff produces alerts for the seeded codes", async () => {
+  const res = await fetch(`${BASE}/api/admin/diff?since=2026-08-01&send=0`, {
+    method: "POST", headers: { "x-admin-token": TOKEN },
+  });
+  const d = await res.json();
+  assert.ok(d.ran, "diff did not run");
+  assert.ok(d.alertsCreated >= 2, `expected alerts, got ${d.alertsCreated}`);
+});
+
 await check("email preview refuses an unauthenticated caller", async () => {
-  const { status } = await get("/api/admin/email-preview?account=acc-paid");
+  const { status } = await get(`/api/admin/email-preview?account=${PAID}`);
   assert.equal(status, 401);
 });
 
 await check("email preview renders a digest from real alerts", async () => {
   const { status, body } = await get(
-    "/api/admin/email-preview?account=acc-paid", { "x-admin-token": TOKEN });
+    `/api/admin/email-preview?account=${PAID}`, { "x-admin-token": TOKEN });
   assert.equal(status, 200);
   const d = JSON.parse(body);
   assert.ok(d.subject.length > 0, "digest must have a subject");
@@ -63,7 +107,7 @@ await check("email preview renders a digest from real alerts", async () => {
 
 await check("digest groups one action per entry, not one per code", async () => {
   const { body } = await get(
-    "/api/admin/email-preview?account=acc-paid", { "x-admin-token": TOKEN });
+    `/api/admin/email-preview?account=${PAID}`, { "x-admin-token": TOKEN });
   const d = JSON.parse(body);
   const titles = d.text.split("\n").filter((l) => l.startsWith("Silicon Metal"));
   assert.equal(new Set(titles).size, titles.length,
@@ -71,18 +115,18 @@ await check("digest groups one action per entry, not one per code", async () => 
 });
 
 await check("a valid unsubscribe link works without a session", async () => {
-  const { status, body } = await get(`/unsubscribe?a=acc-free&t=${sign("acc-free")}`);
+  const { status, body } = await get(`/unsubscribe?a=${FREE}&t=${sign(FREE)}`);
   assert.equal(status, 200);
   assert.match(body, /Alert emails are off/);
 });
 
 await check("a forged unsubscribe token is refused", async () => {
-  const { body } = await get("/unsubscribe?a=acc-free&t=not-a-real-token");
+  const { body } = await get(`/unsubscribe?a=${FREE}&t=not-a-real-token`);
   assert.match(body, /did not work/);
 });
 
 await check("an unsubscribe token cannot be reused for another account", async () => {
-  const { body } = await get(`/unsubscribe?a=acc-paid&t=${sign("acc-free")}`);
+  const { body } = await get(`/unsubscribe?a=${PAID}&t=${sign(FREE)}`);
   assert.match(body, /did not work/,
     "one customer must not be able to unsubscribe another");
 });
@@ -98,6 +142,8 @@ await check("no alert is left unstamped after a delivery run", async () => {
   assert.equal(d.delivery.accountsConsidered, 0,
     "an unstamped alert is reconsidered forever and arrives as a backlog on upgrade");
 });
+
+cleanup();
 
 const failed = results.filter(([, e]) => e);
 const w = Math.max(...results.map(([n]) => n.length));

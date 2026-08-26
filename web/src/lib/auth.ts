@@ -32,16 +32,27 @@ export function validEmail(email: string): boolean {
   return /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email) && email.length <= 254;
 }
 
+const WEAK = ["password", "12345678", "qwerty", "letmein", "htsdesk", "iloveyou"];
+
 /** Rejects the passwords that actually get accounts taken over, and nothing
  *  else: length is what matters, composition rules only push people to
- *  "Password1!". */
+ *  "Password1!".
+ *
+ *  A weak word is only disqualifying when it is most of the password. Plain
+ *  substring matching rejected "a-long-enough-password", which is a perfectly
+ *  good passphrase — and punishing long passphrases for containing a common
+ *  word pushes people back towards short cryptic ones.
+ */
 export function passwordProblem(password: string): string | null {
   if (password.length < 10) return "Use at least 10 characters.";
   if (password.length > 200) return "That password is too long.";
-  const weak = ["password", "12345678", "qwerty", "letmein", "htsdesk"];
-  if (weak.some((w) => password.toLowerCase().includes(w))) {
-    return "That password is too easy to guess.";
+
+  const normalised = password.toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const weak of WEAK) {
+    const remainder = normalised.split(weak).join("");
+    if (remainder.length < 6) return "That password is too easy to guess.";
   }
+  if (/^(.)\1+$/.test(normalised)) return "That password is too easy to guess.";
   return null;
 }
 
