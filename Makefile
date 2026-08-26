@@ -19,6 +19,7 @@ help:
 	@echo ""
 	@echo "Jobs"
 	@echo "  make diff       match new tariff actions against watched codes"
+	@echo "  make email-preview ACCOUNT=<id>  show the digest an account would get"
 	@echo "  make check      everything: build, tests, eval"
 
 # --- data -------------------------------------------------------------------
@@ -48,7 +49,7 @@ build:
 	cd web && rm -rf .next && npm run build
 
 # --- verify -----------------------------------------------------------------
-test: test-duty test-api test-billing test-catalogues
+test: test-duty test-api test-billing test-catalogues test-email
 
 test-duty:
 	@python3 tests/test_duty.py
@@ -59,7 +60,7 @@ test-api:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-api test-billing test-catalogues eval
+check: build test-duty test-api test-billing test-catalogues test-email eval
 
 test-billing:
 	@cd web && node tests/billing.test.mjs
@@ -67,6 +68,14 @@ test-billing:
 test-catalogues:
 	@cd web && node tests/catalogues.test.mjs
 
+test-email:
+	@cd web && node tests/email.test.mjs
+
 diff:
 	@curl -fsS -X POST http://127.0.0.1:3000/api/admin/diff \
 	  -H "x-admin-token: $$HTSDESK_ADMIN_TOKEN" | python3 -m json.tool
+
+email-preview:
+	@curl -fsS "http://127.0.0.1:3000/api/admin/email-preview?account=$$ACCOUNT" \
+	  -H "x-admin-token: $$HTSDESK_ADMIN_TOKEN" | python3 -c \
+	  "import sys,json;d=json.load(sys.stdin);print(d['subject']);print();print(d['text'])"

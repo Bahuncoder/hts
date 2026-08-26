@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { currentViewer } from "@/lib/auth";
-import { logoutAction } from "@/lib/actions";
+import { logoutAction, toggleAlertEmailsAction } from "@/lib/actions";
 import { billingEnabled } from "@/lib/stripe";
+import { emailEnabled } from "@/lib/email";
+import { listWatched } from "@/lib/catalogues";
 import { PortalButton } from "@/components/BillingButtons";
 import { Card, Note } from "@/components/ui";
 
@@ -16,6 +18,8 @@ export default async function AccountPage({
   if (!viewer) redirect("/login");
   const { checkout } = await searchParams;
   const { account, subscription, plan } = viewer;
+  const alertEmailsOn = account.alert_emails !== 0;
+  const watchedCount = listWatched(account.id).length;
 
   const renews = subscription.current_period_end
     ? new Date(subscription.current_period_end).toLocaleDateString("en-US",
@@ -86,6 +90,27 @@ export default async function AccountPage({
               style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
           Audit a catalogue
         </Link>
+      </div>
+
+      <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--border)" }}>
+        <h2 className="text-[15px] font-semibold">Alert emails</h2>
+        <p className="text-[14px]" style={{ color: "var(--muted)" }}>
+          {plan.monitoring
+            ? `We email you when a tariff action names one of the ${watchedCount.toLocaleString()} codes you watch.`
+            : "Alerts appear in the app on every plan. Emailing them is part of Starter and above."}
+          {plan.monitoring && !emailEnabled()
+            ? " Sending is not switched on yet, so alerts are in-app only for now."
+            : ""}
+        </p>
+        <form action={toggleAlertEmailsAction}>
+          <input type="hidden" name="on" value={alertEmailsOn ? "1" : "0"} />
+          <button className="px-4 py-2 text-[14px] font-medium"
+                  style={alertEmailsOn
+                    ? { border: "1px solid var(--rule)", color: "var(--muted)" }
+                    : { background: "var(--accent)", color: "var(--on-accent)" }}>
+            {alertEmailsOn ? "Turn alert emails off" : "Turn alert emails on"}
+          </button>
+        </form>
       </div>
 
       <div className="space-y-2 border-t pt-6" style={{ borderColor: "var(--border)" }}>

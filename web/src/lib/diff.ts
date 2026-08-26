@@ -154,3 +154,92 @@ export function diffStatus() {
   return db().prepare("SELECT last_seen_date, last_run_at FROM diff_state WHERE id = 1")
     .get() as { last_seen_date: string | null; last_run_at: string | null } | undefined;
 }
+
+// --- delivery ---------------------------------------------------------------
+
+import { PLANS } from "./plans";
+import { renderAlertDigest } from "./emails/alertDigest";
+import { emailEnabled, send } from "./email";
+
+export type DeliveryResult = {
+  accountsConsidered: number;
+  sent: number;
+  skippedNoPlan: number;
+  skippedOptedOut: number;
+  failed: number;
+  provider: string;
+};
+
+/** Emails one digest per account covering everything not yet sent.
+ *
+ *  A digest rather than a message per alert: one action commonly names several
+ *  of a customer's codes, and sending it once per code reads as spam.
+ *
+ *  `emailed_at` is stamped for every alert in the batch whatever the outcome —
+ *  including when no provider is configured. A run that could not send must
+ *  not leave a backlog that floods the customer the day a key is added.
+ */
+export async function sendAlertDigests(): Promise<DeliveryResult> {
+  const d = db();
+  const rows = d.prepare(`
+    SELECT a.account_id, ac.email, ac.alert_emails, s.plan, s.status
+      FROM alert a
+      JOIN account ac ON ac.id = a.account_id
+      LEFT JOIN subscription s ON s.account_id = a.account_id
+     WHERE a.emailed_at IS NULL
+     GROUP BY a.account_id`).all() as {
+       account_id: string; email: string; alert_emails: number;
+       plan: string | null; status: string | null;
+     }[];
+
+  const result: DeliveryResult = {
+    accountsConsidered: rows.length, sent: 0, skippedNoPlan: 0,
+    skippedOptedOut: 0, failed: 0, provider: emailEnabled() ? "configured" : "none",
+  };
+
+  const stamp = d.prepare(
+    "UPDATE alert SET emailed_at = ? WHERE account_id = ? AND emailed_at IS NULL");
+
+  for (const row of rows) {
+    const pending = d.prepare(
+      "SELECT * FROM alert WHERE account_id = ? AND emailed_at IS NULL ORDER BY publication_date DESC"
+    ).all(row.account_id) as Alert[];
+    if (!pending.length) continue;
+
+    const entitled = row.status === "active" || row.status === "trialing";
+    const plan = PLANS[(entitled ? row.plan : "free") as keyof typeof PLANS] ?? PLANS.free;
+
+    // Email alerts are a paid feature; the alerts themselves stay visible in
+    // the app on every plan, so a free account loses the email, not the fact.
+    //
+    // Both skips still stamp. An unstamped alert is reconsidered on every
+    // later run, and would arrive as a backlog the moment the account
+    // upgrades or opts back in — greeting a new subscriber with months of
+    // history is the wrong first impression, and the alerts were visible in
+    // the app the whole time.
+    if (!plan.monitoring) {
+      result.skippedNoPlan += 1;
+      stamp.run(new Date().toISOString(), row.account_id);
+      continue;
+    }
+    if (row.alert_emails === 0) {
+      result.skippedOptedOut += 1;
+      stamp.run(new Date().toISOString(), row.account_id);
+      continue;
+    }
+
+    const digest = renderAlertDigest(row.account_id, pending);
+    const outcome = await send({
+      to: row.email, subject: digest.subject, text: digest.text, html: digest.html,
+      kind: "alert_digest", accountId: row.account_id,
+    });
+
+    if (outcome.status === "failed") result.failed += 1;
+    else result.sent += outcome.status === "sent" ? 1 : 0;
+
+    // Stamped even when skipped, so enabling a provider does not replay history.
+    stamp.run(new Date().toISOString(), row.account_id);
+  }
+
+  return result;
+}

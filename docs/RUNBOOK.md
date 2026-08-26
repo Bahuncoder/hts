@@ -85,8 +85,38 @@ Re-running is safe. Alerts are unique per account, document and code, so a
 second pass over the same window creates nothing. `diff_state` records how far
 the last run read; pass `?since=YYYY-MM-DD` to reconsider an earlier window.
 
-**Nothing is emailed yet.** Alerts appear in the app at `/alerts`; the
-`emailed_at` column exists and stays null until email is wired up.
+## Alert emails
+
+The diff run sends one digest per account covering everything not yet emailed —
+a digest rather than a message per alert, because one action commonly names
+several of a customer's codes and sending it once per code reads as spam.
+
+```bash
+make email-preview ACCOUNT=<account id>   # exactly what would be sent
+```
+
+Set one provider key, `RESEND_API_KEY` or `POSTMARK_API_KEY`. **With neither,
+digests are still generated and recorded in `email_log` as `skipped`** — so the
+path is exercised and inspectable before a key exists, rather than being code
+that has never run. Check what happened with:
+
+```sql
+SELECT status, count(*) FROM email_log GROUP BY status;
+```
+
+Two rules worth knowing:
+
+- **Email is a paid feature; alerts are not.** A free account sees every alert
+  in the app and receives no mail. Losing the email does not lose the fact.
+- **Every considered alert is stamped, whatever the outcome** — skipped for
+  plan, opted out, or genuinely sent. An unstamped alert is reconsidered on
+  every later run and would arrive as a backlog the moment the account upgrades
+  or opts back in. Greeting a new subscriber with months of history is the
+  wrong first impression.
+
+Unsubscribe links are signed with `HTSDESK_EMAIL_SECRET` and work without a
+session — someone who no longer wants our mail should not have to sign in to
+stop it. Turning emails off leaves watched codes and in-app alerts untouched.
 
 ## Deploying
 

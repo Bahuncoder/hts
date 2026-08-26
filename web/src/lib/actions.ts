@@ -92,3 +92,11 @@ export async function markAlertsReadAction(): Promise<void> {
   markAllRead(viewer.account.id);
   revalidatePath("/alerts");
 }
+
+export async function toggleAlertEmailsAction(form: FormData): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  const { setAlertEmails } = await import("./store");
+  setAlertEmails(viewer.account.id, String(form.get("on") ?? "") !== "1");
+  revalidatePath("/account");
+}

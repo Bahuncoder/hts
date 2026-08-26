@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import path from "node:path";
 import type { PlanId } from "./plans";
@@ -25,6 +26,20 @@ export function db(): Database.Database {
       password_hash TEXT NOT NULL,
       created_at    TEXT NOT NULL
     );
+
+    -- Delivery log. One row per message we attempted, so a failure is
+    -- visible and a retry cannot silently double-send.
+    CREATE TABLE IF NOT EXISTS email_log (
+      id          TEXT PRIMARY KEY,
+      account_id  TEXT REFERENCES account(id) ON DELETE CASCADE,
+      to_address  TEXT NOT NULL,
+      kind        TEXT NOT NULL,
+      subject     TEXT,
+      status      TEXT NOT NULL,
+      detail      TEXT,
+      created_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS email_account ON email_log(account_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS session (
       token      TEXT PRIMARY KEY,
@@ -124,11 +139,25 @@ export function db(): Database.Database {
       received_at TEXT NOT NULL
     );
   `);
+  migrate(d);
   _db = d;
   return d;
 }
 
-export type Account = { id: string; email: string; created_at: string };
+/** Additive column migrations. SQLite has no IF NOT EXISTS for ADD COLUMN, so
+ *  the current columns are read first. */
+function migrate(d: Database.Database): void {
+  const cols = new Set(
+    (d.prepare("PRAGMA table_info(account)").all() as { name: string }[]).map((c) => c.name),
+  );
+  if (!cols.has("alert_emails")) {
+    d.exec("ALTER TABLE account ADD COLUMN alert_emails INTEGER NOT NULL DEFAULT 1");
+  }
+}
+
+export type Account = {
+  id: string; email: string; created_at: string; alert_emails?: number;
+};
 export type Subscription = {
   account_id: string;
   stripe_customer_id: string | null;
@@ -144,8 +173,26 @@ export function accountByEmail(email: string) {
 }
 
 export function accountById(id: string) {
-  return db().prepare("SELECT id, email, created_at FROM account WHERE id = ?").get(id) as
-    Account | undefined;
+  return db().prepare(
+    "SELECT id, email, created_at, alert_emails FROM account WHERE id = ?"
+  ).get(id) as Account | undefined;
+}
+
+export function setAlertEmails(accountId: string, on: boolean): void {
+  db().prepare("UPDATE account SET alert_emails = ? WHERE id = ?")
+    .run(on ? 1 : 0, accountId);
+}
+
+export function logEmail(row: {
+  account_id: string | null; to_address: string; kind: string;
+  subject: string; status: string; detail?: string;
+}): void {
+  db().prepare(`
+    INSERT INTO email_log(id, account_id, to_address, kind, subject, status, detail, created_at)
+    VALUES(?,?,?,?,?,?,?,?)`).run(
+    crypto.randomUUID(), row.account_id, row.to_address, row.kind,
+    row.subject, row.status, row.detail ?? null, new Date().toISOString(),
+  );
 }
 
 export function createAccount(id: string, email: string, passwordHash: string) {
