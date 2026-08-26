@@ -6,9 +6,18 @@
  */
 export type CsvRow = Record<string, string | number | null | undefined>;
 
+// A field a spreadsheet would treat as a formula. Quoting alone does not help:
+// Excel and Sheets parse the cell *after* unquoting, so `"=cmd|'/C calc'!A1"`
+// still executes on open. Product descriptions are attacker-controlled and
+// these files get sent to brokers, so the leading character is neutralised.
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
 function cell(v: string | number | null | undefined): string {
   if (v === null || v === undefined) return '""';
-  const s = String(v);
+  let s = String(v);
+  // A negative number is not a formula; prefixing it would corrupt the figure.
+  if (FORMULA_LEAD.test(s) && !PLAIN_NUMBER.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 
