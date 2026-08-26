@@ -1,0 +1,90 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Brand"
+    },
+    {
+      "id": "page-2",
+      "name": "Product"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 900,
+      "page": "page-1",
+      "title": "Logo concepts"
+    },
+    {
+      "file": "BrandSystem.dc.html",
+      "x": 1360,
+      "y": 0,
+      "w": 1240,
+      "h": 1020,
+      "page": "page-1",
+      "title": "Brand system"
+    },
+    {
+      "file": "Landing.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1800,
+      "page": "page-2",
+      "title": "Landing page"
+    },
+    {
+      "file": "CodePage.dc.html",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 1260,
+      "page": "page-2",
+      "title": "HTS code page \u2014 the SEO workhorse"
+    },
+    {
+      "file": "Audit.dc.html",
+      "x": 3120,
+      "y": 0,
+      "w": 1440,
+      "h": 1180,
+      "page": "page-2",
+      "title": "Catalogue audit \u2014 the paid product"
+    },
+    {
+      "file": "Pricing.dc.html",
+      "x": 4680,
+      "y": 0,
+      "w": 1440,
+      "h": 1120,
+      "page": "page-2",
+      "title": "Pricing \u2014 Stripe tiers"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "logo-note",
+      "x": 0,
+      "y": -150,
+      "w": 560,
+      "page": "page-1",
+      "text": "Four marks, one idea: draw the classification hierarchy, not a shipping clich\u00e9.\nA is my recommendation \u2014 it survives the shrink to a 20px favicon."
+    },
+    {
+      "id": "product-note",
+      "x": 0,
+      "y": -150,
+      "w": 620,
+      "page": "page-2",
+      "text": "Copy and figures are real, taken from the running product.\nThe pricing page is drawn against the Stripe tiers we're about to build."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

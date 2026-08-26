@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #0d5142; } a:hover { color: #073229; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .nb { white-space: nowrap; }
+    .sans { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .serif { font-family: Newsreader, ui-serif, Georgia, "Times New Roman", serif; }
+    .lbl { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7a75; }
+    td, th { padding: 11px 0; }
+  </style>
+</helmet>
+
+<div class="sans" style="width: 1440px; background: #faf9f6; color: #161c1a;">
+
+  <div style="border-bottom: 1px solid #e4e2da;">
+    <div style="max-width: 1100px; margin: 0 auto; padding: 17px 40px; display: flex; align-items: center; gap: 34px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="23" height="23" viewBox="0 0 104 76" fill="none">
+          <rect x="0" y="4" width="96" height="11" rx="1.5" fill="#0d5142"/>
+          <rect x="14" y="24" width="74" height="11" rx="1.5" fill="#0d5142" opacity="0.74"/>
+          <rect x="28" y="44" width="52" height="11" rx="1.5" fill="#0d5142" opacity="0.5"/>
+          <rect x="42" y="64" width="30" height="11" rx="1.5" fill="#a8501f"/>
+        </svg>
+        <span style="font-size: 17px; font-weight: 600; letter-spacing: -0.015em;">HTS<span style="color: #4d5b56; font-weight: 450;">Desk</span></span>
+      </div>
+      <div style="display: flex; gap: 24px; font-size: 14px; color: #4d5b56;">
+        <span>Classify</span><span>Duty calculator</span><span>Tariff changes</span><span>Catalogue audit</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width: 1100px; margin: 0 auto; padding: 40px 40px 64px; display: flex; flex-direction: column; gap: 34px;">
+
+    <!-- breadcrumb + title -->
+    <div style="display: flex; flex-direction: column; gap: 13px;">
+      <div class="mono" style="font-size: 12px; color: #6b7a75;">
+        Chapter 61 <span style="color: #c3bdb0;">›</span> 6109 <span style="color: #c3bdb0;">›</span> 6109.10 <span style="color: #c3bdb0;">›</span> <span style="color: #161c1a;">6109.10.00.12</span>
+      </div>
+      <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+        <div class="mono" style="font-size: 42px; font-weight: 500; letter-spacing: -0.02em; line-height: 1;">6109.10.00.12</div>
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; background: #e7efeb; color: #0d5142; padding: 4px 8px; margin-bottom: 5px;">STATISTICAL LINE</span>
+      </div>
+      <div class="serif" style="font-size: 25px; line-height: 1.25;">Men’s cotton T-shirts, knitted or crocheted</div>
+      <div style="font-size: 13px; color: #6b7a75; line-height: 1.5; max-width: 800px;">
+        T-shirts, singlets, tank tops and similar garments, knitted or crocheted › Of cotton › Men’s or boys’ › Other T-shirts › Men’s (338)
+      </div>
+    </div>
+
+    <!-- origin selector -->
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid #e4e2da; border-bottom: 1px solid #e4e2da; padding: 14px 0;">
+      <span class="lbl" style="margin-right: 4px;">Origin</span>
+      <span style="font-size: 13px; font-weight: 500; background: #0d5142; color: #fff; padding: 6px 12px;">China</span>
+      <span style="font-size: 13px; color: #4d5b56; border: 1px solid #ddd9ce; padding: 6px 12px;">Vietnam</span>
+      <span style="font-size: 13px; color: #4d5b56; border: 1px solid #ddd9ce; padding: 6px 12px;">Mexico</span>
+      <span style="font-size: 13px; color: #4d5b56; border: 1px solid #ddd9ce; padding: 6px 12px;">India</span>
+      <span style="font-size: 13px; color: #4d5b56; border: 1px solid #ddd9ce; padding: 6px 12px;">Bangladesh</span>
+      <span style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+        <span class="lbl">Entered value</span>
+        <span class="mono" style="font-size: 14px; border: 1px solid #ddd9ce; background: #fff; padding: 6px 12px;">$10,000.00</span>
+      </span>
+    </div>
+
+    <!-- headline figures -->
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 22px 24px;">
+        <div class="lbl">Effective rate</div>
+        <div class="mono" style="font-size: 38px; font-weight: 500; letter-spacing: -0.02em; margin-top: 6px; line-height: 1;">24.47%</div>
+        <div style="font-size: 13px; color: #4d5b56; margin-top: 7px;">MFN plus one trade remedy, plus fees</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 22px 24px;">
+        <div class="lbl">Duty and fees</div>
+        <div class="mono" style="font-size: 38px; font-weight: 500; letter-spacing: -0.02em; margin-top: 6px; line-height: 1;">$2,447.14</div>
+        <div style="font-size: 13px; color: #4d5b56; margin-top: 7px;">on $10,000 entered, by vessel</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; border-left: 3px solid #a8501f; padding: 22px 24px;">
+        <div class="lbl" style="color: #a8501f;">Potentially refundable</div>
+        <div class="mono" style="font-size: 38px; font-weight: 500; letter-spacing: -0.02em; margin-top: 6px; line-height: 1; color: #a8501f;">$0.00</div>
+        <div style="font-size: 13px; color: #4d5b56; margin-top: 7px;">no IEEPA provision reaches this code</div>
+      </div>
+    </div>
+
+    <!-- duty stack -->
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <div class="serif" style="font-size: 25px;">Duty stack</div>
+        <div style="font-size: 13px; color: #6b7a75;">every line traced to its authority</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 4px 24px 12px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #e4e2da;">
+              <th style="text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Component</th>
+              <th style="text-align: right; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Rate</th>
+              <th style="text-align: right; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Amount</th>
+              <th style="text-align: left; padding-left: 32px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Authority</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid #f2f0ea;">
+              <td>MFN duty</td>
+              <td class="mono" style="text-align: right;">16.5%</td>
+              <td class="mono" style="text-align: right;">$1,650.00</td>
+              <td class="mono" style="padding-left: 32px; font-size: 12px; color: #6b7a75;">HTSUS Column 1 General</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f2f0ea;">
+              <td>Trade remedy 9903.88.15</td>
+              <td class="mono" style="text-align: right;">7.5%</td>
+              <td class="mono" style="text-align: right;">$750.00</td>
+              <td class="mono" style="padding-left: 32px; font-size: 12px; color: #6b7a75;">HTSUS 9903.88.15</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f2f0ea;">
+              <td>Merchandise Processing Fee</td>
+              <td class="mono" style="text-align: right;">0.3464%</td>
+              <td class="mono" style="text-align: right;">$34.64</td>
+              <td class="mono" style="padding-left: 32px; font-size: 12px; color: #6b7a75;">19 CFR 24.23</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e4e2da;">
+              <td>Harbor Maintenance Fee</td>
+              <td class="mono" style="text-align: right;">0.125%</td>
+              <td class="mono" style="text-align: right;">$12.50</td>
+              <td class="mono" style="padding-left: 32px; font-size: 12px; color: #6b7a75;">19 CFR 24.24</td>
+            </tr>
+            <tr style="font-weight: 600;">
+              <td>Total</td>
+              <td class="mono" style="text-align: right;">24.47%</td>
+              <td class="mono" style="text-align: right; font-size: 16px;">$2,447.14</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="border-left: 2px solid #8a5a2b; background: #fbf6ec; padding: 13px 16px; font-size: 13px; line-height: 1.5; color: #6b4a1e;">
+        One further trade-remedy heading covers China but defines its product scope in the Chapter 99 U.S. Notes. It is <strong style="font-weight: 600;">excluded from the figure above</strong> pending scope verification — we would rather understate and tell you than invent duty.
+      </div>
+    </div>
+
+    <!-- evidence -->
+    <div style="display: flex; gap: 24px; align-items: flex-start;">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 14px;">
+        <div class="serif" style="font-size: 25px;">CBP rulings on this code</div>
+        <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 6px 24px 14px;">
+          <div style="display: flex; flex-direction: column;">
+            <div style="display: flex; gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid #f2f0ea;">
+              <span class="mono" style="font-size: 13px; color: #0d5142; width: 78px;">N360982</span>
+              <span class="mono nb" style="font-size: 12px; color: #6b7a75; width: 82px;">2026-05-15</span>
+              <span style="font-size: 13px; color: #3d4a45; line-height: 1.4;">The tariff classification of women’s upper body garments from Nicaragua, South Korea, Bangladesh and Indonesia</span>
+            </div>
+            <div style="display: flex; gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid #f2f0ea;">
+              <span class="mono" style="font-size: 13px; color: #0d5142; width: 78px;">N352158</span>
+              <span class="mono nb" style="font-size: 12px; color: #6b7a75; width: 82px;">2025-09-03</span>
+              <span style="font-size: 13px; color: #3d4a45; line-height: 1.4;">Classification and eligibility under CBTPA of men’s T-shirts from Haiti</span>
+            </div>
+            <div style="display: flex; gap: 14px; align-items: baseline; padding: 12px 0;">
+              <span class="mono" style="font-size: 13px; color: #0d5142; width: 78px;">N340813</span>
+              <span class="mono nb" style="font-size: 12px; color: #6b7a75; width: 82px;">2024-07-15</span>
+              <span style="font-size: 13px; color: #3d4a45; line-height: 1.4;">Classification and status under DR-CAFTA of a men’s T-shirt from Honduras</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width: 330px; background: #10201c; color: #e8efec; padding: 24px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.12em; color: #7f9a92;">WATCH THIS CODE</div>
+        <div style="font-size: 16px; font-weight: 600; margin-top: 9px; line-height: 1.35;">Get an email when a tariff action touches 6109.10.00.12</div>
+        <div style="font-size: 13px; color: #b6c6c1; margin-top: 9px; line-height: 1.5;">408 actions published in the last 90 days. Two moved rates on apparel.</div>
+        <div style="background: #5fc0a5; color: #0a1a16; padding: 10px 15px; font-size: 14px; font-weight: 500; text-align: center; margin-top: 15px;">Watch this code</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

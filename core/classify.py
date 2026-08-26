@@ -27,7 +27,7 @@ import re
 import sqlite3
 from dataclasses import dataclass, field
 
-MODEL = os.environ.get("TARIFFWISE_MODEL", "claude-opus-5")
+MODEL = os.environ.get("HTSDESK_MODEL", "claude-opus-5")
 API_URL = "https://api.anthropic.com/v1/messages"
 
 _FTS_STRIP = re.compile(r"[^\w\s]")

@@ -48,15 +48,15 @@ export default async function CalculatorPage({
       <form action="/calculator" className="grid max-w-3xl gap-3 sm:grid-cols-[1fr_auto_auto_auto]">
         <input name="hts" defaultValue={sp.hts ?? ""} placeholder="6109.10.00.12"
           className="rounded-md border px-3 py-2 text-[15px]"
-          style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--ink)" }} />
+          style={{ borderColor: "var(--border)", background: "var(--paper)", color: "var(--ink)" }} />
         <input name="country" defaultValue={country} placeholder="China"
           className="rounded-md border px-3 py-2 text-[15px] sm:w-36"
-          style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--ink)" }} />
+          style={{ borderColor: "var(--border)", background: "var(--paper)", color: "var(--ink)" }} />
         <input name="value" type="number" defaultValue={value} min={1}
           className="tabular rounded-md border px-3 py-2 text-[15px] sm:w-32"
-          style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--ink)" }} />
+          style={{ borderColor: "var(--border)", background: "var(--paper)", color: "var(--ink)" }} />
         <button className="rounded-md px-4 py-2 text-[15px] font-medium"
-          style={{ background: "var(--accent)", color: "var(--bg)" }}>
+          style={{ background: "var(--accent)", color: "var(--paper)" }}>
           Calculate
         </button>
       </form>
@@ -64,7 +64,7 @@ export default async function CalculatorPage({
       <form action="/calculator" className="flex max-w-2xl gap-2">
         <input name="q" defaultValue={sp.q ?? ""} placeholder="Don't know the code? Search descriptions…"
           className="min-w-0 flex-1 rounded-md border px-3 py-2 text-[14px]"
-          style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--ink)" }} />
+          style={{ borderColor: "var(--border)", background: "var(--paper)", color: "var(--ink)" }} />
         <button className="rounded-md border px-3 py-2 text-[14px]" style={{ borderColor: "var(--border)" }}>
           Search
         </button>

@@ -134,7 +134,7 @@ export default function AuditClient() {
         rows={9}
         spellCheck={false}
         className="tabular w-full rounded-md border p-3 font-mono text-[13px]"
-        style={{ ...border, background: "var(--bg)", color: "var(--ink)" }}
+        style={{ ...border, background: "var(--paper)", color: "var(--ink)" }}
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -142,7 +142,7 @@ export default function AuditClient() {
           onClick={run}
           disabled={busy}
           className="rounded-md px-4 py-2 text-[15px] font-medium disabled:opacity-50"
-          style={{ background: "var(--accent)", color: "var(--bg)" }}
+          style={{ background: "var(--accent)", color: "var(--paper)" }}
         >
           {busy ? "Auditing…" : "Run audit"}
         </button>
@@ -154,7 +154,7 @@ export default function AuditClient() {
 
       {error ? (
         <p className="rounded border-l-2 py-2 pl-3 text-[14px]"
-           style={{ borderColor: "var(--danger)", background: "var(--warn-soft)", color: "var(--danger)" }}>
+           style={{ borderColor: "var(--danger)", background: "var(--caution-soft)", color: "var(--danger)" }}>
           {error}
         </p>
       ) : null}
@@ -163,7 +163,7 @@ export default function AuditClient() {
         <>
           {s.truncated ? (
             <p className="rounded border-l-2 py-2 pl-3 text-[14px]"
-               style={{ borderColor: "var(--warn)", background: "var(--warn-soft)", color: "var(--warn)" }}>
+               style={{ borderColor: "var(--caution)", background: "var(--caution-soft)", color: "var(--caution)" }}>
               Time budget reached: {s.items} of {s.submitted} lines were priced.
               The totals below cover only those lines. Split the catalogue to
               price the rest.

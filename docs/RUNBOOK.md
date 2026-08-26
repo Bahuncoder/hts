@@ -10,7 +10,7 @@ proxies.
 
 ```bash
 make api                                    # :8099
-TARIFFWISE_API=http://127.0.0.1:8099 make web   # :3000
+HTSDESK_API=http://127.0.0.1:8099 make web   # :3000
 ```
 
 The web app talks to the API server-side only. Browsers never call the API
@@ -19,8 +19,8 @@ directly, so no CORS configuration is needed locally.
 To exercise the paid limits and the audit proxy:
 
 ```bash
-TARIFFWISE_API_KEYS=devkey make api
-TARIFFWISE_API_KEY=devkey TARIFFWISE_API=http://127.0.0.1:8099 make web
+HTSDESK_API_KEYS=devkey make api
+HTSDESK_API_KEY=devkey HTSDESK_API=http://127.0.0.1:8099 make web
 ```
 
 ## Before every deploy
@@ -47,7 +47,7 @@ owes.
 | Federal Register | daily | `make fedreg` | rate changes, new actions |
 | CROSS bodies | continuous | `make rulings` | classifier accuracy |
 
-`deploy/tariffwise-ingest.timer` runs the daily refresh at 09:00 UTC, ahead of
+`deploy/htsdesk-ingest.timer` runs the daily refresh at 09:00 UTC, ahead of
 the US business day.
 
 `make rulings` is resumable and idempotent — it fetches only rulings whose body
@@ -64,24 +64,24 @@ proceed during writes.
 ## Deploying
 
 ```
-/opt/tariffwise            application, owned by the tariffwise user
-/opt/tariffwise/data       reference DB — the only writable path
-/etc/tariffwise/api.env    credentials, root-owned, mode 0600
+/opt/htsdesk            application, owned by the htsdesk user
+/opt/htsdesk/data       reference DB — the only writable path
+/etc/htsdesk/api.env    credentials, root-owned, mode 0600
 ```
 
-1. `install -m 0600 /dev/null /etc/tariffwise/api.env` and fill it from
+1. `install -m 0600 /dev/null /etc/htsdesk/api.env` and fill it from
    `.env.example`. Generate keys with `openssl rand -hex 32`.
-2. `cp deploy/tariffwise-*.{service,timer} /etc/systemd/system/`
-3. `cp deploy/nginx.conf /etc/nginx/sites-available/tariffwise-api` and edit
+2. `cp deploy/htsdesk-*.{service,timer} /etc/systemd/system/`
+3. `cp deploy/nginx.conf /etc/nginx/sites-available/htsdesk-api` and edit
    the hostname.
-4. `systemctl enable --now tariffwise-api tariffwise-ingest.timer`
+4. `systemctl enable --now htsdesk-api htsdesk-ingest.timer`
 5. Confirm: `curl -s localhost:8099/api/health | jq .counts`
 
-The web app deploys separately (Vercel). Set `TARIFFWISE_API` to the API
-origin, `TARIFFWISE_API_KEY` to a key from the allowlist, and `SITE_URL` to
+The web app deploys separately (Vercel). Set `HTSDESK_API` to the API
+origin, `HTSDESK_API_KEY` to a key from the allowlist, and `SITE_URL` to
 the canonical site URL — sitemaps and metadata derive from it.
 
-Leave `TARIFFWISE_ORIGINS` empty. It is only needed if a third party must call
+Leave `HTSDESK_ORIGINS` empty. It is only needed if a third party must call
 the API from a browser, and it defaults to denying that.
 
 ## Health checks
@@ -103,7 +103,7 @@ so in its response notes.
 **`database is locked` during ingest.** Two writers. Stop one; see above.
 
 **Audit returns `truncated: true`.** The wall-clock budget was reached. Raise
-`TARIFFWISE_AUDIT_BUDGET` or split the catalogue. Do not raise it far: it is
+`HTSDESK_AUDIT_BUDGET` or split the catalogue. Do not raise it far: it is
 what stops one request occupying a worker.
 
 **429 from the API.** Rate limiting is working. Supply a key via `X-API-Key`,

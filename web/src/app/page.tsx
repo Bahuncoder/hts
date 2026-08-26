@@ -16,7 +16,7 @@ export default async function Home() {
         </h1>
         <p className="text-lg" style={{ color: "var(--muted)" }}>
           Most duty calculators ask for an HTS code you don&rsquo;t have, then quote a
-          rate that ignores the trade remedies stacked on top of it. Tariffwise
+          rate that ignores the trade remedies stacked on top of it. HTSDesk
           classifies your goods against 200,000 CBP rulings and computes the full
           duty stack — Section 232, Section 301, MPF and HMF — with the authority
           for every line.
@@ -25,7 +25,7 @@ export default async function Home() {
           <Link
             href="/classify"
             className="rounded-md px-4 py-2 text-[15px] font-medium"
-            style={{ background: "var(--accent)", color: "var(--bg)" }}
+            style={{ background: "var(--accent)", color: "var(--paper)" }}
           >
             Classify a product
           </Link>

@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Lockup } from "@/components/Logo";
+import { currentViewer } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.SITE_URL ?? "http://localhost:3000"),
   title: {
-    default: "Tariffwise — US import duty, HTS codes and tariff changes",
-    template: "%s | Tariffwise",
+    default: "HTSDesk — US import duty, HTS codes and tariff changes",
+    template: "%s | HTSDesk",
   },
   description:
-    "Work out what a shipment actually costs to import into the US. Live HTS duty rates, Section 232 and 301 exposure, and classification backed by CBP rulings.",
+    "Describe your product in plain words and get its HTS classification, the CBP rulings behind it, and the full duty stack — Section 232, Section 301, MPF and HMF — with the authority for every line.",
 };
 
 const NAV = [
@@ -17,45 +19,71 @@ const NAV = [
   { href: "/calculator", label: "Duty calculator" },
   { href: "/changes", label: "Tariff changes" },
   { href: "/audit", label: "Catalogue audit" },
+  { href: "/pricing", label: "Pricing" },
 ];
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const viewer = await currentViewer();
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap"
+        />
+      </head>
       <body>
-        <header className="border-b" style={{ borderColor: "var(--border)" }}>
+        <header style={{ borderBottom: "1px solid var(--border)" }}>
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-            <Link href="/" className="text-[15px] font-semibold tracking-tight">
-              Tariffwise
+            <Link href="/" aria-label="HTSDesk home">
+              <Lockup />
             </Link>
             <nav className="flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
               {NAV.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="hover:underline"
-                  style={{ color: "var(--muted)" }}
-                >
+                <Link key={n.href} href={n.href} className="hover:underline"
+                      style={{ color: "var(--muted)" }}>
                   {n.label}
                 </Link>
               ))}
             </nav>
+            <div className="ml-auto flex items-center gap-4 text-[14px]">
+              {viewer ? (
+                <>
+                  <span className="mono hidden text-[12px] sm:inline" style={{ color: "var(--faint)" }}>
+                    {viewer.plan.name}
+                  </span>
+                  <Link href="/account" className="hover:underline" style={{ color: "var(--muted)" }}>
+                    Account
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/login" className="hover:underline" style={{ color: "var(--muted)" }}>
+                    Sign in
+                  </Link>
+                  <Link href="/signup" className="px-3 py-1.5 font-medium"
+                        style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
+                    Start free
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </header>
 
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
 
-        <footer
-          className="mt-16 border-t px-4 py-8 text-[13px]"
-          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-        >
+        <footer className="mt-16 px-4 py-8 text-[13px]"
+                style={{ borderTop: "1px solid var(--border)", color: "var(--faint)" }}>
           <div className="mx-auto max-w-6xl space-y-2">
             <p>
               Rates are derived from the USITC Harmonized Tariff Schedule, the
               Chapter 99 U.S. Notes and the Federal Register.
             </p>
             <p>
-              Tariffwise is decision support, not customs advice. The importer of
+              HTSDesk is decision support, not customs advice. The importer of
               record&rsquo;s duty of reasonable care under 19 U.S.C. §1484 cannot be
               delegated — confirm classifications with your broker before entry.
             </p>

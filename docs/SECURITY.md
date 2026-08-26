@@ -65,7 +65,7 @@ detail server-side.
 
 ### 5. CORS defaulted to `*` — medium, fixed
 
-`TARIFFWISE_ORIGINS` defaulted to `*`, so any origin could call the API from a
+`HTSDESK_ORIGINS` defaulted to `*`, so any origin could call the API from a
 browser.
 
 **Fixed**: the default is now empty, denying all cross-origin requests. A
@@ -93,7 +93,7 @@ fields are capped at 400 characters, `sku` at 64, HTS codes at 20.
 `X-Forwarded-For` is caller-supplied. Trusting it unconditionally lets any
 client evade rate limiting by forging the header.
 
-**Fixed**: it is read only when `TARIFFWISE_BEHIND_PROXY=1`, and only the last
+**Fixed**: it is read only when `HTSDESK_BEHIND_PROXY=1`, and only the last
 hop is taken. The systemd unit sets it because nginx is in front; a directly
 exposed instance must not.
 

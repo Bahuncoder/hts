@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #0d5142; } a:hover { color: #073229; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .sans { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .serif { font-family: Newsreader, ui-serif, Georgia, "Times New Roman", serif; }
+    .lbl { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7a75; }
+    .row { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; }
+    .tick { flex-shrink: 0; margin-top: 3px; }
+  </style>
+</helmet>
+
+<div class="sans" style="width: 1440px; background: #faf9f6; color: #161c1a;">
+
+  <div style="border-bottom: 1px solid #e4e2da;">
+    <div style="max-width: 1160px; margin: 0 auto; padding: 17px 40px; display: flex; align-items: center; gap: 34px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="23" height="23" viewBox="0 0 104 76" fill="none">
+          <rect x="0" y="4" width="96" height="11" rx="1.5" fill="#0d5142"/>
+          <rect x="14" y="24" width="74" height="11" rx="1.5" fill="#0d5142" opacity="0.74"/>
+          <rect x="28" y="44" width="52" height="11" rx="1.5" fill="#0d5142" opacity="0.5"/>
+          <rect x="42" y="64" width="30" height="11" rx="1.5" fill="#a8501f"/>
+        </svg>
+        <span style="font-size: 17px; font-weight: 600; letter-spacing: -0.015em;">HTS<span style="color: #4d5b56; font-weight: 450;">Desk</span></span>
+      </div>
+      <div style="display: flex; gap: 24px; font-size: 14px; color: #4d5b56;">
+        <span>Classify</span><span>Duty calculator</span><span>Tariff changes</span><span>Catalogue audit</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width: 1160px; margin: 0 auto; padding: 60px 40px 70px; display: flex; flex-direction: column; gap: 38px;">
+
+    <div style="display: flex; flex-direction: column; gap: 12px; max-width: 720px;">
+      <div class="serif" style="font-size: 44px; line-height: 1.06; letter-spacing: -0.016em;">Priced against what you’d otherwise overpay</div>
+      <div style="font-size: 16px; color: #4d5b56; line-height: 1.55;">
+        A single misclassified entry averages <span class="mono" style="color: #161c1a;">$3,847</span> in duty you did not owe. Every plan bills monthly and cancels in one click.
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: stretch;">
+
+      <!-- Free -->
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 26px 24px; display: flex; flex-direction: column; gap: 17px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div class="lbl">Free</div>
+          <div class="mono" style="font-size: 34px; font-weight: 500; letter-spacing: -0.02em;">$0</div>
+          <div style="font-size: 13px; color: #6b7a75;">no card</div>
+        </div>
+        <div style="height: 1px; background: #efede7;"></div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>25 products per audit</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Full duty stack with authorities</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>All 19,949 code pages</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Cited CBP rulings</span></div>
+        </div>
+        <div style="margin-top: auto; border: 1px solid #d3cfc4; padding: 10px; font-size: 14px; font-weight: 500; text-align: center;">Start free</div>
+      </div>
+
+      <!-- Starter -->
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 26px 24px; display: flex; flex-direction: column; gap: 17px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div class="lbl">Starter</div>
+          <div style="display: flex; align-items: baseline; gap: 5px;">
+            <span class="mono" style="font-size: 34px; font-weight: 500; letter-spacing: -0.02em;">$99</span>
+            <span style="font-size: 14px; color: #6b7a75;">/month</span>
+          </div>
+          <div style="font-size: 13px; color: #6b7a75;">one buyer, one catalogue</div>
+        </div>
+        <div style="height: 1px; background: #efede7;"></div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong style="font-weight: 600;">100 SKUs</strong> monitored</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Email alerts when a tariff action hits your codes</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Saved catalogues</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>CSV export</span></div>
+        </div>
+        <div style="margin-top: auto; border: 1px solid #d3cfc4; padding: 10px; font-size: 14px; font-weight: 500; text-align: center;">Choose Starter</div>
+      </div>
+
+      <!-- Growth -->
+      <div style="background: #ffffff; border: 1.5px solid #0d5142; padding: 26px 24px; display: flex; flex-direction: column; gap: 17px; position: relative;">
+        <div style="position: absolute; top: -11px; left: 24px; background: #0d5142; color: #fff; font-size: 10px; letter-spacing: 0.1em; padding: 4px 9px; font-weight: 600;">MOST IMPORTERS</div>
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div class="lbl" style="color: #0d5142;">Growth</div>
+          <div style="display: flex; align-items: baseline; gap: 5px;">
+            <span class="mono" style="font-size: 34px; font-weight: 500; letter-spacing: -0.02em;">$499</span>
+            <span style="font-size: 14px; color: #6b7a75;">/month</span>
+          </div>
+          <div style="font-size: 13px; color: #6b7a75;">$100k–$1M duty a year</div>
+        </div>
+        <div style="height: 1px; background: #e7efeb;"></div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong style="font-weight: 600;">1,000 SKUs</strong> monitored</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Savings analysis — FTA eligibility, alternate defensible codes</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Refundable-duty report (IEEPA)</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Classification binder export (PDF)</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#0d5142" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span>3 seats</span></div>
+        </div>
+        <div style="margin-top: auto; background: #0d5142; color: #fff; padding: 10px; font-size: 14px; font-weight: 500; text-align: center;">Choose Growth</div>
+      </div>
+
+      <!-- Pro -->
+      <div style="background: #10201c; color: #e8efec; padding: 26px 24px; display: flex; flex-direction: column; gap: 17px;">
+        <div style="display: flex; flex-direction: column; gap: 5px;">
+          <div class="lbl" style="color: #7f9a92;">Pro</div>
+          <div style="display: flex; align-items: baseline; gap: 5px;">
+            <span class="mono" style="font-size: 34px; font-weight: 500; letter-spacing: -0.02em;">$1,999</span>
+            <span style="font-size: 14px; color: #9bada7;">/month</span>
+          </div>
+          <div style="font-size: 13px; color: #9bada7;">brokers and $1M+ duty</div>
+        </div>
+        <div style="height: 1px; background: #253430;"></div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#5fc0a5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color: #d7e2de;">Unlimited SKUs</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#5fc0a5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color: #d7e2de;">Entry audit — upload CBP 7501s, compare declared against computed</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#5fc0a5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color: #d7e2de;">API access</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#5fc0a5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color: #d7e2de;">Multi-client workspaces</span></div>
+          <div class="row"><svg class="tick" width="13" height="13" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3.2L13 5" stroke="#5fc0a5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color: #d7e2de;">Unlimited seats</span></div>
+        </div>
+        <div style="margin-top: auto; background: #5fc0a5; color: #0a1a16; padding: 10px; font-size: 14px; font-weight: 500; text-align: center;">Talk to us</div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 20px; border-top: 1px solid #e4e2da; padding-top: 26px;">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 15px; font-weight: 600;">What we do not do</div>
+        <div style="font-size: 13.5px; color: #4d5b56; line-height: 1.55;">
+          We do not file entries, and we are not your customs broker. HTSDesk is decision support: it finds candidate classifications, shows the CBP rulings behind them, and prices the duty. Your broker signs off.
+        </div>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 15px; font-weight: 600;">Where a figure is uncertain, we say so</div>
+        <div style="font-size: 13.5px; color: #4d5b56; line-height: 1.55;">
+          Remedies whose product scope lives in the U.S. Notes are withheld from the total and listed separately. You will see an understated figure with a flag, never a confident wrong one.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

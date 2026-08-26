@@ -1,0 +1,9 @@
+[Unit]
+Description=HTSDesk data refresh (HTS, rulings, Federal Register)
+After=network.target
+
+[Service]
+Type=oneshot
+User=htsdesk
+WorkingDirectory=/opt/htsdesk
+ExecStart=/opt/htsdesk/.venv/bin/python ingest/refresh.py

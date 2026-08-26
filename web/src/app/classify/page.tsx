@@ -33,11 +33,11 @@ export default async function ClassifyPage({
           defaultValue={q ?? ""}
           placeholder="men's knitted cotton t-shirt, 100% cotton, short sleeve"
           className="min-w-0 flex-1 rounded-md border px-3 py-2 text-[15px]"
-          style={{ borderColor: "var(--border)", background: "var(--bg)", color: "var(--ink)" }}
+          style={{ borderColor: "var(--border)", background: "var(--paper)", color: "var(--ink)" }}
         />
         <button
           className="rounded-md px-4 py-2 text-[15px] font-medium"
-          style={{ background: "var(--accent)", color: "var(--bg)" }}
+          style={{ background: "var(--accent)", color: "var(--paper)" }}
         >
           Classify
         </button>

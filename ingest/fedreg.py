@@ -165,7 +165,7 @@ async def poll(days: int = 120, enrich_limit: int = 400) -> int:
     since = (date.today() - timedelta(days=days)).isoformat()
     conn = connect()
     init(conn)
-    async with httpx.AsyncClient(headers={"User-Agent": "tariffwise/0.1"}) as client:
+    async with httpx.AsyncClient(headers={"User-Agent": "htsdesk/0.1"}) as client:
         for term in TERMS:
             docs = await _fetch(client, term, since)
             n, rel = _store(conn, docs)

@@ -27,7 +27,7 @@ from store.db import connect, init, set_meta
 SEARCH = "https://rulings.cbp.gov/api/search"
 DETAIL = "https://rulings.cbp.gov/api/ruling/{}"
 PAGE_SIZE = 100
-UA = "tariffwise-ingest/0.1 (+public data research)"
+UA = "htsdesk-ingest/0.1 (+public data research)"
 
 # CROSS subject lines are not consistently subjects. Some carry the whole
 # ruling letter, capped at 1000 characters, with the body running on after the

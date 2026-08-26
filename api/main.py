@@ -1,4 +1,4 @@
-"""Tariffwise HTTP API.
+"""HTSDesk HTTP API.
 
 Serves the duty engine, classifier and reference data. Reference data is
 read-only SQLite shipped as a build artifact, so the service has no database
@@ -30,15 +30,15 @@ from store.db import connect, get_meta
 ROOT = Path(__file__).resolve().parent.parent
 
 # Wall-clock ceiling on a single audit, whatever the item count.
-AUDIT_BUDGET_SECONDS = float(os.environ.get("TARIFFWISE_AUDIT_BUDGET", "45"))
+AUDIT_BUDGET_SECONDS = float(os.environ.get("HTSDESK_AUDIT_BUDGET", "45"))
 app = FastAPI(
-    title="Tariffwise API",
+    title="HTSDesk API",
     version="0.1.0",
     description="Duty calculation and HTS classification for US importers.",
 )
 # Deny cross-origin by default. An explicit origin list is required to enable
 # it, so a misconfigured deployment fails closed rather than open.
-_origins = [o.strip() for o in os.environ.get("TARIFFWISE_ORIGINS", "").split(",") if o.strip()]
+_origins = [o.strip() for o in os.environ.get("HTSDESK_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,

@@ -27,8 +27,8 @@ export function Badge({
   const tones = {
     neutral: { background: "var(--surface)", color: "var(--muted)", borderColor: "var(--border)" },
     good: { background: "var(--accent-soft)", color: "var(--accent)", borderColor: "transparent" },
-    warn: { background: "var(--warn-soft)", color: "var(--warn)", borderColor: "transparent" },
-    bad: { background: "var(--warn-soft)", color: "var(--danger)", borderColor: "transparent" },
+    warn: { background: "var(--caution-soft)", color: "var(--caution)", borderColor: "transparent" },
+    bad: { background: "var(--caution-soft)", color: "var(--danger)", borderColor: "transparent" },
   }[tone];
   return (
     <span
@@ -52,7 +52,7 @@ export function Stat({
   tone?: "good" | "warn";
 }) {
   const color =
-    tone === "warn" ? "var(--warn)" : tone === "good" ? "var(--accent)" : "var(--ink)";
+    tone === "warn" ? "var(--caution)" : tone === "good" ? "var(--accent)" : "var(--ink)";
   return (
     <div>
       <div className="text-[12px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
@@ -83,7 +83,7 @@ export function Note({ children }: { children: React.ReactNode }) {
   return (
     <p
       className="rounded border-l-2 py-2 pl-3 text-[13px]"
-      style={{ borderColor: "var(--warn)", background: "var(--warn-soft)", color: "var(--warn)" }}
+      style={{ borderColor: "var(--caution)", background: "var(--caution-soft)", color: "var(--caution)" }}
     >
       {children}
     </p>

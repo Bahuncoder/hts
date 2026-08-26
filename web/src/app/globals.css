@@ -1,49 +1,124 @@
 @import "tailwindcss";
 
+/* HTSDesk design system.
+   Green marks what the product asserts. Copper marks money the importer may
+   get back — the IEEPA duties struck down in February 2026. Nothing else on
+   a page is allowed to be copper. */
+
 :root {
-  --bg: #ffffff;
-  --surface: #f7f8f9;
-  --border: #e3e6e8;
-  --ink: #10161c;
-  --muted: #5d6b78;
-  --accent: #0f5c4a;
-  --accent-soft: #e8f2ef;
-  --warn: #8a5a00;
-  --warn-soft: #fdf5e3;
-  --danger: #9b2c2c;
+  --paper: #faf9f6;
+  --surface: #ffffff;
+  --sunk: #f3f1ec;
+  --border: #e4e2da;
+  --rule: #d3cfc4;
+  --hair: #efede7;
+
+  --ink: #161c1a;
+  --muted: #4d5b56;
+  --faint: #6b7a75;
+
+  --accent: #0d5142;
+  --accent-soft: #e7efeb;
+  --on-accent: #ffffff;
+
+  --recover: #a8501f;
+  --caution: #8a5a2b;
+  --caution-soft: #fbf6ec;
+  --caution-ink: #6b4a1e;
+  --danger: #8f2f2a;
+
+  --deep: #10201c;
+  --deep-ink: #e8efec;
+  --deep-muted: #7f9a92;
+
+  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --serif: Newsreader, ui-serif, Georgia, "Times New Roman", serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1117;
-    --surface: #151b23;
-    --border: #262d36;
-    --ink: #e6edf3;
-    --muted: #93a1af;
-    --accent: #4cc4a4;
-    --accent-soft: #12241f;
-    --warn: #e0b341;
-    --warn-soft: #241d0e;
+    --paper: #0e1513;
+    --surface: #141d1a;
+    --sunk: #101815;
+    --border: #253430;
+    --rule: #33453f;
+    --hair: #1d2925;
+
+    --ink: #e8efec;
+    --muted: #9bada7;
+    --faint: #7f9a92;
+
+    --accent: #5fc0a5;
+    --accent-soft: #16302a;
+    --on-accent: #0a1a16;
+
+    --recover: #e08a4e;
+    --caution: #e0b341;
+    --caution-soft: #241d0e;
+    --caution-ink: #e0b341;
     --danger: #f28b82;
+
+    --deep: #16302a;
+    --deep-ink: #e8efec;
+    --deep-muted: #9bada7;
   }
+}
+
+:root[data-theme="dark"] {
+  --paper: #0e1513;
+  --surface: #141d1a;
+  --sunk: #101815;
+  --border: #253430;
+  --rule: #33453f;
+  --hair: #1d2925;
+  --ink: #e8efec;
+  --muted: #9bada7;
+  --faint: #7f9a92;
+  --accent: #5fc0a5;
+  --accent-soft: #16302a;
+  --on-accent: #0a1a16;
+  --recover: #e08a4e;
+  --caution: #e0b341;
+  --caution-soft: #241d0e;
+  --caution-ink: #e0b341;
+  --danger: #f28b82;
+  --deep: #16302a;
+  --deep-ink: #e8efec;
+  --deep-muted: #9bada7;
 }
 
 html { -webkit-text-size-adjust: 100%; }
 
 body {
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-feature-settings: "cv05" 1;
+  font-family: var(--sans);
   line-height: 1.55;
 }
 
-.tabular { font-variant-numeric: tabular-nums; }
+/* Codes, rates and money. Tabular figures keep columns aligned and stop a
+   digit shifting when a value updates. */
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
 
-.scroll-x { overflow-x: auto; }
+.serif { font-family: var(--serif); }
 
-/* Source data is uneven: some CBP ruling subjects carry the whole letter.
-   Clamp so a bad record degrades the line, not the page. */
+/* Dates and codes are single values; they must never break mid-value. */
+.nb { white-space: nowrap; }
+
+.lbl {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Source data is uneven — some CBP ruling subjects carry a whole letter.
+   Clamp so a bad record degrades its line, not the page. */
 .clamp-1, .clamp-2 {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -51,3 +126,5 @@ body {
 }
 .clamp-1 { -webkit-line-clamp: 1; }
 .clamp-2 { -webkit-line-clamp: 2; }
+
+.scroll-x { overflow-x: auto; }

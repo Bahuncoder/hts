@@ -1,24 +1,24 @@
 [Unit]
-Description=Tariffwise API
+Description=HTSDesk API
 After=network.target
 
 [Service]
 Type=simple
-User=tariffwise
-WorkingDirectory=/opt/tariffwise
+User=htsdesk
+WorkingDirectory=/opt/htsdesk
 Environment=PYTHONUNBUFFERED=1
-# Holds ANTHROPIC_API_KEY, TARIFFWISE_API_KEYS and TARIFFWISE_ORIGINS.
+# Holds ANTHROPIC_API_KEY, HTSDESK_API_KEYS and HTSDESK_ORIGINS.
 # Must be root-owned and mode 0600: it contains credentials.
-EnvironmentFile=/etc/tariffwise/api.env
+EnvironmentFile=/etc/htsdesk/api.env
 
 # nginx terminates TLS and sets X-Forwarded-For, so the last hop is
 # trustworthy. Never set this when the API is directly reachable — the header
 # is caller-supplied and rate limiting could be evaded by forging it.
-Environment=TARIFFWISE_BEHIND_PROXY=1
+Environment=HTSDESK_BEHIND_PROXY=1
 
 # The in-process rate limiter counts per worker. Two workers double every
 # application limit, which is why nginx holds the authoritative one.
-ExecStart=/opt/tariffwise/.venv/bin/uvicorn api.main:app \
+ExecStart=/opt/htsdesk/.venv/bin/uvicorn api.main:app \
     --host 127.0.0.1 --port 8099 --workers 2
 
 Restart=always
@@ -38,7 +38,7 @@ LockPersonality=true
 MemoryDenyWriteExecute=true
 SystemCallArchitectures=native
 # The reference database is the only path that must stay writable (WAL).
-ReadWritePaths=/opt/tariffwise/data
+ReadWritePaths=/opt/htsdesk/data
 
 [Install]
 WantedBy=multi-user.target

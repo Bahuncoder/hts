@@ -10,7 +10,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "tariffwise.db"
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "htsdesk.db"
 SCHEMA = Path(__file__).resolve().parent / "schema.sql"
 
 

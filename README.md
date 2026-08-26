@@ -1,4 +1,4 @@
-# Tariffwise — duty & tariff intelligence for SMB importers
+# HTSDesk — duty & tariff intelligence for SMB importers
 
 A duty-calculation and HTS-classification engine for the ~400,000 US businesses
 that import goods and are ignored by enterprise trade platforms.

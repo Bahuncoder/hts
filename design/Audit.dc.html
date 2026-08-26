@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #0d5142; } a:hover { color: #073229; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .nb { white-space: nowrap; }
+    .sans { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .serif { font-family: Newsreader, ui-serif, Georgia, "Times New Roman", serif; }
+    .lbl { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7a75; }
+    td, th { padding: 12px 0; }
+  </style>
+</helmet>
+
+<div class="sans" style="width: 1440px; background: #faf9f6; color: #161c1a;">
+
+  <div style="border-bottom: 1px solid #e4e2da;">
+    <div style="max-width: 1240px; margin: 0 auto; padding: 17px 40px; display: flex; align-items: center; gap: 34px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="23" height="23" viewBox="0 0 104 76" fill="none">
+          <rect x="0" y="4" width="96" height="11" rx="1.5" fill="#0d5142"/>
+          <rect x="14" y="24" width="74" height="11" rx="1.5" fill="#0d5142" opacity="0.74"/>
+          <rect x="28" y="44" width="52" height="11" rx="1.5" fill="#0d5142" opacity="0.5"/>
+          <rect x="42" y="64" width="30" height="11" rx="1.5" fill="#a8501f"/>
+        </svg>
+        <span style="font-size: 17px; font-weight: 600; letter-spacing: -0.015em;">HTS<span style="color: #4d5b56; font-weight: 450;">Desk</span></span>
+      </div>
+      <div style="display: flex; gap: 24px; font-size: 14px; color: #4d5b56;">
+        <span>Classify</span><span>Duty calculator</span><span>Tariff changes</span>
+        <span style="color: #161c1a; font-weight: 500; border-bottom: 2px solid #0d5142; padding-bottom: 2px;">Catalogue audit</span>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
+        <span class="mono" style="font-size: 12px; color: #6b7a75;">Growth · 412 / 1,000 SKUs</span>
+        <div style="width: 28px; height: 28px; background: #e7efeb; color: #0d5142; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600;">RS</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width: 1240px; margin: 0 auto; padding: 36px 40px 60px; display: flex; flex-direction: column; gap: 26px;">
+
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 30px;">
+      <div style="display: flex; flex-direction: column; gap: 8px; max-width: 660px;">
+        <div class="serif" style="font-size: 34px; line-height: 1.1; letter-spacing: -0.012em;">Catalogue audit</div>
+        <div style="font-size: 15px; color: #4d5b56; line-height: 1.5;">
+          Every line gets a classification, the full duty stack for its origin, and a flag where a remedy’s scope still needs confirming. Leave the HTS column blank and we will classify it.
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px;">
+        <div style="border: 1px solid #d3cfc4; background: #fff; padding: 10px 16px; font-size: 14px; font-weight: 500;">Upload CSV</div>
+        <div style="background: #0d5142; color: #fff; padding: 10px 16px; font-size: 14px; font-weight: 500;">Run audit</div>
+      </div>
+    </div>
+
+    <!-- summary -->
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px;">
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 20px 22px;">
+        <div class="lbl">Entered value</div>
+        <div class="mono" style="font-size: 30px; font-weight: 500; margin-top: 5px; letter-spacing: -0.018em;">$4.82M</div>
+        <div style="font-size: 12px; color: #6b7a75; margin-top: 4px;">412 lines priced</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 20px 22px;">
+        <div class="lbl">Duty and fees</div>
+        <div class="mono" style="font-size: 30px; font-weight: 500; margin-top: 5px; letter-spacing: -0.018em;">$911,340</div>
+        <div style="font-size: 12px; color: #6b7a75; margin-top: 4px;">18.91% effective</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; border-left: 3px solid #a8501f; padding: 20px 22px;">
+        <div class="lbl" style="color: #a8501f;">Potentially refundable</div>
+        <div class="mono" style="font-size: 30px; font-weight: 500; margin-top: 5px; letter-spacing: -0.018em; color: #a8501f;">$116,208</div>
+        <div style="font-size: 12px; color: #6b7a75; margin-top: 4px;">IEEPA, struck down Feb 2026</div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; border-left: 3px solid #8a5a2b; padding: 20px 22px;">
+        <div class="lbl" style="color: #8a5a2b;">Needs your review</div>
+        <div class="mono" style="font-size: 30px; font-weight: 500; margin-top: 5px; letter-spacing: -0.018em;">37</div>
+        <div style="font-size: 12px; color: #6b7a75; margin-top: 4px;">29 unverified scope · 8 low confidence</div>
+      </div>
+    </div>
+
+    <!-- table -->
+    <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 4px 26px 16px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+        <thead>
+          <tr style="border-bottom: 1px solid #e4e2da;">
+            <th style="text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">SKU</th>
+            <th style="text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Description</th>
+            <th style="text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">HTS</th>
+            <th style="text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Origin</th>
+            <th style="text-align: right; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Value</th>
+            <th style="text-align: right; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Duty</th>
+            <th style="text-align: right; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Rate</th>
+            <th style="text-align: left; padding-left: 26px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b7a75; font-weight: 500;">Flags</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid #f2f0ea;">
+            <td class="mono" style="font-size: 13px;">TS-001</td>
+            <td style="color: #3d4a45;">Men’s knitted cotton t-shirt, short sleeve</td>
+            <td class="mono" style="font-size: 13px; color: #0d5142;">6109.10.00.04</td>
+            <td style="color: #4d5b56;">China</td>
+            <td class="mono" style="text-align: right;">$48,000</td>
+            <td class="mono" style="text-align: right;">$11,746</td>
+            <td class="mono" style="text-align: right;">24.47%</td>
+            <td style="padding-left: 26px;"><span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 22px; height: 3px; background: #0d5142;"></span><span style="font-size: 12px; color: #4d5b56;">high</span></span></td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f2f0ea;">
+            <td class="mono" style="font-size: 13px;">BP-220</td>
+            <td style="color: #3d4a45;">Nylon backpack with zipper closure</td>
+            <td class="mono" style="font-size: 13px; color: #0d5142;">4202.92.31.20</td>
+            <td style="color: #4d5b56;">Vietnam</td>
+            <td class="mono" style="text-align: right;">$31,000</td>
+            <td class="mono" style="text-align: right;">$5,634</td>
+            <td class="mono" style="text-align: right;">18.17%</td>
+            <td style="padding-left: 26px;"><span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 22px; height: 3px; background: #0d5142;"></span><span style="font-size: 12px; color: #4d5b56;">high</span></span></td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f2f0ea; background: #fdfbf6;">
+            <td class="mono" style="font-size: 13px;">LI-20V</td>
+            <td style="color: #3d4a45;">Lithium-ion battery pack, 20V, cordless tools</td>
+            <td class="mono" style="font-size: 13px; color: #0d5142;">8507.60.00.20</td>
+            <td style="color: #4d5b56;">China</td>
+            <td class="mono" style="text-align: right;">$75,000</td>
+            <td class="mono" style="text-align: right;">$2,904</td>
+            <td class="mono" style="text-align: right;">3.87%</td>
+            <td style="padding-left: 26px;"><span style="font-size: 12px; color: #8a5a2b;">2 remedies · scope unverified</span></td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f2f0ea;">
+            <td class="mono" style="font-size: 13px;">CH-14</td>
+            <td style="color: #3d4a45;">Upholstered wooden dining chair</td>
+            <td class="mono" style="font-size: 13px; color: #0d5142;">9401.61.40.01</td>
+            <td style="color: #4d5b56;">China</td>
+            <td class="mono" style="text-align: right;">$52,000</td>
+            <td class="mono" style="text-align: right;">$13,245</td>
+            <td class="mono" style="text-align: right;">25.47%</td>
+            <td style="padding-left: 26px;"><span style="font-size: 12px; color: #a8501f;">$10,400 refundable</span></td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f2f0ea; background: #fdfbf6;">
+            <td class="mono" style="font-size: 13px;">GR-77</td>
+            <td style="color: #3d4a45;">Silicone kitchen utensil grip sleeve</td>
+            <td class="mono" style="font-size: 13px; color: #8a5a2b;">3924.10.40.00</td>
+            <td style="color: #4d5b56;">China</td>
+            <td class="mono" style="text-align: right;">$9,400</td>
+            <td class="mono" style="text-align: right;">$3,469</td>
+            <td class="mono" style="text-align: right;">36.90%</td>
+            <td style="padding-left: 26px;"><span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 10px; height: 3px; background: #b3aa9a;"></span><span style="font-size: 12px; color: #8a5a2b;">low · confirm</span></span></td>
+          </tr>
+          <tr>
+            <td class="mono" style="font-size: 13px;">MG-09</td>
+            <td style="color: #3d4a45;">Ceramic coffee mug, 12oz</td>
+            <td class="mono" style="font-size: 13px; color: #0d5142;">6912.00.44.00</td>
+            <td style="color: #4d5b56;">Germany</td>
+            <td class="mono" style="text-align: right;">$12,000</td>
+            <td class="mono" style="text-align: right;">$1,257</td>
+            <td class="mono" style="text-align: right;">10.47%</td>
+            <td style="padding-left: 26px;"><span style="display: inline-flex; align-items: center; gap: 5px;"><span style="width: 22px; height: 3px; background: #0d5142;"></span><span style="font-size: 12px; color: #4d5b56;">high</span></span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; gap: 18px;">
+      <div style="flex-grow: 1; border-left: 2px solid #8a5a2b; background: #fbf6ec; padding: 14px 18px; font-size: 13px; line-height: 1.55; color: #6b4a1e;">
+        <strong style="font-weight: 600;">Confirm the 37 flagged lines before you file.</strong> Classifications are ranked from CBP ruling precedent; the reasonable-care duty under 19 U.S.C. §1484 stays with the importer of record and cannot be delegated to us.
+      </div>
+      <div style="width: 300px; background: #ffffff; border: 1px solid #e4e2da; padding: 16px 18px; display: flex; flex-direction: column; gap: 9px;">
+        <div class="lbl">Export</div>
+        <div style="font-size: 13px; color: #4d5b56; line-height: 1.45;">Classification binder with cited rulings, for your broker and your reasonable-care file.</div>
+        <div style="border: 1px solid #d3cfc4; padding: 8px 14px; font-size: 13px; font-weight: 500; text-align: center;">Download binder (PDF)</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

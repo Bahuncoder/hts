@@ -45,7 +45,7 @@ build:
 	cd web && rm -rf .next && npm run build
 
 # --- verify -----------------------------------------------------------------
-test: test-duty test-api
+test: test-duty test-api test-billing
 
 test-duty:
 	@python3 tests/test_duty.py
@@ -56,4 +56,7 @@ test-api:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-api eval
+check: build test-duty test-api test-billing eval
+
+test-billing:
+	@cd web && node tests/billing.test.mjs

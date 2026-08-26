@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import { API_BASE } from "@/lib/api";
+import { currentViewer } from "@/lib/auth";
+import { PLANS } from "@/lib/plans";
 
 /** Server-side proxy for the catalogue audit.
  *
  *  The browser posts here rather than to the engine directly. That keeps the
- *  engine off the public internet, removes the cross-origin exchange, and —
- *  most importantly — keeps the API key server-side. A key shipped to the
- *  browser under NEXT_PUBLIC_ is a published key.
+ *  engine off the public internet, removes the cross-origin exchange, and
+ *  keeps the API key server-side — a key shipped to the browser under
+ *  NEXT_PUBLIC_ is a published key.
+ *
+ *  It is also where the plan ceiling is enforced, because the ceiling is a
+ *  real cost control: classification costs ~175 ms of CPU per item.
  */
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_BODY = 2_000_000; // bytes; the engine caps item count separately
+const MAX_BODY = 2_000_000;
 
 export async function POST(request: Request) {
   const raw = await request.text();
@@ -22,15 +27,31 @@ export async function POST(request: Request) {
     );
   }
 
-  let parsed: unknown;
+  let parsed: { items?: unknown[] };
   try {
     parsed = JSON.parse(raw);
   } catch {
     return NextResponse.json({ detail: "Malformed request body." }, { status: 400 });
   }
 
+  const viewer = await currentViewer();
+  const plan = viewer?.plan ?? PLANS.free;
+  const count = Array.isArray(parsed.items) ? parsed.items.length : 0;
+
+  if (count > plan.skus) {
+    return NextResponse.json(
+      {
+        detail: viewer
+          ? `${count} products exceeds the ${plan.skus.toLocaleString()} allowed on ${plan.name}. Upgrade, or split the catalogue.`
+          : `${count} products exceeds the ${plan.skus} allowed without an account. Create a free account, or split the catalogue.`,
+        upgrade: viewer ? "/pricing" : "/signup",
+      },
+      { status: 413 },
+    );
+  }
+
   const headers: Record<string, string> = { "content-type": "application/json" };
-  const key = process.env.TARIFFWISE_API_KEY;
+  const key = process.env.HTSDESK_API_KEY;
   if (key) headers["x-api-key"] = key;
 
   try {

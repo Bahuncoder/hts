@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #0d5142; } a:hover { color: #073229; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .nb { white-space: nowrap; }
+    .sans { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .serif { font-family: Newsreader, ui-serif, Georgia, "Times New Roman", serif; }
+    .lbl { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7a75; }
+  </style>
+</helmet>
+
+<div class="sans" style="width: 1440px; background: #faf9f6; color: #161c1a;">
+
+  <!-- nav -->
+  <div style="border-bottom: 1px solid #e4e2da; background: #faf9f6;">
+    <div style="max-width: 1160px; margin: 0 auto; padding: 17px 40px; display: flex; align-items: center; gap: 34px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="23" height="23" viewBox="0 0 104 76" fill="none">
+          <rect x="0" y="4" width="96" height="11" rx="1.5" fill="#0d5142"/>
+          <rect x="14" y="24" width="74" height="11" rx="1.5" fill="#0d5142" opacity="0.74"/>
+          <rect x="28" y="44" width="52" height="11" rx="1.5" fill="#0d5142" opacity="0.5"/>
+          <rect x="42" y="64" width="30" height="11" rx="1.5" fill="#a8501f"/>
+        </svg>
+        <span style="font-size: 17px; font-weight: 600; letter-spacing: -0.015em;">HTS<span style="color: #4d5b56; font-weight: 450;">Desk</span></span>
+      </div>
+      <div style="display: flex; gap: 24px; font-size: 14px; color: #4d5b56;">
+        <span>Classify</span><span>Duty calculator</span><span>Tariff changes</span><span>Catalogue audit</span>
+      </div>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 18px;">
+        <span style="font-size: 14px; color: #4d5b56;">Sign in</span>
+        <span style="background: #0d5142; color: #fff; padding: 8px 15px; font-size: 14px; font-weight: 500;">Start free</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- hero -->
+  <div style="max-width: 1160px; margin: 0 auto; padding: 76px 40px 60px; display: flex; gap: 60px; align-items: flex-start;">
+    <div style="width: 580px; display: flex; flex-direction: column; gap: 24px;">
+      <div class="lbl">US import duty · HTS classification</div>
+      <div class="serif" style="font-size: 58px; line-height: 1.03; letter-spacing: -0.018em;">
+        Every duty calculator asks for a code you don’t have.
+      </div>
+      <div style="font-size: 18px; line-height: 1.55; color: #3d4a45;">
+        Describe your product in plain words. HTSDesk finds the classification against 200,962 CBP rulings, shows you the rulings it relied on, and prices the full duty stack — Section 232, Section 301, MPF and HMF — with the legal authority for every line.
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <div style="background: #0d5142; color: #fff; padding: 13px 22px; font-size: 15px; font-weight: 500;">Classify a product free</div>
+        <div style="border: 1px solid #d3cfc4; padding: 13px 22px; font-size: 15px; font-weight: 500;">See a worked example</div>
+      </div>
+      <div style="font-size: 13px; color: #6b7a75;">No card. 25 products free, then $99/month.</div>
+    </div>
+
+    <!-- worked example -->
+    <div style="flex-grow: 1; background: #ffffff; border: 1px solid #e4e2da;">
+      <div style="padding: 15px 20px; border-bottom: 1px solid #e4e2da; display: flex; align-items: center; gap: 9px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.1em; color: #6b7a75;">WORKED EXAMPLE</div>
+      </div>
+      <div style="padding: 18px 20px; border-bottom: 1px solid #efede7;">
+        <div style="font-size: 13px; color: #6b7a75; margin-bottom: 6px;">You type</div>
+        <div style="font-size: 15px; color: #161c1a;">nylon backpack with zipper closure, from Vietnam</div>
+      </div>
+      <div style="padding: 18px 20px; display: flex; flex-direction: column; gap: 13px;">
+        <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+          <span class="mono" style="font-size: 19px; font-weight: 500; color: #0d5142;">4202.92.31.20</span>
+          <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; background: #e7efeb; color: #0d5142; padding: 3px 7px;">HIGH CONFIDENCE</span>
+        </div>
+        <div style="font-size: 13px; color: #4d5b56; line-height: 1.45;">Travel, sports and similar bags, with outer surface of textile materials, of man-made fibres</div>
+        <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid #efede7; padding-top: 12px;">
+          <div class="mono" style="font-size: 10px; letter-spacing: 0.1em; color: #6b7a75; margin-bottom: 3px;">PRECEDENT</div>
+          <div style="font-size: 12px; color: #4d5b56;"><span class="mono" style="color: #0d5142;">852603</span> · The tariff classification of a nylon backpack from China</div>
+          <div style="font-size: 12px; color: #4d5b56;"><span class="mono" style="color: #0d5142;">878450</span> · The tariff classification of a nylon backpack from Thailand</div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid #efede7; padding-top: 12px;">
+          <span style="font-size: 13px; color: #4d5b56;">Duty on $31,000</span>
+          <span class="mono" style="font-size: 21px; font-weight: 500;">$5,633.65</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- proof -->
+  <div style="border-top: 1px solid #e4e2da; border-bottom: 1px solid #e4e2da; background: #ffffff;">
+    <div style="max-width: 1160px; margin: 0 auto; padding: 30px 40px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 30px;">
+      <div><div class="mono" style="font-size: 25px; font-weight: 500;">19,949</div><div style="font-size: 13px; color: #4d5b56; margin-top: 2px;">HTS statistical lines</div></div>
+      <div><div class="mono" style="font-size: 25px; font-weight: 500;">200,962</div><div style="font-size: 13px; color: #4d5b56; margin-top: 2px;">CBP rulings indexed</div></div>
+      <div><div class="mono" style="font-size: 25px; font-weight: 500;">12,362</div><div style="font-size: 13px; color: #4d5b56; margin-top: 2px;">codes scoped from the U.S. Notes</div></div>
+      <div><div class="mono" style="font-size: 25px; font-weight: 500;">408</div><div style="font-size: 13px; color: #4d5b56; margin-top: 2px;">tariff actions tracked, last 90 days</div></div>
+    </div>
+  </div>
+
+  <!-- doubts -->
+  <div style="max-width: 1160px; margin: 0 auto; padding: 68px 40px 30px; display: flex; flex-direction: column; gap: 30px;">
+    <div style="display: flex; flex-direction: column; gap: 10px; max-width: 700px;">
+      <div class="serif" style="font-size: 38px; line-height: 1.08; letter-spacing: -0.014em;">Three ways the other tools are quietly wrong</div>
+      <div style="font-size: 16px; color: #4d5b56; line-height: 1.5;">All of them read the same public JSON feed. None of them read the notes that feed points at.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 26px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.1em; color: #6b7a75;">01 · SCOPE LIVES IN A PDF</div>
+        <div style="font-size: 18px; font-weight: 600; line-height: 1.25;">487 of 565 remedy rules name no products</div>
+        <div style="font-size: 14px; line-height: 1.55; color: #4d5b56;">
+          They defer to the Chapter 99 U.S. Notes, published only as prose. A tool built on the JSON alone is guessing which goods a tariff covers. We parse the Notes — and where scope is still unresolved we withhold the duty and say so, rather than inventing a figure.
+        </div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 26px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.1em; color: #6b7a75;">02 · SUSPENDED, STILL PRINTED</div>
+        <div style="font-size: 18px; font-weight: 600; line-height: 1.25;">Heading 9903.88.16 reads 15% and is not in force</div>
+        <div style="font-size: 14px; line-height: 1.55; color: #4d5b56;">
+          Suspensions live in footnotes, not in the rate column. Applying that heading overstates duty on affected goods by fifteen points. We read the footnotes.
+        </div>
+      </div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 26px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.1em; color: #a8501f;">03 · MONEY OWED TO YOU</div>
+        <div style="font-size: 18px; font-weight: 600; line-height: 1.25;">The IEEPA tariffs were struck down in February 2026</div>
+        <div style="font-size: 14px; line-height: 1.55; color: #4d5b56;">
+          Those provisions are still sitting in the schedule. We report them separately as <span style="color: #a8501f; font-weight: 500;">potentially refundable</span> rather than as duty owed, so you can see what may be recoverable by protest.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- monitoring -->
+  <div style="max-width: 1160px; margin: 0 auto; padding: 42px 40px 76px;">
+    <div style="background: #10201c; color: #e8efec; padding: 44px 46px; display: flex; gap: 52px; align-items: center;">
+      <div style="width: 500px; display: flex; flex-direction: column; gap: 15px;">
+        <div class="mono" style="font-size: 11px; letter-spacing: 0.12em; color: #7f9a92;">RATES MOVE WEEKLY</div>
+        <div class="serif" style="font-size: 33px; line-height: 1.1; letter-spacing: -0.012em;">You will not hear about the one that hits your codes.</div>
+        <div style="font-size: 15px; line-height: 1.55; color: #b6c6c1;">
+          We read the Federal Register every morning, keep only the genuine tariff actions, pull the codes out of the operative tables, and email you when one touches a product in your catalogue.
+        </div>
+      </div>
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 9px;">
+        <div style="background: #16302a; padding: 15px 18px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; gap: 11px; align-items: baseline;">
+            <span class="mono nb" style="font-size: 11px; color: #7f9a92;">2026-08-21</span>
+            <span style="font-size: 14px; font-weight: 500;">Silicon Metal From Australia and Norway: Antidumping Duty Orders</span>
+          </div>
+          <div style="display: flex; gap: 7px;">
+            <span class="mono" style="font-size: 11px; border: 1px solid #2c4d45; color: #5fc0a5; padding: 2px 6px;">2804.61</span>
+            <span class="mono" style="font-size: 11px; border: 1px solid #2c4d45; color: #5fc0a5; padding: 2px 6px;">2804.69</span>
+          </div>
+        </div>
+        <div style="background: #16302a; padding: 15px 18px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; gap: 11px; align-items: baseline;">
+            <span class="mono nb" style="font-size: 11px; color: #7f9a92;">2026-08-24</span>
+            <span style="font-size: 14px; font-weight: 500;">Temporary Suspension of Additional Duties To Offset Canadian Discrimination</span>
+          </div>
+          <div style="font-size: 12px; color: #7f9a92;">Presidential document · scope described in prose</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <div style="border-top: 1px solid #e4e2da;">
+    <div style="max-width: 1160px; margin: 0 auto; padding: 26px 40px; font-size: 12px; color: #6b7a75; line-height: 1.6;">
+      HTSDesk is decision support, not customs advice. The importer of record’s duty of reasonable care under 19 U.S.C. §1484 cannot be delegated — confirm classifications with your broker before entry.
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

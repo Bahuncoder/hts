@@ -1,0 +1,169 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #0d5142; } a:hover { color: #073229; }
+    .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .sans { font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+    .serif { font-family: Newsreader, ui-serif, Georgia, "Times New Roman", serif; }
+    .lbl { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b7a75; }
+  </style>
+</helmet>
+
+<div class="sans" style="width: 1240px; height: 1020px; background: #faf9f6; color: #161c1a; padding: 52px 60px; box-sizing: border-box; display: flex; flex-direction: column; gap: 30px;">
+
+  <div style="display: flex; flex-direction: column; gap: 6px;">
+    <div class="lbl">HTSDesk · system</div>
+    <div class="serif" style="font-size: 36px; line-height: 1.05; letter-spacing: -0.01em;">An instrument, not a brochure</div>
+    <div style="font-size: 15px; color: #4d5b56; max-width: 760px; line-height: 1.5;">
+      The buyer is checking whether they owe money. Everything is tuned for reading figures under doubt: warm paper, hairline rules, tabular numerals, and colour reserved for the two things that change a decision.
+    </div>
+  </div>
+
+  <!-- palette -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div class="lbl">Palette</div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="height: 62px; background: #faf9f6; border: 1px solid #e4e2da;"></div>
+        <div style="font-size: 12px; font-weight: 600;">Paper</div>
+        <div class="mono" style="font-size: 11px; color: #6b7a75;">#faf9f6</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="height: 62px; background: #ffffff; border: 1px solid #e4e2da;"></div>
+        <div style="font-size: 12px; font-weight: 600;">Surface</div>
+        <div class="mono" style="font-size: 11px; color: #6b7a75;">#ffffff</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="height: 62px; background: #e4e2da;"></div>
+        <div style="font-size: 12px; font-weight: 600;">Rule</div>
+        <div class="mono" style="font-size: 11px; color: #6b7a75;">#e4e2da</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="height: 62px; background: #161c1a;"></div>
+        <div style="font-size: 12px; font-weight: 600;">Ink</div>
+        <div class="mono" style="font-size: 11px; color: #6b7a75;">#161c1a</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="height: 62px; background: #0d5142;"></div>
+        <div style="font-size: 12px; font-weight: 600;">Duty green</div>
+        <div class="mono" style="font-size: 11px; color: #6b7a75;">#0d5142</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="height: 62px; background: #a8501f;"></div>
+        <div style="font-size: 12px; font-weight: 600;">Recoverable</div>
+        <div class="mono" style="font-size: 11px; color: #6b7a75;">#a8501f</div>
+      </div>
+    </div>
+    <div style="font-size: 13px; color: #4d5b56; line-height: 1.5; max-width: 860px;">
+      Green marks what the product asserts. Copper marks money the importer may get back — the IEEPA duties the Supreme Court struck down. Nothing else on the page is allowed to be copper.
+    </div>
+  </div>
+
+  <!-- type -->
+  <div style="display: flex; gap: 30px;">
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 12px;">
+      <div class="lbl">Typography</div>
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 22px 24px; display: flex; flex-direction: column; gap: 15px;">
+        <div style="display: flex; align-items: baseline; gap: 16px;">
+          <div class="serif" style="font-size: 33px; line-height: 1;">Newsreader</div>
+          <div class="mono" style="font-size: 11px; color: #6b7a75;">display · 33/36</div>
+        </div>
+        <div style="height: 1px; background: #efede7;"></div>
+        <div style="display: flex; align-items: baseline; gap: 16px;">
+          <div style="font-size: 21px; font-weight: 600; letter-spacing: -0.012em;">IBM Plex Sans</div>
+          <div class="mono" style="font-size: 11px; color: #6b7a75;">interface · 21 / 15 / 13</div>
+        </div>
+        <div style="height: 1px; background: #efede7;"></div>
+        <div style="display: flex; align-items: baseline; gap: 16px;">
+          <div class="mono" style="font-size: 19px; font-weight: 500;">6109.10.00.12</div>
+          <div class="mono" style="font-size: 11px; color: #6b7a75;">codes &amp; figures · tabular</div>
+        </div>
+        <div style="font-size: 13px; color: #4d5b56; line-height: 1.5;">
+          Every HTS code, rate and dollar figure sets in Plex Mono with tabular numerals, so columns align down a table and a digit never shifts when a value updates.
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 400px; display: flex; flex-direction: column; gap: 12px;">
+      <div class="lbl">Dark</div>
+      <div style="background: #0e1513; border: 1px solid #253430; padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; flex-grow: 1;">
+        <div style="display: flex; gap: 9px;">
+          <div style="width: 42px; height: 42px; background: #141d1a; border: 1px solid #253430;"></div>
+          <div style="width: 42px; height: 42px; background: #5fc0a5;"></div>
+          <div style="width: 42px; height: 42px; background: #e08a4e;"></div>
+          <div style="width: 42px; height: 42px; background: #e8efec;"></div>
+        </div>
+        <div class="mono" style="font-size: 11px; color: #9bada7; line-height: 1.8;">
+          bg #0e1513<br>accent #5fc0a5<br>recover #e08a4e<br>ink #e8efec
+        </div>
+        <div style="margin-top: auto; font-size: 13px; color: #9bada7; line-height: 1.5;">
+          Accents lighten rather than shift hue, so a figure keeps its meaning between themes.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- components -->
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <div class="lbl">Components</div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px;">
+
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 18px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 10px; letter-spacing: 0.1em; color: #6b7a75;">BUTTONS · 40px</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="background: #0d5142; color: #ffffff; padding: 10px 16px; font-size: 14px; font-weight: 500; text-align: center;">Classify a product</div>
+          <div style="background: #ffffff; color: #161c1a; padding: 10px 16px; font-size: 14px; font-weight: 500; border: 1px solid #d3cfc4; text-align: center;">Audit a catalogue</div>
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 18px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 10px; letter-spacing: 0.1em; color: #6b7a75;">CONFIDENCE</div>
+        <div style="display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <div style="width: 26px; height: 4px; background: #0d5142;"></div>
+            <span style="font-size: 12px; font-weight: 500;">High · 16 rulings</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <div style="width: 17px; height: 4px; background: #8a5a2b;"></div>
+            <span style="font-size: 12px; color: #4d5b56;">Medium · 3</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <div style="width: 9px; height: 4px; background: #b3aa9a;"></div>
+            <span style="font-size: 12px; color: #4d5b56;">Low · none</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 18px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 10px; letter-spacing: 0.1em; color: #6b7a75;">WITHHELD NOTICE</div>
+        <div style="border-left: 2px solid #8a5a2b; background: #fbf6ec; padding: 9px 11px; font-size: 12px; line-height: 1.45; color: #6b4a1e;">
+          1 remedy covers China but defines scope in the U.S. Notes. Excluded pending review.
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e4e2da; padding: 18px; display: flex; flex-direction: column; gap: 11px;">
+        <div class="mono" style="font-size: 10px; letter-spacing: 0.1em; color: #6b7a75;">FIGURE</div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div class="mono" style="font-size: 27px; font-weight: 500; letter-spacing: -0.015em;">24.47%</div>
+          <div style="font-size: 12px; color: #4d5b56;">effective rate from China</div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div class="mono" style="font-size: 21px; font-weight: 500; color: #a8501f;">$2,000.00</div>
+          <div style="font-size: 12px; color: #4d5b56;">potentially refundable</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

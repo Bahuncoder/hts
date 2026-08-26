@@ -6,7 +6,7 @@ fourteen minutes, unbounded `limit` parameters returned whole tables, and
 unhandled exceptions echoed Python type names to callers.
 
 Runs against a live API. Start one first:
-    TARIFFWISE_API_KEYS=testkey python3 -m uvicorn api.main:app --port 8099
+    HTSDESK_API_KEYS=testkey python3 -m uvicorn api.main:app --port 8099
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = os.environ.get("TARIFFWISE_TEST_API", "http://127.0.0.1:8099")
-KEY = os.environ.get("TARIFFWISE_TEST_KEY", "testkey123")
+BASE = os.environ.get("HTSDESK_TEST_API", "http://127.0.0.1:8099")
+KEY = os.environ.get("HTSDESK_TEST_KEY", "testkey123")
 
 _results: list[tuple[str, str, str]] = []
 

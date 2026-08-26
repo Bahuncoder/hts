@@ -1,0 +1,67 @@
+"use client";
+
+import { useActionState } from "react";
+import Link from "next/link";
+import type { FormState } from "@/lib/actions";
+
+export function AuthForm({
+  action, submit, heading, blurb, footer,
+}: {
+  action: (prev: FormState, form: FormData) => Promise<FormState>;
+  submit: string;
+  heading: string;
+  blurb: string;
+  footer: React.ReactNode;
+}) {
+  const [state, formAction, pending] = useActionState(action, {} as FormState);
+  const field = {
+    borderColor: "var(--rule)", background: "var(--surface)", color: "var(--ink)",
+  };
+
+  return (
+    <div className="mx-auto max-w-[400px] space-y-6 py-8">
+      <div className="space-y-2">
+        <h1 className="serif text-3xl tracking-tight">{heading}</h1>
+        <p className="text-[15px]" style={{ color: "var(--muted)" }}>{blurb}</p>
+      </div>
+
+      <form action={formAction} className="space-y-4">
+        <label className="block space-y-1.5">
+          <span className="lbl">Email</span>
+          <input name="email" type="email" required autoComplete="email"
+                 className="w-full rounded-none border px-3 py-2.5 text-[15px]" style={field} />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="lbl">Password</span>
+          <input name="password" type="password" required minLength={10}
+                 autoComplete={submit === "Create account" ? "new-password" : "current-password"}
+                 className="w-full rounded-none border px-3 py-2.5 text-[15px]" style={field} />
+          {submit === "Create account" ? (
+            <span className="block text-[12px]" style={{ color: "var(--faint)" }}>
+              At least 10 characters.
+            </span>
+          ) : null}
+        </label>
+
+        {state.error ? (
+          <p className="border-l-2 py-2 pl-3 text-[13px]"
+             style={{ borderColor: "var(--danger)", background: "var(--caution-soft)", color: "var(--danger)" }}>
+            {state.error}
+          </p>
+        ) : null}
+
+        <button type="submit" disabled={pending}
+                className="w-full py-2.5 text-[15px] font-medium disabled:opacity-60"
+                style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
+          {pending ? "Working…" : submit}
+        </button>
+      </form>
+
+      <p className="text-[14px]" style={{ color: "var(--muted)" }}>{footer}</p>
+    </div>
+  );
+}
+
+export function AuthFooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return <Link href={href} className="hover:underline" style={{ color: "var(--accent)" }}>{children}</Link>;
+}

@@ -36,8 +36,8 @@ MAX_TEXT = 400              # longest accepted free-text field
 
 
 def api_keys() -> set[str]:
-    """Keys permitted to use the paid limits, from TARIFFWISE_API_KEYS."""
-    raw = os.environ.get("TARIFFWISE_API_KEYS", "")
+    """Keys permitted to use the paid limits, from HTSDESK_API_KEYS."""
+    raw = os.environ.get("HTSDESK_API_KEYS", "")
     return {k.strip() for k in raw.split(",") if k.strip()}
 
 
@@ -87,7 +87,7 @@ def client_id(request: Request) -> str:
     Only the last hop of X-Forwarded-For is trusted, and only when a proxy is
     declared, because the header is caller-supplied and otherwise forgeable.
     """
-    if os.environ.get("TARIFFWISE_BEHIND_PROXY") == "1":
+    if os.environ.get("HTSDESK_BEHIND_PROXY") == "1":
         fwd = request.headers.get("x-forwarded-for", "")
         if fwd:
             return fwd.split(",")[-1].strip()

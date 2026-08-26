@@ -1,7 +1,7 @@
-/** Server-side client for the Tariffwise API. */
+/** Server-side client for the HTSDesk API. */
 
 export const API_BASE =
-  process.env.TARIFFWISE_API ?? "http://127.0.0.1:8099";
+  process.env.HTSDESK_API ?? "http://127.0.0.1:8099";
 
 export type DutyComponent = {
   label: string;

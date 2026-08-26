@@ -1,4 +1,4 @@
-# Deploying Tariffwise
+# Deploying HTSDesk
 
 Two processes: a Python API that owns the data, and a Next.js app that renders
 it. The reference data is a SQLite file built from public sources, so there is
@@ -21,8 +21,8 @@ reads as thin-affiliate to Google. Pick a name you can build a brand on.
 ## API (the VPS)
 
 ```bash
-adduser --system --group tariffwise
-git clone <repo> /opt/tariffwise && cd /opt/tariffwise
+adduser --system --group htsdesk
+git clone <repo> /opt/htsdesk && cd /opt/htsdesk
 python3 -m venv .venv
 .venv/bin/pip install fastapi uvicorn httpx pydantic
 apt-get install -y poppler-utils          # pdftotext, for the Chapter 99 Notes
@@ -31,13 +31,13 @@ apt-get install -y poppler-utils          # pdftotext, for the Chapter 99 Notes
 .venv/bin/python ingest/cross.py          # 200k ruling metadata, ~15 min
 .venv/bin/python ingest/cross.py --skip-metadata --bodies 60000   # full text
 
-mkdir -p /etc/tariffwise
-printf 'ANTHROPIC_API_KEY=sk-ant-...\n' > /etc/tariffwise/api.env
-chmod 600 /etc/tariffwise/api.env
+mkdir -p /etc/htsdesk
+printf 'ANTHROPIC_API_KEY=sk-ant-...\n' > /etc/htsdesk/api.env
+chmod 600 /etc/htsdesk/api.env
 
-cp deploy/tariffwise-api.service /etc/systemd/system/
-cp deploy/tariffwise-ingest.{service,timer} /etc/systemd/system/
-systemctl enable --now tariffwise-api tariffwise-ingest.timer
+cp deploy/htsdesk-api.service /etc/systemd/system/
+cp deploy/htsdesk-ingest.{service,timer} /etc/systemd/system/
+systemctl enable --now htsdesk-api htsdesk-ingest.timer
 ```
 
 Put nginx in front using `deploy/nginx.conf` (edit the hostname), then issue a
@@ -48,17 +48,17 @@ certificate with certbot.
 Set the project root to `web/`, then set:
 
 ```
-TARIFFWISE_API=https://api.yourdomain.com
-NEXT_PUBLIC_TARIFFWISE_API=https://api.yourdomain.com
+HTSDESK_API=https://api.yourdomain.com
+NEXT_PUBLIC_HTSDESK_API=https://api.yourdomain.com
 SITE_URL=https://yourdomain.com
 ```
 
-`TARIFFWISE_ORIGINS` on the API must list the web origin, or the catalogue
+`HTSDESK_ORIGINS` on the API must list the web origin, or the catalogue
 audit will fail CORS in the browser.
 
 ## Keeping data current
 
-`tariffwise-ingest.timer` runs `ingest/refresh.py` daily: it re-downloads the
+`htsdesk-ingest.timer` runs `ingest/refresh.py` daily: it re-downloads the
 HTS schedule and the Chapter 99 PDF, re-extracts the U.S. Notes scope, rebuilds
 the database and polls the Federal Register.
 
