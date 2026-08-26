@@ -120,6 +120,15 @@ stop it. Turning emails off leaves watched codes and in-app alerts untouched.
 
 ## Deploying
 
+```bash
+sudo ops/install.sh     # idempotent; never overwrites /etc/htsdesk/*.env
+```
+
+Creates the service user, installs the app, builds the web bundle, generates
+secrets on first run, pulls the reference data, and enables every unit and
+timer. Then fill in the provider keys, point nginx at your hostname, and re-run
+`make preflight` until it reports no failures.
+
 ```
 /opt/htsdesk            application, owned by the htsdesk user
 /opt/htsdesk/data       reference DB — the only writable path
@@ -142,6 +151,19 @@ the canonical site URL — sitemaps and metadata derive from it.
 Leave `HTSDESK_ORIGINS` empty. It is only needed if a third party must call
 the API from a browser, and it defaults to denying that.
 
+### Preflight
+
+```bash
+make preflight
+```
+
+Checks the things that fail silently: reference data loaded, secrets present
+and not trivially short, CORS closed, the accounts database not
+world-readable, backups actually being written. It found `accounts.db` at mode
+0644 on a working machine — every customer's data readable by any local user.
+Failures exit non-zero; warnings are for capabilities that are simply not
+switched on yet.
+
 ### Back up accounts.db
 
 `data/htsdesk.db` is a build artifact and can be rebuilt from public sources at
@@ -149,11 +171,19 @@ any time. `data/accounts.db` cannot: it holds every account, catalogue, watched
 code and alert. It is the only file in this system whose loss is unrecoverable.
 
 ```bash
-sqlite3 /opt/htsdesk/data/accounts.db ".backup '/backup/accounts-$(date +%F).db'"
+make backup                              # or: htsdesk-backup.timer, hourly
+make restore BACKUP=/var/backups/htsdesk/accounts-....db.gz
 ```
 
-Use `.backup` rather than copying the file — a plain copy taken mid-write, with
-WAL enabled, can be inconsistent.
+Uses SQLite's online backup API, not a file copy: with WAL enabled a copy taken
+mid-write can be torn, and a backup that will not open is worse than none
+because it is trusted. Every snapshot is integrity-checked before it is
+compressed, and the rotation keeps the most recent 30.
+
+Restore is deliberately manual — it asks you to type RESTORE, and keeps the
+file it replaces alongside. Verified end to end: a backup taken while writes
+were in flight restored 207 accounts and 25 catalogues with `integrity_check`
+returning `ok`.
 
 ## Health checks
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { runDiff, diffStatus, sendAlertDigests } from "@/lib/diff";
 import { purgeExpired } from "@/lib/tokens";
+import { reportFindings, scanAuditLog } from "@/lib/watch";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -35,7 +36,9 @@ export async function POST(request: Request) {
   const delivery = deliver ? await sendAlertDigests() : null;
   // Housekeeping on the same schedule, rather than another timer to forget.
   const tokensPurged = purgeExpired();
-  return NextResponse.json({ ...diff, delivery, tokensPurged });
+  // A log nobody reads is filing, not security.
+  const security = await reportFindings(scanAuditLog());
+  return NextResponse.json({ ...diff, delivery, tokensPurged, security });
 }
 
 export async function GET(request: Request) {

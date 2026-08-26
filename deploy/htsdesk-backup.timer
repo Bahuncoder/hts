@@ -1,0 +1,12 @@
+[Unit]
+Description=Back up the HTSDesk accounts database
+
+[Timer]
+# Hourly. The database is small and the data is the business; the cost of a
+# backup is nothing against the cost of losing a day of signups.
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

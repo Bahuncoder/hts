@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import Database from "better-sqlite3";
 import path from "node:path";
 import type { PlanId } from "./plans";
@@ -17,6 +18,9 @@ let _db: Database.Database | null = null;
 export function db(): Database.Database {
   if (_db) return _db;
   const d = new Database(DB_PATH);
+  // Every account, catalogue and alert lives in this file. SQLite creates it
+  // with the process umask, which on a default box leaves it world-readable.
+  try { fs.chmodSync(DB_PATH, 0o600); } catch { /* not ours to change */ }
   d.pragma("journal_mode = WAL");
   d.pragma("busy_timeout = 5000");
   d.exec(`

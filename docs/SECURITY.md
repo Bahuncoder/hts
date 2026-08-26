@@ -191,7 +191,31 @@ The credential throttle counted in a module-level map. Two workers gave an
 attacker twice the configured budget, and every deploy reset it.
 
 **Fixed** by counting in the database, so the limit holds across workers and
-across instances sharing the file.
+across instances sharing the file. The duty engine's own limiter had the same
+flaw and was moved the same way; verified by exhausting the budget from one
+limiter object and confirming a second — standing in for a second worker — was
+refused immediately.
+
+### 15. The accounts database was world-readable — high, fixed
+
+Found by the preflight check, on a working machine: `accounts.db` sat at mode
+0644. SQLite creates a file with the process umask, which on a default host
+leaves every account, catalogue and alert readable by any local user.
+
+**Fixed** by forcing 0600 when the database is opened, so it is corrected on
+every start rather than depending on how it was first created. The engine's
+runtime counter is treated the same way.
+
+### 16. Nothing watched the audit log — medium, fixed
+
+Events were recorded and shown to the customer, but nothing looked at them.
+A log nobody reads is filing, not security.
+
+**Fixed** with a daily scan for credential stuffing against one address,
+spraying across many, throttle trips, and resets completed without a matching
+request. Thresholds sit above ordinary human error — four mistyped passwords is
+not an incident — because an alert that fires every day gets filtered into a
+folder and stops working. Findings email `HTSDESK_SECURITY_EMAIL` when set.
 
 ---
 
@@ -241,12 +265,14 @@ Accepted for now, listed so they are not forgotten.
 2. **Engine API keys are a static allowlist** in an environment variable — no
    per-customer key, rotation or usage metering. Customer-facing traffic goes
    through the web app's session, so this affects only direct engine access.
-3. **The engine's own rate limiter is still in-process** (the sign-in throttle
-   is not — see finding 14). nginx carries the coarse limit there.
-4. **The reasoning layer is unmeasured.** With `ANTHROPIC_API_KEY` set, model
-   output is parsed as JSON and merged into results. It is constrained to
-   reordering supplied candidates and cannot introduce codes, but its accuracy
-   has never been measured because no key has been configured.
+3. **The reasoning layer's accuracy is unmeasured.** The code path itself has
+   now been exercised against a stub: with a key set the model reorders
+   candidates, attaches reasoning and surfaces missing facts. A deliberately
+   hostile stub — inventing `9999.99.99.99`, returning unrelated codes and
+   embedding markup — changed nothing: every code returned was one that
+   retrieval had already found, and each was a real HTS line. So the model
+   cannot introduce a classification. What remains unmeasured is whether its
+   reordering is *better*, which needs a real key.
 5. **Ingest trusts upstream.** CROSS and Federal Register responses are parsed
    without schema validation. Both are government sources reached over HTTPS;
    a malformed response degrades data quality rather than executing anything.

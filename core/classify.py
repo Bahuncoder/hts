@@ -28,7 +28,9 @@ import sqlite3
 from dataclasses import dataclass, field
 
 MODEL = os.environ.get("HTSDESK_MODEL", "claude-opus-5")
-API_URL = "https://api.anthropic.com/v1/messages"
+# Overridable so the reasoning path can be exercised against a local stub.
+# Defaults to the real endpoint.
+API_URL = os.environ.get("ANTHROPIC_API_URL", "https://api.anthropic.com/v1/messages")
 
 _FTS_STRIP = re.compile(r"[^\w\s]")
 _STOP = {

@@ -1,5 +1,5 @@
 import { currentViewer } from "@/lib/auth";
-import { PLANS, type PlanId } from "@/lib/plans";
+import { IN_BUILD, PLANS, type PlanId } from "@/lib/plans";
 import { billingEnabled } from "@/lib/stripe";
 import { SubscribeButton } from "@/components/BillingButtons";
 import { Note } from "@/components/ui";
@@ -12,7 +12,7 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-const ORDER: PlanId[] = ["free", "starter", "growth", "pro"];
+const ORDER: PlanId[] = ["free", "starter", "growth"];
 
 function Tick() {
   return (
@@ -48,7 +48,7 @@ export default async function PricingPage() {
         </Note>
       ) : null}
 
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-5 md:grid-cols-3">
         {ORDER.map((id) => {
           const plan = PLANS[id];
           const isCurrent = current === id;
@@ -56,8 +56,8 @@ export default async function PricingPage() {
           return (
             <div key={id} className="relative flex flex-col gap-4 p-6"
                  style={{
-                   background: id === "pro" ? "var(--deep)" : "var(--surface)",
-                   color: id === "pro" ? "var(--deep-ink)" : "var(--ink)",
+                   background: "var(--surface)",
+                   color: "var(--ink)",
                    border: featured ? "1.5px solid var(--accent)" : "1px solid var(--border)",
                  }}>
               {featured ? (
@@ -68,8 +68,7 @@ export default async function PricingPage() {
               ) : null}
 
               <div className="space-y-1">
-                <div className="lbl" style={id === "pro" ? { color: "var(--deep-muted)" }
-                                        : featured ? { color: "var(--accent)" } : undefined}>
+                <div className="lbl" style={featured ? { color: "var(--accent)" } : undefined}>
                   {plan.name}
                 </div>
                 <div className="flex items-baseline gap-1">
@@ -83,12 +82,11 @@ export default async function PricingPage() {
                 <div className="text-[13px]" style={{ color: "var(--faint)" }}>{plan.blurb}</div>
               </div>
 
-              <div style={{ height: 1, background: id === "pro" ? "var(--border)" : "var(--hair)" }} />
+              <div style={{ height: 1, background: "var(--hair)" }} />
 
               <ul className="flex flex-col gap-2.5 text-[13.5px] leading-[1.45]">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex gap-2"
-                      style={{ color: id === "pro" ? "var(--deep-ink)" : undefined }}>
+                  <li key={f} className="flex gap-2">
                     <span style={{ color: "var(--accent)" }}><Tick /></span>
                     <span>{f}</span>
                   </li>
@@ -109,12 +107,30 @@ export default async function PricingPage() {
                   </a>
                 ) : (
                   <SubscribeButton plan={id} signedIn={signedIn} primary={featured}
-                                   onDark={id === "pro"} label={`Choose ${plan.name}`} />
+                                   label={`Choose ${plan.name}`} />
                 )}
               </div>
             </div>
           );
         })}
+      </div>
+
+      <div className="flex flex-wrap items-baseline gap-2 text-[14px]"
+           style={{ color: "var(--muted)" }}>
+        <span>Bigger catalogue, a broker workspace, or several importers under one login?</span>
+        <a href="mailto:hello@htsdesk.com" className="font-medium hover:underline"
+           style={{ color: "var(--accent)" }}>Tell us what you need</a>
+      </div>
+
+      <div className="space-y-3 border-t pt-7" style={{ borderColor: "var(--border)" }}>
+        <h2 className="text-[15px] font-semibold">Being built, and not yet sold</h2>
+        <p className="text-[13.5px] leading-[1.55]" style={{ color: "var(--muted)" }}>
+          These are on the way. They are listed here rather than inside a plan
+          because none of them work yet, and a price list is a promise.
+        </p>
+        <ul className="grid gap-1.5 text-[13.5px] sm:grid-cols-2" style={{ color: "var(--muted)" }}>
+          {IN_BUILD.map((f) => <li key={f}>· {f}</li>)}
+        </ul>
       </div>
 
       <div className="grid gap-6 border-t pt-7 md:grid-cols-2" style={{ borderColor: "var(--border)" }}>

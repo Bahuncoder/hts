@@ -1,4 +1,5 @@
-.PHONY: help data refresh rulings fedreg api web build test test-duty test-api eval check
+.PHONY: help data refresh rulings fedreg api web build test test-duty test-api eval check \
+        preflight backup restore install mailcatch diff email-preview
 
 help:
 	@echo "Data"
@@ -19,6 +20,12 @@ help:
 	@echo "  make test-security attacks the running app"
 	@echo "  make test-authflow password reset and email verification"
 	@echo "  make eval       held-out classifier accuracy"
+	@echo ""
+	@echo "Operations"
+	@echo "  make preflight  check a deployment before it takes traffic"
+	@echo "  make backup     snapshot the accounts database"
+	@echo "  make restore BACKUP=<file>   restore one"
+	@echo "  make install    install on a fresh host (run as root)"
 	@echo ""
 	@echo "Jobs"
 	@echo "  make diff       match new tariff actions against watched codes"
@@ -94,6 +101,19 @@ test-authflow:
 # a provider account. Point RESEND_API_URL at it when starting the web app.
 mailcatch:
 	@cd web && node tests/mailcatch.mjs
+
+# --- operations -------------------------------------------------------------
+preflight:
+	@python3 ops/preflight.py
+
+backup:
+	@python3 ops/backup-accounts.py
+
+restore:
+	@python3 ops/restore-accounts.py $(BACKUP)
+
+install:
+	@sudo ops/install.sh
 
 diff:
 	@curl -fsS -X POST http://127.0.0.1:3000/api/admin/diff \

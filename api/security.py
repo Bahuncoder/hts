@@ -6,17 +6,20 @@ catalogue request occupies a worker for a quarter of an hour. Work is
 therefore bounded per request, per client and per unit time, and the bounds
 are tighter for anonymous callers than for keyed ones.
 
-Rate limiting is in-process. It is correct for a single instance and is the
-right amount of machinery for one; running several behind a load balancer
-needs a shared counter instead.
+Rate limiting counts in SQLite rather than process memory. Uvicorn runs
+several workers, and an in-process counter is multiplied by the worker count —
+two workers hand an attacker twice the configured budget, and every restart
+wipes the tally. The counter lives in its own small writable database because
+the reference data is opened read-only.
 """
 from __future__ import annotations
 
 import hmac
 import os
+import sqlite3
 import time
-from collections import deque
-from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from threading import Lock
 
 from fastapi import Header, HTTPException, Request
@@ -41,41 +44,72 @@ def api_keys() -> set[str]:
     return {k.strip() for k in raw.split(",") if k.strip()}
 
 
-@dataclass
-class _Bucket:
-    hits: deque[float] = field(default_factory=deque)
+RUNTIME_DB = Path(os.environ.get(
+    "HTSDESK_RUNTIME_DB",
+    str(Path(__file__).resolve().parent.parent / "data" / "runtime.db"),
+))
 
 
 class RateLimiter:
-    def __init__(self) -> None:
-        self._buckets: dict[tuple[str, str], _Bucket] = {}
+    """Sliding-window limiter shared by every worker on the host."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self._path = Path(path or RUNTIME_DB)
         self._lock = Lock()
-        self._last_sweep = time.monotonic()
+        self._last_sweep = 0.0
+        self._conn: sqlite3.Connection | None = None
+
+    def _db(self) -> sqlite3.Connection:
+        if self._conn is None:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(self._path, check_same_thread=False, timeout=5)
+            try:
+                os.chmod(self._path, 0o600)
+            except OSError:
+                pass
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 5000")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS api_hit ("
+                "  client TEXT NOT NULL, cls TEXT NOT NULL, at REAL NOT NULL)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS api_hit_key ON api_hit(client, cls, at)")
+            conn.commit()
+            self._conn = conn
+        return self._conn
 
     def check(self, client: str, cls: str) -> None:
         limit, window = LIMITS[cls]
-        now = time.monotonic()
+        now = time.time()
         with self._lock:
-            if now - self._last_sweep > 300:
-                self._sweep(now)
-            bucket = self._buckets.setdefault((client, cls), _Bucket())
-            while bucket.hits and now - bucket.hits[0] > window:
-                bucket.hits.popleft()
-            if len(bucket.hits) >= limit:
-                retry = int(window - (now - bucket.hits[0])) + 1
+            db = self._db()
+            self._sweep(db, now)
+            cutoff = now - window
+            row = db.execute(
+                "SELECT count(*), min(at) FROM api_hit "
+                "WHERE client = ? AND cls = ? AND at >= ?",
+                (client, cls, cutoff),
+            ).fetchone()
+            count, oldest = row[0], row[1]
+            if count >= limit:
+                retry = int(window - (now - oldest)) + 1
                 raise HTTPException(
                     429, f"Rate limit exceeded. Retry in {retry}s.",
                     headers={"Retry-After": str(retry)},
                 )
-            bucket.hits.append(now)
+            db.execute("INSERT INTO api_hit(client, cls, at) VALUES(?, ?, ?)",
+                       (client, cls, now))
+            db.commit()
 
-    def _sweep(self, now: float) -> None:
-        """Drop buckets nothing has touched inside the longest window."""
-        longest = max(w for _, w in LIMITS.values())
-        for key in [k for k, b in self._buckets.items()
-                    if not b.hits or now - b.hits[-1] > longest]:
-            self._buckets.pop(key, None)
+    def _sweep(self, db: sqlite3.Connection, now: float) -> None:
+        """Drop hits outside the longest window, at most once a minute."""
+        if now - self._last_sweep < 60:
+            return
         self._last_sweep = now
+        longest = max(w for _, w in LIMITS.values())
+        db.execute("DELETE FROM api_hit WHERE at < ?", (now - longest,))
+        db.commit()
 
 
 limiter = RateLimiter()
