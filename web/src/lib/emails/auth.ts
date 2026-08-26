@@ -1,27 +1,26 @@
+import { MAIL, escapeHtml } from "./palette";
 const SITE = process.env.SITE_URL ?? "https://htsdesk.com";
 
-const esc = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function shell(intro: string, action: string, href: string, footer: string): string {
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#faf9f6;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f6;">
+<html><body style="margin:0;padding:0;background:${MAIL.paper};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${MAIL.paper};">
 <tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e4e2da;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:${MAIL.surface};border:1px solid ${MAIL.border};">
   <tr><td style="padding:26px 28px 0 28px;">
-    <div style="font:600 17px ui-sans-serif,system-ui,sans-serif;color:#161c1a;letter-spacing:-.015em;">
-      HTS<span style="color:#4d5b56;font-weight:450;">Desk</span>
+    <div style="font:600 17px ui-sans-serif,system-ui,sans-serif;color:${MAIL.ink};letter-spacing:-.015em;">
+      HTS<span style="color:${MAIL.muted};font-weight:450;">Desk</span>
     </div>
   </td></tr>
   <tr><td style="padding:18px 28px 0 28px;">
-    <div style="font:400 16px/1.5 ui-sans-serif,system-ui,sans-serif;color:#3d4a45;">${esc(intro)}</div>
+    <div style="font:400 16px/1.5 ui-sans-serif,system-ui,sans-serif;color:${MAIL.body};">${escapeHtml(intro)}</div>
   </td></tr>
   <tr><td style="padding:22px 28px 0 28px;">
-    <a href="${esc(href)}" style="display:inline-block;background:#0d5142;color:#ffffff;padding:12px 20px;font:500 14px ui-sans-serif,system-ui,sans-serif;text-decoration:none;">${esc(action)}</a>
+    <a href="${escapeHtml(href)}" style="display:inline-block;background:${MAIL.accent};color:${MAIL.surface};padding:12px 20px;font:500 14px ui-sans-serif,system-ui,sans-serif;text-decoration:none;">${escapeHtml(action)}</a>
   </td></tr>
   <tr><td style="padding:18px 28px 26px 28px;">
-    <div style="font:400 12px/1.5 ui-sans-serif,system-ui,sans-serif;color:#6b7a75;">${esc(footer)}</div>
+    <div style="font:400 12px/1.5 ui-sans-serif,system-ui,sans-serif;color:${MAIL.faint};">${escapeHtml(footer)}</div>
   </td></tr>
 </table>
 </td></tr></table>

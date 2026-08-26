@@ -14,11 +14,14 @@ export default async function AuditPage() {
   return (
     <div className="space-y-8">
       <div className="max-w-2xl space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Catalogue audit</h1>
-        <p style={{ color: "var(--muted)" }}>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Catalogue audit
+        </h1>
+        <p className="text-muted">
           Paste or upload your catalogue. Every line gets a classification, the
-          full duty stack for its origin, and a flag where a trade remedy&rsquo;s scope
-          needs confirming. Leave the HTS column blank and it will be classified.
+          full duty stack for its origin, and a flag where a trade
+          remedy&rsquo;s scope needs confirming. Leave the HTS column blank and
+          it will be classified.
         </p>
       </div>
       <AuditClient signedIn={Boolean(viewer)} />

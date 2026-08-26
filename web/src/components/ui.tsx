@@ -9,8 +9,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-lg border p-5 ${className}`}
-      style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+      className={`rounded-lg border p-5 ${className} border-border bg-surface`}
     >
       {children}
     </div>
@@ -25,10 +24,26 @@ export function Badge({
   children: React.ReactNode;
 }) {
   const tones = {
-    neutral: { background: "var(--surface)", color: "var(--muted)", borderColor: "var(--border)" },
-    good: { background: "var(--accent-soft)", color: "var(--accent)", borderColor: "transparent" },
-    warn: { background: "var(--caution-soft)", color: "var(--caution)", borderColor: "transparent" },
-    bad: { background: "var(--caution-soft)", color: "var(--danger)", borderColor: "transparent" },
+    neutral: {
+      background: "var(--surface)",
+      color: "var(--muted)",
+      borderColor: "var(--border)",
+    },
+    good: {
+      background: "var(--accent-soft)",
+      color: "var(--accent)",
+      borderColor: "transparent",
+    },
+    warn: {
+      background: "var(--caution-soft)",
+      color: "var(--caution)",
+      borderColor: "transparent",
+    },
+    bad: {
+      background: "var(--caution-soft)",
+      color: "var(--danger)",
+      borderColor: "transparent",
+    },
   }[tone];
   return (
     <span
@@ -52,28 +67,30 @@ export function Stat({
   tone?: "good" | "warn";
 }) {
   const color =
-    tone === "warn" ? "var(--caution)" : tone === "good" ? "var(--accent)" : "var(--ink)";
+    tone === "warn"
+      ? "var(--caution)"
+      : tone === "good"
+        ? "var(--accent)"
+        : "var(--ink)";
   return (
     <div>
-      <div className="text-[12px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+      <div className="text-[12px] uppercase tracking-wide text-muted">
         {label}
       </div>
       <div className="tabular mt-1 text-2xl font-semibold" style={{ color }}>
         {value}
       </div>
-      {sub ? (
-        <div className="text-[12px]" style={{ color: "var(--muted)" }}>
-          {sub}
-        </div>
-      ) : null}
+      {sub ? <div className="text-[12px] text-muted">{sub}</div> : null}
     </div>
   );
 }
 
 export function HtsLink({ code }: { code: string }) {
   return (
-    <Link href={`/hts/${code}`} className="tabular font-medium hover:underline"
-      style={{ color: "var(--accent)" }}>
+    <Link
+      href={`/hts/${code}`}
+      className="tabular font-medium hover:underline text-accent"
+    >
       {code}
     </Link>
   );
@@ -81,10 +98,7 @@ export function HtsLink({ code }: { code: string }) {
 
 export function Note({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      className="rounded border-l-2 py-2 pl-3 text-[13px]"
-      style={{ borderColor: "var(--caution)", background: "var(--caution-soft)", color: "var(--caution)" }}
-    >
+    <p className="rounded border-l-2 py-2 pl-3 text-[13px] border-caution bg-caution-soft text-caution">
       {children}
     </p>
   );

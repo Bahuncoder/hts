@@ -1,7 +1,10 @@
 import { AuthForm, AuthFooterLink } from "@/components/AuthForm";
 import { requestResetAction } from "@/lib/actions";
 
-export const metadata = { title: "Reset your password", robots: { index: false } };
+export const metadata = {
+  title: "Reset your password",
+  robots: { index: false },
+};
 
 export default function ForgotPage() {
   return (
@@ -11,7 +14,11 @@ export default function ForgotPage() {
       heading="Reset your password"
       blurb="We will email you a link. It works once, and expires in an hour."
       emailOnly
-      footer={<>Remembered it? <AuthFooterLink href="/login">Sign in</AuthFooterLink>.</>}
+      footer={
+        <>
+          Remembered it? <AuthFooterLink href="/login">Sign in</AuthFooterLink>.
+        </>
+      }
     />
   );
 }

@@ -17,7 +17,8 @@ export default async function LoginPage() {
         <>
           <AuthFooterLink href="/forgot">Forgot your password?</AuthFooterLink>
           <br />
-          No account yet? <AuthFooterLink href="/signup">Create one</AuthFooterLink>.
+          No account yet?{" "}
+          <AuthFooterLink href="/signup">Create one</AuthFooterLink>.
         </>
       }
     />

@@ -19,23 +19,28 @@ export default async function CataloguesPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1.5">
           <h1 className="serif text-3xl tracking-tight">Catalogues</h1>
-          <p className="text-[15px]" style={{ color: "var(--muted)" }}>
-            Every code in a saved catalogue is watched. When a tariff action names
-            one, it lands in <Link href="/alerts" className="hover:underline"
-            style={{ color: "var(--accent)" }}>your alerts</Link>.
+          <p className="text-[15px] text-muted">
+            Every code in a saved catalogue is watched. When a tariff action
+            names one, it lands in{" "}
+            <Link href="/alerts" className="hover:underline text-accent">
+              your alerts
+            </Link>
+            .
           </p>
         </div>
-        <Link href="/audit" className="px-4 py-2 text-[14px] font-medium"
-              style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
+        <Link
+          href="/audit"
+          className="px-4 py-2 text-[14px] font-medium bg-accent text-on-accent"
+        >
           Audit a catalogue
         </Link>
       </div>
 
       {catalogues.length === 0 ? (
         <Card>
-          <p className="text-[15px]" style={{ color: "var(--muted)" }}>
-            Nothing saved yet. Run an audit and save the result — that is what turns
-            a one-off calculation into something we can watch for you.
+          <p className="text-[15px] text-muted">
+            Nothing saved yet. Run an audit and save the result — that is what
+            turns a one-off calculation into something we can watch for you.
           </p>
         </Card>
       ) : (
@@ -44,13 +49,21 @@ export default async function CataloguesPage() {
             <Card key={c.id}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-1">
-                  <Link href={`/catalogues/${c.id}`} className="text-[17px] font-semibold hover:underline">
+                  <Link
+                    href={`/catalogues/${c.id}`}
+                    className="text-[17px] font-semibold hover:underline"
+                  >
                     {c.name}
                   </Link>
-                  <div className="text-[13px]" style={{ color: "var(--faint)" }}>
+                  <div className="text-[13px] text-faint">
                     {c.items.toLocaleString()} products · saved{" "}
-                    <span className="nb">{new Date(c.created_at).toLocaleDateString("en-US",
-                      { year: "numeric", month: "short", day: "numeric" })}</span>
+                    <span className="nb">
+                      {new Date(c.created_at).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-6 text-right">
@@ -64,16 +77,15 @@ export default async function CataloguesPage() {
                   </div>
                   {c.refundable > 0 ? (
                     <div>
-                      <div className="lbl" style={{ color: "var(--recover)" }}>Refundable</div>
-                      <div className="mono text-[16px]" style={{ color: "var(--recover)" }}>
+                      <div className="lbl text-recover">Refundable</div>
+                      <div className="mono text-[16px] text-recover">
                         {money(c.refundable)}
                       </div>
                     </div>
                   ) : null}
                   <form action={deleteCatalogueAction}>
                     <input type="hidden" name="id" value={c.id} />
-                    <button className="px-2.5 py-1.5 text-[13px]"
-                            style={{ border: "1px solid var(--rule)", color: "var(--muted)" }}>
+                    <button className="px-2.5 py-1.5 text-[13px] border border-rule text-muted">
                       Delete
                     </button>
                   </form>

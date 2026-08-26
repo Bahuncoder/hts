@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import crypto from "node:crypto";
+import { isAdmin, refuse } from "@/lib/adminAuth";
 import { renderAlertDigest } from "@/lib/emails/alertDigest";
 import { emailProvider } from "@/lib/email";
 import { db } from "@/lib/store";
@@ -7,25 +7,8 @@ import type { Alert } from "@/lib/diff";
 
 export const runtime = "nodejs";
 
-/** Renders the digest an account would receive, without sending it.
- *
- *  Email is the one output nobody sees until it lands in a stranger's inbox.
- *  This makes it inspectable — before a provider key exists, and afterwards
- *  when checking a template change.
- */
-function authorised(request: Request): boolean {
-  const expected = process.env.HTSDESK_ADMIN_TOKEN;
-  if (!expected) return false;
-  const given = request.headers.get("x-admin-token") ?? "";
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
 export async function GET(request: Request) {
-  if (!authorised(request)) {
-    return NextResponse.json({ error: "not authorised" }, { status: 401 });
-  }
+  if (!isAdmin(request)) return refuse();
 
   const url = new URL(request.url);
   const account = url.searchParams.get("account");

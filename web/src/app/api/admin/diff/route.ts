@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import crypto from "node:crypto";
+import { isAdmin, refuse } from "@/lib/adminAuth";
 import { runDiff, diffStatus, sendAlertDigests } from "@/lib/diff";
 import { purgeExpired } from "@/lib/tokens";
 import { reportFindings, scanAuditLog } from "@/lib/watch";
@@ -7,25 +7,8 @@ import { reportFindings, scanAuditLog } from "@/lib/watch";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/** Runs the change diff. Called on a schedule, not by a person.
- *
- *  Guarded by a shared token rather than a session: the caller is a cron job.
- *  Without HTSDESK_ADMIN_TOKEN set the route refuses outright, so a
- *  deployment that forgets to configure it is closed rather than open.
- */
-function authorised(request: Request): boolean {
-  const expected = process.env.HTSDESK_ADMIN_TOKEN;
-  if (!expected) return false;
-  const given = request.headers.get("x-admin-token") ?? "";
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
-}
-
 export async function POST(request: Request) {
-  if (!authorised(request)) {
-    return NextResponse.json({ error: "not authorised" }, { status: 401 });
-  }
+  if (!isAdmin(request)) return refuse();
   const url = new URL(request.url);
   const since = url.searchParams.get("since") ?? undefined;
   const limit = Number(url.searchParams.get("limit") ?? 500);
@@ -42,8 +25,6 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!authorised(request)) {
-    return NextResponse.json({ error: "not authorised" }, { status: 401 });
-  }
+  if (!isAdmin(request)) return refuse();
   return NextResponse.json(diffStatus() ?? { last_seen_date: null, last_run_at: null });
 }
