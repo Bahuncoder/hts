@@ -46,6 +46,7 @@ owes.
 | Chapter 99 notes | with HTS | `make refresh` | product scope for remedies |
 | Federal Register | daily | `make fedreg` | rate changes, new actions |
 | CROSS bodies | continuous | `make rulings` | classifier accuracy |
+| Watched-code diff | daily, 09:30 UTC | `make diff` | alerts customers to changes |
 
 `deploy/htsdesk-ingest.timer` runs the daily refresh at 09:00 UTC, ahead of
 the US business day.
@@ -61,12 +62,39 @@ both write, and running them together produces `database is locked`. Run them
 one at a time. The API is unaffected: it opens read-only and WAL lets readers
 proceed during writes.
 
+## The change diff
+
+The diff is what makes a subscription worth renewing: it matches tariff actions
+published in the Federal Register against the codes each customer watches, and
+records an alert when one lands.
+
+```bash
+make diff                      # needs HTSDESK_ADMIN_TOKEN in the environment
+```
+
+`deploy/htsdesk-diff.timer` runs it at 09:30 UTC, half an hour after the data
+refresh, so it reads that morning's documents rather than yesterday's.
+
+Matching is by code prefix, and the direction matters: an action naming
+`2804.61` reaches a watched `2804.61.00.00`, so the mention is the prefix and
+the watched code is the longer string. Reversing that silently misses every
+heading-level action, which is most of them. Mentions shorter than six digits
+are ignored as too loose to alert on.
+
+Re-running is safe. Alerts are unique per account, document and code, so a
+second pass over the same window creates nothing. `diff_state` records how far
+the last run read; pass `?since=YYYY-MM-DD` to reconsider an earlier window.
+
+**Nothing is emailed yet.** Alerts appear in the app at `/alerts`; the
+`emailed_at` column exists and stays null until email is wired up.
+
 ## Deploying
 
 ```
 /opt/htsdesk            application, owned by the htsdesk user
 /opt/htsdesk/data       reference DB — the only writable path
 /etc/htsdesk/api.env    credentials, root-owned, mode 0600
+/opt/htsdesk/data/accounts.db  accounts, catalogues, alerts — BACK THIS UP
 ```
 
 1. `install -m 0600 /dev/null /etc/htsdesk/api.env` and fill it from
@@ -74,7 +102,7 @@ proceed during writes.
 2. `cp deploy/htsdesk-*.{service,timer} /etc/systemd/system/`
 3. `cp deploy/nginx.conf /etc/nginx/sites-available/htsdesk-api` and edit
    the hostname.
-4. `systemctl enable --now htsdesk-api htsdesk-ingest.timer`
+4. `systemctl enable --now htsdesk-api htsdesk-ingest.timer htsdesk-diff.timer`
 5. Confirm: `curl -s localhost:8099/api/health | jq .counts`
 
 The web app deploys separately (Vercel). Set `HTSDESK_API` to the API
@@ -83,6 +111,19 @@ the canonical site URL — sitemaps and metadata derive from it.
 
 Leave `HTSDESK_ORIGINS` empty. It is only needed if a third party must call
 the API from a browser, and it defaults to denying that.
+
+### Back up accounts.db
+
+`data/htsdesk.db` is a build artifact and can be rebuilt from public sources at
+any time. `data/accounts.db` cannot: it holds every account, catalogue, watched
+code and alert. It is the only file in this system whose loss is unrecoverable.
+
+```bash
+sqlite3 /opt/htsdesk/data/accounts.db ".backup '/backup/accounts-$(date +%F).db'"
+```
+
+Use `.backup` rather than copying the file — a plain copy taken mid-write, with
+WAL enabled, can be inconsistent.
 
 ## Health checks
 

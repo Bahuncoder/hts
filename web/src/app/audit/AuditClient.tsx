@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { saveCatalogueAction } from "@/lib/actions";
 
 type Line = {
   sku: string;
@@ -69,7 +71,35 @@ function parseCsv(text: string): Record<string, string>[] {
   return body.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? "").trim()])));
 }
 
-export default function AuditClient() {
+function downloadCsv(lines: Line[]) {
+  const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const cols: [string, (l: Line) => unknown][] = [
+    ["SKU", (l) => l.sku], ["Description", (l) => l.description],
+    ["Country of origin", (l) => l.country], ["HTS code", (l) => l.hts],
+    ["Confidence", (l) => l.confidence],
+    ["Entered value (USD)", (l) => l.entered_value?.toFixed(2)],
+    ["Duty and fees (USD)", (l) => l.duty?.toFixed(2)],
+    ["Effective rate (%)", (l) => l.effective_rate_pct?.toFixed(2)],
+    ["Potentially refundable (USD)", (l) => l.refundable?.toFixed(2)],
+    ["Flags", (l) => (l.error ? l.error : l.scope_unverified?.length ? "scope unverified" : "")],
+  ];
+  const csv = "\ufeff" + [
+    cols.map(([h]) => cell(h)).join(","),
+    ...lines.map((l) => cols.map(([, get]) => cell(get(l))).join(",")),
+  ].join("\r\n") + "\r\n";
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `htsdesk-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function AuditClient({ signedIn }: { signedIn: boolean }) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [text, setText] = useState(SAMPLE);
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
@@ -237,6 +267,61 @@ export default function AuditClient() {
               </tbody>
             </table>
           </div>
+
+          <div className="flex flex-wrap items-end gap-3 border-t pt-5"
+               style={{ borderColor: "var(--border)" }}>
+            {signedIn ? (
+              <>
+                <label className="flex flex-col gap-1.5">
+                  <span className="lbl">Save as</span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Autumn range, China"
+                    className="border px-3 py-2 text-[14px] sm:w-72"
+                    style={{ ...border, background: "var(--surface)", color: "var(--ink)" }}
+                  />
+                </label>
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true); setSaveError(null);
+                    const priced = result!.lines.filter((l) => !l.error);
+                    const res = await saveCatalogueAction(name, priced.map((l) => ({
+                      sku: l.sku, description: l.description, country: l.country ?? "",
+                      value: l.entered_value ?? 0, hts: l.hts, confidence: l.confidence,
+                      duty: l.duty, effective_rate_pct: l.effective_rate_pct,
+                      refundable: l.refundable, scope_unverified: l.scope_unverified,
+                    })));
+                    if (res.error) { setSaveError(res.error); setSaving(false); return; }
+                    router.push(`/catalogues/${res.id}`);
+                  }}
+                  className="px-4 py-2 text-[14px] font-medium disabled:opacity-60"
+                  style={{ background: "var(--accent)", color: "var(--on-accent)" }}
+                >
+                  {saving ? "Saving…" : "Save and watch these codes"}
+                </button>
+                <button
+                  onClick={() => downloadCsv(result!.lines)}
+                  className="px-4 py-2 text-[14px] font-medium"
+                  style={{ ...border, borderWidth: 1, borderStyle: "solid" }}
+                >
+                  Export CSV
+                </button>
+              </>
+            ) : (
+              <p className="text-[14px]" style={{ color: "var(--muted)" }}>
+                <a href="/signup" className="font-medium hover:underline"
+                   style={{ color: "var(--accent)" }}>Create a free account</a>{" "}
+                to save this catalogue — every code in it is then watched, and you
+                are told when a tariff action names one.
+              </p>
+            )}
+          </div>
+
+          {saveError ? (
+            <p className="text-[13px]" style={{ color: "var(--danger)" }}>{saveError}</p>
+          ) : null}
 
           <p className="text-[13px]" style={{ color: "var(--muted)" }}>
             Classifications are ranked from CBP ruling precedent. Confirm anything

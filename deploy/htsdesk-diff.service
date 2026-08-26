@@ -1,0 +1,12 @@
+[Unit]
+Description=HTSDesk change diff (match tariff actions against watched codes)
+After=network.target
+
+[Service]
+Type=oneshot
+User=htsdesk
+# Holds HTSDESK_ADMIN_TOKEN. Root-owned, mode 0600.
+EnvironmentFile=/etc/htsdesk/api.env
+ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 120 \
+    -X POST http://127.0.0.1:3000/api/admin/diff \
+    -H "x-admin-token: ${HTSDESK_ADMIN_TOKEN}"

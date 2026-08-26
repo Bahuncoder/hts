@@ -22,6 +22,11 @@ const NAV = [
   { href: "/pricing", label: "Pricing" },
 ];
 
+const SIGNED_IN_NAV = [
+  { href: "/catalogues", label: "Catalogues" },
+  { href: "/alerts", label: "Alerts" },
+];
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const viewer = await currentViewer();
   return (
@@ -41,7 +46,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Lockup />
             </Link>
             <nav className="flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
-              {NAV.map((n) => (
+              {[...NAV, ...(viewer ? SIGNED_IN_NAV : [])].map((n) => (
                 <Link key={n.href} href={n.href} className="hover:underline"
                       style={{ color: "var(--muted)" }}>
                   {n.label}
@@ -86,6 +91,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               HTSDesk is decision support, not customs advice. The importer of
               record&rsquo;s duty of reasonable care under 19 U.S.C. §1484 cannot be
               delegated — confirm classifications with your broker before entry.
+            </p>
+            <p className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
+              <Link href="/terms" className="hover:underline">Terms</Link>
+              <Link href="/privacy" className="hover:underline">Privacy</Link>
+              <a href="mailto:hello@htsdesk.com" className="hover:underline">hello@htsdesk.com</a>
             </p>
           </div>
         </footer>

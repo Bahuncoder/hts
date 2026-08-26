@@ -1,4 +1,5 @@
 import AuditClient from "./AuditClient";
+import { currentViewer } from "@/lib/auth";
 
 export const metadata = {
   title: "Catalogue duty audit — price your whole import exposure",
@@ -6,7 +7,10 @@ export const metadata = {
     "Upload a product catalogue and get an HTS code, duty rate and annual duty exposure for every SKU, with recoverable duty flagged.",
 };
 
-export default function AuditPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AuditPage() {
+  const viewer = await currentViewer();
   return (
     <div className="space-y-8">
       <div className="max-w-2xl space-y-2">
@@ -17,7 +21,7 @@ export default function AuditPage() {
           needs confirming. Leave the HTS column blank and it will be classified.
         </p>
       </div>
-      <AuditClient />
+      <AuditClient signedIn={Boolean(viewer)} />
     </div>
   );
 }

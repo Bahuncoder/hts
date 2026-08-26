@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getHts, money2 } from "@/lib/api";
 import { Badge, Card, Note, Stat } from "@/components/ui";
+import { currentViewer } from "@/lib/auth";
+import { isWatched } from "@/lib/catalogues";
+import { watchCodeAction } from "@/lib/actions";
 
 export const revalidate = 3600;
 
@@ -31,6 +34,8 @@ export default async function HtsPage({ params, searchParams }: Props) {
   if (!d) notFound();
 
   const q = d.quote;
+  const viewer = await currentViewer();
+  const watched = viewer ? isWatched(viewer.account.id, d.hts) : false;
 
   return (
     <div className="space-y-8">
@@ -145,6 +150,32 @@ export default async function HtsPage({ params, searchParams }: Props) {
           </div>
         </section>
       ) : null}
+
+      <div className="flex flex-wrap items-center gap-4 border-t pt-5"
+           style={{ borderColor: "var(--border)" }}>
+        {viewer ? (
+          <form action={watchCodeAction}>
+            <input type="hidden" name="hts" value={d.hts} />
+            <input type="hidden" name="watched" value={watched ? "1" : "0"} />
+            <button className="px-4 py-2 text-[14px] font-medium"
+                    style={watched
+                      ? { border: "1px solid var(--rule)", color: "var(--muted)" }
+                      : { background: "var(--accent)", color: "var(--on-accent)" }}>
+              {watched ? "Stop watching this code" : "Watch this code"}
+            </button>
+          </form>
+        ) : (
+          <a href="/signup" className="px-4 py-2 text-[14px] font-medium"
+             style={{ background: "var(--accent)", color: "var(--on-accent)" }}>
+            Watch this code
+          </a>
+        )}
+        <p className="text-[13px]" style={{ color: "var(--muted)" }}>
+          {watched
+            ? "You are told when a tariff action names this code."
+            : "Rates move several times a week. We will email you when a tariff action names this code."}
+        </p>
+      </div>
 
       {d.rulings.length ? (
         <section className="space-y-3">

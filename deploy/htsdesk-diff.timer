@@ -1,0 +1,11 @@
+[Unit]
+Description=Match new tariff actions against watched codes
+
+[Timer]
+# Half an hour after the data refresh, so the diff reads that morning's
+# Federal Register documents rather than yesterday's.
+OnCalendar=*-*-* 09:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -38,3 +38,57 @@ export async function logoutAction(): Promise<void> {
   await endSession();
   redirect("/");
 }
+
+// --- catalogues -------------------------------------------------------------
+
+import { revalidatePath } from "next/cache";
+import { currentViewer } from "./auth";
+import {
+  deleteCatalogue, saveCatalogue, unwatchCode, watchCode,
+  type CatalogueItemInput,
+} from "./catalogues";
+import { markAllRead } from "./diff";
+
+export async function saveCatalogueAction(
+  name: string, items: CatalogueItemInput[],
+): Promise<{ id?: string; error?: string }> {
+  const viewer = await currentViewer();
+  if (!viewer) return { error: "Sign in to save a catalogue." };
+
+  const clean = name.trim().slice(0, 120) || "Untitled catalogue";
+  if (!items.length) return { error: "Nothing to save." };
+  if (items.length > viewer.plan.skus) {
+    return { error: `${items.length} products exceeds the ${viewer.plan.skus.toLocaleString()} allowed on ${viewer.plan.name}.` };
+  }
+
+  const id = saveCatalogue(viewer.account.id, clean, items);
+  revalidatePath("/catalogues");
+  return { id };
+}
+
+export async function deleteCatalogueAction(form: FormData): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  deleteCatalogue(viewer.account.id, String(form.get("id") ?? ""));
+  revalidatePath("/catalogues");
+}
+
+export async function watchCodeAction(form: FormData): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  const hts = String(form.get("hts") ?? "");
+  if (String(form.get("watched") ?? "") === "1") {
+    unwatchCode(viewer.account.id, hts);
+  } else {
+    watchCode(viewer.account.id, hts);
+  }
+  revalidatePath(`/hts/${hts}`);
+  revalidatePath("/alerts");
+}
+
+export async function markAlertsReadAction(): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  markAllRead(viewer.account.id);
+  revalidatePath("/alerts");
+}

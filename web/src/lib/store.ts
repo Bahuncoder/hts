@@ -46,6 +46,75 @@ export function db(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS sub_customer ON subscription(stripe_customer_id);
 
+    -- A catalogue is the unit a customer keeps and we monitor. Items carry
+    -- the classification as decided at save time, so a later change to our
+    -- ranking cannot silently rewrite what someone reviewed and accepted.
+    CREATE TABLE IF NOT EXISTS catalogue (
+      id         TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS catalogue_account ON catalogue(account_id);
+
+    CREATE TABLE IF NOT EXISTS catalogue_item (
+      id            TEXT PRIMARY KEY,
+      catalogue_id  TEXT NOT NULL REFERENCES catalogue(id) ON DELETE CASCADE,
+      sku           TEXT,
+      description   TEXT NOT NULL,
+      country       TEXT NOT NULL,
+      value         REAL NOT NULL,
+      hts           TEXT,
+      digits        TEXT,
+      confidence    TEXT,
+      duty          REAL,
+      effective_rate REAL,
+      refundable    REAL,
+      scope_unverified INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS item_catalogue ON catalogue_item(catalogue_id);
+    CREATE INDEX IF NOT EXISTS item_digits ON catalogue_item(digits);
+
+    -- Codes an account wants to hear about. Saving a catalogue watches every
+    -- code in it; a code can also be watched on its own from a code page.
+    CREATE TABLE IF NOT EXISTS watched_code (
+      account_id   TEXT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+      digits       TEXT NOT NULL,
+      hts          TEXT NOT NULL,
+      catalogue_id TEXT REFERENCES catalogue(id) ON DELETE CASCADE,
+      created_at   TEXT NOT NULL,
+      PRIMARY KEY (account_id, digits, catalogue_id)
+    );
+    CREATE INDEX IF NOT EXISTS watch_digits ON watched_code(digits);
+    CREATE INDEX IF NOT EXISTS watch_account ON watched_code(account_id);
+
+    -- One row per (account, document, code) the diff matched. The unique key
+    -- is what stops a re-run alerting the same person twice for one action.
+    CREATE TABLE IF NOT EXISTS alert (
+      id              TEXT PRIMARY KEY,
+      account_id      TEXT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+      document_number TEXT NOT NULL,
+      title           TEXT,
+      publication_date TEXT,
+      html_url        TEXT,
+      digits          TEXT NOT NULL,
+      hts             TEXT NOT NULL,
+      created_at      TEXT NOT NULL,
+      read_at         TEXT,
+      emailed_at      TEXT,
+      UNIQUE (account_id, document_number, digits)
+    );
+    CREATE INDEX IF NOT EXISTS alert_account ON alert(account_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS alert_unread ON alert(account_id) WHERE read_at IS NULL;
+
+    -- How far the diff has read, so a run only considers new documents.
+    CREATE TABLE IF NOT EXISTS diff_state (
+      id            INTEGER PRIMARY KEY CHECK (id = 1),
+      last_seen_date TEXT,
+      last_run_at   TEXT
+    );
+
     -- Webhook ids we have already applied. Stripe retries and can deliver the
     -- same event more than once; without this a retry could downgrade an
     -- account that has since upgraded.
