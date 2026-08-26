@@ -13,7 +13,13 @@ export default async function LoginPage() {
       submit="Sign in"
       heading="Sign in"
       blurb="Your catalogues and watched codes are waiting."
-      footer={<>No account yet? <AuthFooterLink href="/signup">Create one</AuthFooterLink>.</>}
+      footer={
+        <>
+          <AuthFooterLink href="/forgot">Forgot your password?</AuthFooterLink>
+          <br />
+          No account yet? <AuthFooterLink href="/signup">Create one</AuthFooterLink>.
+        </>
+      }
     />
   );
 }

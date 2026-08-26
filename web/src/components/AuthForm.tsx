@@ -5,13 +5,16 @@ import Link from "next/link";
 import type { FormState } from "@/lib/actions";
 
 export function AuthForm({
-  action, submit, heading, blurb, footer,
+  action, submit, heading, blurb, footer, hidden, emailOnly, newPassword,
 }: {
   action: (prev: FormState, form: FormData) => Promise<FormState>;
   submit: string;
   heading: string;
   blurb: string;
   footer: React.ReactNode;
+  hidden?: Record<string, string>;
+  emailOnly?: boolean;
+  newPassword?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, {} as FormState);
   const field = {
@@ -26,27 +29,40 @@ export function AuthForm({
       </div>
 
       <form action={formAction} className="space-y-4">
-        <label className="block space-y-1.5">
-          <span className="lbl">Email</span>
-          <input name="email" type="email" required autoComplete="email"
-                 className="w-full rounded-none border px-3 py-2.5 text-[15px]" style={field} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="lbl">Password</span>
-          <input name="password" type="password" required minLength={10}
-                 autoComplete={submit === "Create account" ? "new-password" : "current-password"}
-                 className="w-full rounded-none border px-3 py-2.5 text-[15px]" style={field} />
-          {submit === "Create account" ? (
-            <span className="block text-[12px]" style={{ color: "var(--faint)" }}>
-              At least 10 characters.
-            </span>
-          ) : null}
-        </label>
+        {Object.entries(hidden ?? {}).map(([k, v]) => (
+          <input key={k} type="hidden" name={k} value={v} />
+        ))}
+        {!hidden?.token ? (
+          <label className="block space-y-1.5">
+            <span className="lbl">Email</span>
+            <input name="email" type="email" required autoComplete="email"
+                   className="w-full rounded-none border px-3 py-2.5 text-[15px]" style={field} />
+          </label>
+        ) : null}
+        {!emailOnly ? (
+          <label className="block space-y-1.5">
+            <span className="lbl">{newPassword ? "New password" : "Password"}</span>
+            <input name="password" type="password" required minLength={10}
+                   autoComplete={newPassword ? "new-password" : "current-password"}
+                   className="w-full rounded-none border px-3 py-2.5 text-[15px]" style={field} />
+            {newPassword ? (
+              <span className="block text-[12px]" style={{ color: "var(--faint)" }}>
+                At least 10 characters.
+              </span>
+            ) : null}
+          </label>
+        ) : null}
 
         {state.error ? (
           <p className="border-l-2 py-2 pl-3 text-[13px]"
              style={{ borderColor: "var(--danger)", background: "var(--caution-soft)", color: "var(--danger)" }}>
             {state.error}
+          </p>
+        ) : null}
+        {state.notice ? (
+          <p className="border-l-2 py-2 pl-3 text-[13px]"
+             style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", color: "var(--accent)" }}>
+            {state.notice}
           </p>
         ) : null}
 

@@ -130,6 +130,45 @@ export function db(): Database.Database {
       last_run_at   TEXT
     );
 
+    -- Credential throttling. In the database rather than process memory so
+    -- the limit holds across workers and across instances sharing this file;
+    -- an in-process counter multiplies the real limit by the worker count.
+    CREATE TABLE IF NOT EXISTS auth_attempt (
+      scope      TEXT NOT NULL,
+      subject    TEXT NOT NULL,
+      at         TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS attempt_key ON auth_attempt(scope, subject, at);
+
+    -- Single-use, expiring tokens for password reset and email verification.
+    -- Only the hash is stored: a leaked database must not yield working links.
+    CREATE TABLE IF NOT EXISTS auth_token (
+      token_hash TEXT PRIMARY KEY,
+      kind       TEXT NOT NULL,
+      account_id TEXT REFERENCES account(id) ON DELETE CASCADE,
+      email      TEXT,
+      payload    TEXT,
+      expires_at TEXT NOT NULL,
+      used_at    TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS token_account ON auth_token(account_id, kind);
+    CREATE INDEX IF NOT EXISTS token_expiry ON auth_token(expires_at);
+
+    -- Security-relevant events, so abuse can be attributed and a customer can
+    -- be told what happened to their account.
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id         TEXT PRIMARY KEY,
+      account_id TEXT,
+      email      TEXT,
+      event      TEXT NOT NULL,
+      client     TEXT,
+      detail     TEXT,
+      at         TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS audit_account ON audit_log(account_id, at DESC);
+    CREATE INDEX IF NOT EXISTS audit_event ON audit_log(event, at DESC);
+
     -- Webhook ids we have already applied. Stripe retries and can deliver the
     -- same event more than once; without this a retry could downgrade an
     -- account that has since upgraded.
@@ -153,10 +192,14 @@ function migrate(d: Database.Database): void {
   if (!cols.has("alert_emails")) {
     d.exec("ALTER TABLE account ADD COLUMN alert_emails INTEGER NOT NULL DEFAULT 1");
   }
+  if (!cols.has("email_verified_at")) {
+    d.exec("ALTER TABLE account ADD COLUMN email_verified_at TEXT");
+  }
 }
 
 export type Account = {
-  id: string; email: string; created_at: string; alert_emails?: number;
+  id: string; email: string; created_at: string;
+  alert_emails?: number; email_verified_at?: string | null;
 };
 export type Subscription = {
   account_id: string;
@@ -174,7 +217,7 @@ export function accountByEmail(email: string) {
 
 export function accountById(id: string) {
   return db().prepare(
-    "SELECT id, email, created_at, alert_emails FROM account WHERE id = ?"
+    "SELECT id, email, created_at, alert_emails, email_verified_at FROM account WHERE id = ?"
   ).get(id) as Account | undefined;
 }
 

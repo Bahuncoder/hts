@@ -13,6 +13,8 @@ const SESSION_DAYS = 30;
  *  patched. Parameters are the Node defaults with a raised cost. */
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
 
+/** Exposed so a pending signup can carry an already-hashed password
+ *  through a verification token without ever storing the plaintext. */
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16);
   const key = crypto.scryptSync(password, salt, SCRYPT.keylen, SCRYPT);
@@ -56,10 +58,29 @@ export function passwordProblem(password: string): string | null {
   return null;
 }
 
-export function signUp(email: string, password: string): { id: string } {
+export function signUp(email: string, password: string,
+                       opts: { verified?: boolean } = {}): { id: string } {
   const id = crypto.randomUUID();
   createAccount(id, email.trim().toLowerCase(), hashPassword(password));
+  if (opts.verified) {
+    db().prepare("UPDATE account SET email_verified_at = ? WHERE id = ?")
+      .run(new Date().toISOString(), id);
+  }
   return { id };
+}
+
+export function setPassword(accountId: string, password: string): void {
+  db().prepare("UPDATE account SET password_hash = ? WHERE id = ?")
+    .run(hashPassword(password), accountId);
+  // Every existing session is invalidated: a reset is what someone does when
+  // they believe the account is compromised, and leaving the intruder signed
+  // in defeats the point.
+  db().prepare("DELETE FROM session WHERE account_id = ?").run(accountId);
+}
+
+export function markEmailVerified(accountId: string): void {
+  db().prepare("UPDATE account SET email_verified_at = ? WHERE id = ?")
+    .run(new Date().toISOString(), accountId);
 }
 
 export function authenticate(email: string, password: string): string | null {

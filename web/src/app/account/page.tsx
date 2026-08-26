@@ -5,11 +5,28 @@ import { logoutAction, toggleAlertEmailsAction } from "@/lib/actions";
 import { billingEnabled } from "@/lib/stripe";
 import { emailEnabled } from "@/lib/email";
 import { listWatched } from "@/lib/catalogues";
+import { recentForAccount } from "@/lib/audit";
 import { PortalButton } from "@/components/BillingButtons";
 import { Card, Note } from "@/components/ui";
 
 export const metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
+
+const EVENT_LABEL: Record<string, string> = {
+  signup: "Account created",
+  signin: "Signed in",
+  signin_failed: "Failed sign-in",
+  signin_throttled: "Sign-in blocked — too many attempts",
+  signout: "Signed out",
+  password_reset_requested: "Password reset requested",
+  password_reset_completed: "Password changed",
+  email_verified: "Email confirmed",
+  catalogue_saved: "Catalogue saved",
+  catalogue_deleted: "Catalogue deleted",
+  catalogue_exported: "Catalogue exported",
+  alert_emails_changed: "Alert emails changed",
+  plan_changed: "Plan changed",
+};
 
 export default async function AccountPage({
   searchParams,
@@ -20,6 +37,7 @@ export default async function AccountPage({
   const { account, subscription, plan } = viewer;
   const alertEmailsOn = account.alert_emails !== 0;
   const watchedCount = listWatched(account.id).length;
+  const activity = recentForAccount(account.id, 10);
 
   const renews = subscription.current_period_end
     ? new Date(subscription.current_period_end).toLocaleDateString("en-US",
@@ -111,6 +129,34 @@ export default async function AccountPage({
             {alertEmailsOn ? "Turn alert emails off" : "Turn alert emails on"}
           </button>
         </form>
+      </div>
+
+      <div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--border)" }}>
+        <h2 className="text-[15px] font-semibold">Recent activity</h2>
+        <p className="text-[13px]" style={{ color: "var(--faint)" }}>
+          Sign-ins and changes to your account. If you see something you did not do,
+          reset your password — that signs out every other device.
+        </p>
+        <div className="scroll-x">
+          <table className="w-full min-w-[420px] text-[13px]">
+            <tbody>
+              {activity.length === 0 ? (
+                <tr><td className="py-2" style={{ color: "var(--faint)" }}>Nothing recorded yet.</td></tr>
+              ) : activity.map((row) => (
+                <tr key={row.id} className="border-b" style={{ borderColor: "var(--hair)" }}>
+                  <td className="mono nb py-2 pr-4" style={{ color: "var(--faint)" }}>
+                    {new Date(row.at).toLocaleString("en-US",
+                      { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                  <td className="py-2 pr-4">{EVENT_LABEL[row.event] ?? row.event}</td>
+                  <td className="mono py-2 text-[12px]" style={{ color: "var(--faint)" }}>
+                    {row.client ?? ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="space-y-2 border-t pt-6" style={{ borderColor: "var(--border)" }}>

@@ -17,6 +17,7 @@ help:
 	@echo "  make test-api   API contract + security (needs a running API)"
 	@echo "  make test-journey  browser walk-through of the customer journey"
 	@echo "  make test-security attacks the running app"
+	@echo "  make test-authflow password reset and email verification"
 	@echo "  make eval       held-out classifier accuracy"
 	@echo ""
 	@echo "Jobs"
@@ -62,7 +63,8 @@ test-api:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-api test-billing test-catalogues test-email test-journey test-security eval
+check: build test-duty test-api test-billing test-catalogues test-email \
+       test-journey test-security test-authflow eval
 
 test-billing:
 	@cd web && node tests/billing.test.mjs
@@ -82,6 +84,16 @@ test-journey:
 # throttling, CSV formula injection, admin gates.
 test-security:
 	@cd web && node tests/security.test.mjs
+
+# Password reset and email verification. Runs the link flows when a mail
+# provider is configured, the documented fallback when not.
+test-authflow:
+	@cd web && node tests/authflow.test.mjs
+
+# Captures outbound email locally so the link flows can be exercised without
+# a provider account. Point RESEND_API_URL at it when starting the web app.
+mailcatch:
+	@cd web && node tests/mailcatch.mjs
 
 diff:
 	@curl -fsS -X POST http://127.0.0.1:3000/api/admin/diff \

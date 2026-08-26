@@ -143,21 +143,55 @@ allowed, 12 refused.
 > many. Verified by running the full journey immediately after the brute-force
 > tests — the exact shared-address scenario.
 
-### 11. Signup confirms which emails are registered — medium, mitigated not closed
+### 11. Signup confirmed which emails are registered — medium, fixed
 
 Signing up with an existing address returns "An account with that email already
 exists", which is an enumeration oracle: it tells an attacker who uses HTSDesk.
 
-**Not fully fixable without email verification.** Any flow that creates an
-account immediately must behave differently for a taken address than a free
-one, and hiding it strands a real customer who has simply forgotten they
-registered — a bad trade on a paid product.
+**Fixed** by not creating the account synchronously. With a mail provider
+configured, signup stores a verification token carrying the already-hashed
+password and returns "Check your inbox" — *identically* for a new address and a
+registered one. The difference is carried in the mail itself: a new address
+gets a confirmation link, a registered one gets a password-reset link. The
+account is created only when the link is used, so an unverified address leaves
+no record at all.
 
-**Mitigated** by throttling signup on the same counters as sign-in, which makes
-harvesting a list impractical. **The real fix ships with transactional email**:
-signup should then respond "check your inbox" in both cases and verify before
-creating anything. Sign-in already gives one message for both failures, and
-that is verified by test.
+Verified: both branches return byte-identical text. The reset form behaves the
+same way, answering "if that address has an account…" whether or not it does.
+
+Without a provider configured the old behaviour remains, because an account
+must still be creatable; the throttle is what limits harvesting there. That
+fallback is what `tests/authflow.test.mjs` checks when it detects no mail
+provider.
+
+### 12. No password reset — medium, fixed
+
+A customer who forgot their password had no route back in.
+
+**Fixed** with single-use, one-hour tokens. Only a SHA-256 of the token is
+stored, so a leaked database yields no working links, and lookup is by hash so
+there is nothing to compare in variable time. Issuing a new token invalidates
+any outstanding one. **Completing a reset deletes every session for that
+account** — a reset is what someone does when they think they are compromised,
+and leaving the intruder signed in defeats the point. Verified by test.
+
+### 13. Verification crashed after doing its work — high, fixed
+
+Found in testing, not review. `/verify` was a page, and it called
+`cookies().set()` during a Server Component render, which Next refuses. The
+account was created and then the request returned **HTTP 500** — the work
+succeeded and the customer saw a crash, with no way to tell which.
+
+**Fixed** by moving it to a Route Handler, where cookie writes are allowed, and
+redirecting to `/account` on success or back to signup on a spent link.
+
+### 14. Throttle state lived in process memory — medium, fixed
+
+The credential throttle counted in a module-level map. Two workers gave an
+attacker twice the configured budget, and every deploy reset it.
+
+**Fixed** by counting in the database, so the limit holds across workers and
+across instances sharing the file.
 
 ---
 
@@ -192,6 +226,8 @@ Each was tested, not assumed.
   compared in constant time, and refuse outright when it is unset.
 - **Unsubscribe links.** Signed with HMAC; a forged token is refused, and one
   customer's token cannot unsubscribe another.
+- **Reset and verification links.** Single-use and expiring, stored only as a
+  hash, superseded when a new one is issued, and refused once spent.
 
 ---
 
@@ -199,22 +235,20 @@ Each was tested, not assumed.
 
 Accepted for now, listed so they are not forgotten.
 
-1. **Signup enumeration is mitigated, not closed.** See finding 11; it needs
-   transactional email to fix properly.
-2. **No password reset.** A customer who forgets their password has no route
-   back in without us. This also needs email.
-3. **Engine API keys are a static allowlist** in an environment variable — no
+1. **Signup enumeration returns without a mail provider.** See finding 11: the
+   fix depends on email being configured. Until a key is set, the fallback is
+   throttled but visible.
+2. **Engine API keys are a static allowlist** in an environment variable — no
    per-customer key, rotation or usage metering. Customer-facing traffic goes
    through the web app's session, so this affects only direct engine access.
-4. **Rate limiting is single-host** — both the engine's and the sign-in
-   throttle. Several instances need a shared counter; nginx carries the coarse
-   limit meanwhile.
-5. **The reasoning layer is unmeasured.** With `ANTHROPIC_API_KEY` set, model
+3. **The engine's own rate limiter is still in-process** (the sign-in throttle
+   is not — see finding 14). nginx carries the coarse limit there.
+4. **The reasoning layer is unmeasured.** With `ANTHROPIC_API_KEY` set, model
    output is parsed as JSON and merged into results. It is constrained to
    reordering supplied candidates and cannot introduce codes, but its accuracy
    has never been measured because no key has been configured.
-6. **Ingest trusts upstream.** CROSS and Federal Register responses are parsed
+5. **Ingest trusts upstream.** CROSS and Federal Register responses are parsed
    without schema validation. Both are government sources reached over HTTPS;
    a malformed response degrades data quality rather than executing anything.
-7. **No audit log.** Requests are not recorded per caller, so abuse can be
-   rate-limited but not attributed.
+6. **The audit log is not alerted on.** Events are recorded and shown to the
+   customer on their account page, but nothing watches them for patterns.

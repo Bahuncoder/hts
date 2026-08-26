@@ -42,9 +42,13 @@ async function deliver(msg: Message): Promise<SendResult> {
   const resend = process.env.RESEND_API_KEY;
   const postmark = process.env.POSTMARK_API_KEY;
 
+  // Overridable so the delivery path can be exercised against a local
+  // catcher in development. Defaults to the real endpoint.
+  const resendUrl = process.env.RESEND_API_URL ?? "https://api.resend.com/emails";
+
   try {
     if (resend) {
-      const res = await fetch("https://api.resend.com/emails", {
+      const res = await fetch(resendUrl, {
         method: "POST",
         headers: { authorization: `Bearer ${resend}`, "content-type": "application/json" },
         body: JSON.stringify({

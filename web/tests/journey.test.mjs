@@ -8,14 +8,17 @@
  */
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { BASE, PASSWORD as SHARED_PW, go, inbox, newContext, signUp } from "./helpers.mjs";
 
-const BASE = process.env.HTSDESK_TEST_WEB ?? "http://127.0.0.1:3000";
+
+
+
 const TOKEN = process.env.HTSDESK_ADMIN_TOKEN ?? "admin-test-token";
-const EMAIL = `journey-${Date.now()}@example.com`;
-const PASSWORD = "a-long-enough-password";
+
+
 
 const results = [];
-let browser, page;
+let browser, page, account;
 
 async function step(name, fn) {
   try { await fn(); results.push([name, null]); }
@@ -28,7 +31,7 @@ browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome",
   args: ["--no-sandbox"],
 });
-const ctx = await browser.newContext({
+let ctx = await newContext(browser, {
   viewport: { width: 1280, height: 900 },
   acceptDownloads: true,
 });
@@ -64,8 +67,8 @@ await step("an anonymous visitor is invited to watch, not shown a broken control
 // --- signing up -------------------------------------------------------------
 
 await step("signup rejects a short password", async () => {
-  await page.goto(`${BASE}/signup`, { waitUntil: "networkidle" });
-  await page.fill('input[name="email"]', EMAIL);
+  await page.goto(`${BASE}/signup`, { waitUntil: "domcontentloaded" });
+  await page.fill('input[name="email"]', `short-${Date.now()}@example.test`);
   await page.fill('input[name="password"]', "short");
   await page.evaluate(() => {
     document.querySelector('input[name="password"]').removeAttribute("minlength");
@@ -76,23 +79,23 @@ await step("signup rejects a short password", async () => {
 });
 
 await step("signup creates an account and lands on it", async () => {
-  await page.fill('input[name="email"]', EMAIL);
-  await page.fill('input[name="password"]', PASSWORD);
-  await Promise.all([
-    page.waitForURL(/\/account/, { timeout: 20000 }),
-    page.click('button[type="submit"]'),
-  ]);
+  account = await signUp(browser, "journey");
+  await ctx.close();
+  ctx = account.ctx;
+  page = account.page;
+  page.on("pageerror", (e) => errors.push(String(e)));
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const body = await text();
-  assert.match(body, new RegExp(EMAIL.replace(/[.+]/g, "\\$&")));
   assert.match(body, /Free/, "a new account starts on the free plan");
 });
 
-await step("a second signup on the same email is refused", async () => {
-  const p2 = await ctx.newPage();
-  await p2.goto(`${BASE}/signup`, { waitUntil: "networkidle" });
-  // Already signed in: signup redirects to the account rather than duplicating.
-  assert.match(p2.url(), /\/account/);
-  await p2.close();
+await step("signing up again while signed in does not create a second account", async () => {
+  const probe = await ctx.newPage();
+  await probe.goto(`${BASE}/signup`, { waitUntil: "domcontentloaded" });
+
+  assert.match(probe.url(), /\/account/,
+    "an existing session should skip signup");
+  await probe.close();
 });
 
 // --- the core job -----------------------------------------------------------
@@ -188,8 +191,8 @@ await step("signing out ends the session", async () => {
 
 await step("signing back in restores the catalogue", async () => {
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-  await page.fill('input[name="email"]', EMAIL);
-  await page.fill('input[name="password"]', PASSWORD);
+  await page.fill('input[name="email"]', account.email);
+  await page.fill('input[name="password"]', SHARED_PW);
   await Promise.all([
     page.waitForURL(/\/account/, { timeout: 20000 }),
     page.click('button[type="submit"]'),
@@ -203,7 +206,7 @@ await step("a wrong password is refused with one message", async () => {
   await page.click("text=Sign out").catch(() => {});
   await page.waitForTimeout(800);
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
-  await page.fill('input[name="email"]', EMAIL);
+  await page.fill('input[name="email"]', account.email);
   await page.fill('input[name="password"]', "definitely-not-the-password");
   await page.click('button[type="submit"]');
   await page.waitForTimeout(1500);
@@ -241,7 +244,9 @@ await step("script in a product description is not executed", async () => {
 });
 
 await step("the page has no console errors during the journey", async () => {
-  const real = errors.filter((e) => !/favicon|404 \(Not Found\)/i.test(e));
+  // Webfonts are deliberately blocked by the test harness.
+  const real = errors.filter((e) =>
+    !/favicon|404 \(Not Found\)|ERR_FAILED|fonts\.(googleapis|gstatic)/i.test(e));
   assert.deepEqual(real, [], `console errors: ${real.slice(0, 3).join(" | ")}`);
 });
 

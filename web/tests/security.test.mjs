@@ -7,8 +7,22 @@
  */
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { BASE, newContext, signUp } from "./helpers.mjs";
 
-const BASE = process.env.HTSDESK_TEST_WEB ?? "http://localhost:3000";
+/** Fonts are fetched from Google on every fresh context. They change nothing
+ *  about behaviour and make navigation waits flaky when the network is slow,
+ *  so they are refused outright. */
+async function blockWebfonts(ctx) {
+  await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+}
+
+async function newPage() {
+  const c = await b.newContext();
+  await blockWebfonts(c);
+  return c.newPage();
+}
+
+
 const PASSWORD = "a-perfectly-fine-passphrase";
 const results = [];
 
@@ -23,14 +37,7 @@ async function check(name, fn) {
 }
 
 async function makeUser(tag) {
-  const ctx = await browser.newContext({ acceptDownloads: true });
-  const page = await ctx.newPage();
-  const email = `${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.test`;
-  await page.goto(`${BASE}/signup`, { waitUntil: "networkidle" });
-  await page.fill("input[name=email]", email);
-  await page.fill("input[name=password]", PASSWORD);
-  await page.click("button[type=submit]");
-  await page.waitForURL(/account/, { timeout: 20000 });
+  const { ctx, page, email } = await signUp(browser, tag, { acceptDownloads: true });
   return { ctx, page, email };
 }
 
@@ -74,7 +81,8 @@ await check("a missing catalogue is indistinguishable from someone else's", asyn
 });
 
 await check("signed-out visitors cannot reach account pages", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext(browser);
+  await blockWebfonts(ctx);
   const page = await ctx.newPage();
   for (const path of ["/account", "/catalogues", "/alerts"]) {
     await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
@@ -101,7 +109,8 @@ await check("the session token is not reachable from page scripts", async () => 
 // --- credentials ------------------------------------------------------------
 
 await check("sign-in is throttled against guessing", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext(browser);
+  await blockWebfonts(ctx);
   const page = await ctx.newPage();
   let allowed = 0;
   for (let i = 0; i < 14; i++) {
@@ -119,7 +128,8 @@ await check("sign-in is throttled against guessing", async () => {
 });
 
 await check("a failed sign-in does not reveal whether the email exists", async () => {
-  const ctx = await browser.newContext();
+  const ctx = await newContext(browser);
+  await blockWebfonts(ctx);
   const page = await ctx.newPage();
   const read = async (email) => {
     await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { runDiff, diffStatus, sendAlertDigests } from "@/lib/diff";
+import { purgeExpired } from "@/lib/tokens";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,7 +33,9 @@ export async function POST(request: Request) {
   // alert. `send=0` runs the match alone, for backfills.
   const deliver = url.searchParams.get("send") !== "0";
   const delivery = deliver ? await sendAlertDigests() : null;
-  return NextResponse.json({ ...diff, delivery });
+  // Housekeeping on the same schedule, rather than another timer to forget.
+  const tokensPurged = purgeExpired();
+  return NextResponse.json({ ...diff, delivery, tokensPurged });
 }
 
 export async function GET(request: Request) {

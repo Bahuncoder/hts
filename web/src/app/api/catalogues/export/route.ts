@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { currentViewer } from "@/lib/auth";
 import { getCatalogue } from "@/lib/catalogues";
 import { AUDIT_COLUMNS, csvFilename, toCsv } from "@/lib/csv";
+import { audit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,11 @@ export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get("id") ?? "";
   const cat = getCatalogue(viewer.account.id, id);
   if (!cat) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  await audit("catalogue_exported", {
+    accountId: viewer.account.id, email: viewer.account.email,
+    detail: `${cat.items.length} products`,
+  });
 
   const csv = toCsv(
     cat.items.map((i) => ({
