@@ -73,7 +73,7 @@ def items(n, desc="cotton knitted t-shirt"):
 
 @check("hts detail returns a priced duty stack")
 def _():
-    s, d = call("/api/hts/6109.10.00.12?country=China")
+    s, d = call("/api/hts/6109.10.00.12?country=China", key=KEY)
     assert s == 200, s
     assert d["quote"]["total_duty"] > 0
     assert any(c["authority"] for c in d["quote"]["components"]), "components must cite authority"
@@ -81,7 +81,7 @@ def _():
 
 @check("unknown hts code is a clean 404")
 def _():
-    s, d = call("/api/hts/0000.00.00.00")
+    s, d = call("/api/hts/0000.00.00.00", key=KEY)
     assert s == 404, s
 
 
@@ -134,14 +134,14 @@ def _():
 
 @check("search limit cannot exceed its bound")
 def _():
-    s, _ = call("/api/search?q=cotton&limit=99999999")
+    s, _ = call("/api/search?q=cotton&limit=99999999", key=KEY)
     assert s == 422, s
 
 
 @check("changes limit and window are bounded")
 def _():
-    assert call("/api/changes?limit=99999999")[0] == 422
-    assert call("/api/changes?days=-5")[0] == 422
+    assert call("/api/changes?limit=99999999", key=KEY)[0] == 422
+    assert call("/api/changes?days=-5", key=KEY)[0] == 422
 
 
 @check("oversized text fields are rejected")
@@ -162,20 +162,20 @@ def _():
 @check("sql and fts injection do not escape parameterisation")
 def _():
     for q in ["x' UNION SELECT name FROM sqlite_master--", '" OR "1"="1', "*"]:
-        s, d = call("/api/search?" + urllib.parse.urlencode({"q": q}))
+        s, d = call("/api/search?" + urllib.parse.urlencode({"q": q}), key=KEY)
         assert s in (200, 422), (q, s)
         assert "sqlite_master" not in json.dumps(d.get("results", [])), q
 
 
 @check("path traversal is not routed")
 def _():
-    s, _ = call("/api/hts/..%2F..%2Fetc%2Fpasswd")
+    s, _ = call("/api/hts/..%2F..%2Fetc%2Fpasswd", key=KEY)
     assert s == 404, s
 
 
 @check("changes feed excludes documents that merely mention a term")
 def _():
-    s, d = call("/api/changes?days=120&limit=100")
+    s, d = call("/api/changes?days=120&limit=100", key=KEY)
     assert s == 200, s
     assert all(c["tariff_action"] for c in d["changes"]), "unfiltered document surfaced"
     # Searching the Register for tariff terms returns FTZ notices, agency
@@ -214,18 +214,6 @@ def _():
     assert body["counts"]["hts"] > 19_000, body
 
 
-@check("bulk enumeration endpoints are metered")
-def _():
-    # A hundred chunks of ten thousand walks the whole schedule.
-    limited = False
-    for _ in range(140):
-        code, _body = call("/api/sitemap?chunk=0&size=100")
-        if code == 429:
-            limited = True
-            break
-    assert limited, "sitemap accepts unlimited anonymous calls"
-
-
 @check("our own build is not throttled by its key")
 def _():
     code, body = call("/api/sitemap?chunk=0&size=10000", key=KEY)
@@ -244,6 +232,20 @@ def _():
     h = headers_of("/api/health")
     for want in ("x-content-type-options", "x-frame-options", "referrer-policy"):
         assert want in h, f"missing {want}"
+
+
+# Runs last on purpose: it spends the anonymous budget, and anything
+# anonymous after it would fail for the wrong reason.
+@check("bulk enumeration endpoints are metered")
+def _():
+    # A hundred chunks of ten thousand walks the whole schedule.
+    limited = False
+    for _ in range(140):
+        code, _body = call("/api/sitemap?chunk=0&size=100")
+        if code == 429:
+            limited = True
+            break
+    assert limited, "sitemap accepts unlimited anonymous calls"
 
 
 def main() -> int:
