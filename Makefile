@@ -47,7 +47,7 @@ fedreg:
 
 # --- run --------------------------------------------------------------------
 api:
-	python3 -m uvicorn api.main:app --host 127.0.0.1 --port 8099 --reload
+	python3 -m uvicorn api.main:app --host 127.0.0.1 --port 8099 --reload --no-server-header
 
 web:
 	cd web && npm run dev

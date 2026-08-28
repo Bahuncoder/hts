@@ -3,6 +3,17 @@
 export const API_BASE =
   process.env.HTSDESK_API ?? "http://127.0.0.1:8099";
 
+/** Server-side calls carry the engine key.
+ *
+ *  These run during render, so one visitor's page can fan out into several
+ *  engine calls and a busy page would otherwise trip the anonymous limit for
+ *  everyone. The key is read here and never reaches the browser.
+ */
+export function engineHeaders(): Record<string, string> {
+  const key = process.env.HTSDESK_API_KEY;
+  return key ? { "x-api-key": key } : {};
+}
+
 export type DutyComponent = {
   label: string;
   rate_pct: number | null;
@@ -68,7 +79,10 @@ export type HtsDetail = {
 
 async function get<T>(path: string, revalidate = 3600): Promise<T | null> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, { next: { revalidate } });
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: engineHeaders(),
+      next: { revalidate },
+    });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {

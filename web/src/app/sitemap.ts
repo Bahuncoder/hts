@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, engineHeaders } from "@/lib/api";
 
 const SITE = process.env.SITE_URL ?? "http://localhost:3000";
 const CHUNK = 5000;
 
 async function chunkCount(): Promise<number> {
   try {
-    const res = await fetch(`${API_BASE}/api/sitemap?chunk=0&size=${CHUNK}`);
+    const res = await fetch(`${API_BASE}/api/sitemap?chunk=0&size=${CHUNK}`, {
+      headers: engineHeaders(),
+    });
     if (!res.ok) return 1;
     const { chunks } = (await res.json()) as { chunks: number };
     return Math.max(chunks, 1);
@@ -41,6 +43,7 @@ export default async function sitemap({
 
   try {
     const res = await fetch(`${API_BASE}/api/sitemap?chunk=${chunk}&size=${CHUNK}`, {
+      headers: engineHeaders(),
       next: { revalidate: 86400 },
     });
     if (!res.ok) return staticPages;

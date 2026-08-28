@@ -31,10 +31,18 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Wall-clock ceiling on a single audit, whatever the item count.
 AUDIT_BUDGET_SECONDS = float(os.environ.get("HTSDESK_AUDIT_BUDGET", "45"))
+# FastAPI publishes /docs, /redoc and /openapi.json by default. That is a
+# complete map of the surface — every path, every schema — handed to anyone who
+# asks. Useful in development, so it is opt-in rather than removed.
+_DOCS = os.environ.get("HTSDESK_ENABLE_DOCS") == "1"
+
 app = FastAPI(
     title="HTSDesk API",
     version="0.1.0",
     description="Duty calculation and HTS classification for US importers.",
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
 )
 # Deny cross-origin by default. An explicit origin list is required to enable
 # it, so a misconfigured deployment fails closed rather than open.
@@ -53,6 +61,10 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Frame-Options"] = "DENY"
+    # The Server header is not set here on purpose. Uvicorn writes its own at
+    # the ASGI layer *after* application middleware, so setting it here only
+    # appends a second one. It is suppressed with --no-server-header on the
+    # command line instead; see deploy/htsdesk-api.service.
     return response
 
 
@@ -109,7 +121,17 @@ class AuditRequest(BaseModel):
 # --------------------------------------------------------------------------- routes
 
 @app.get("/api/health")
-def health(conn=Depends(db)):
+def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
+    """Liveness.
+
+    Row counts, build timestamps and whether the reasoning layer is enabled are
+    operational detail: they tell an unauthenticated caller how complete the
+    data is and which code path a request will take. A keyed caller gets them;
+    everyone else gets liveness, which is all a health check needs.
+    """
+    if not keyed:
+        return {"status": "ok"}
+
     counts = {
         t: conn.execute(f"SELECT count(*) c FROM {t}").fetchone()["c"]
         for t in ("hts", "ch99_rule", "ch99_scope", "ruling", "fr_document")
@@ -349,8 +371,14 @@ def changes(days: int = Query(90, ge=1, le=3650),
 
 @app.get("/api/sitemap")
 def sitemap(chunk: int = Query(0, ge=0, le=100),
-            size: int = Query(5000, ge=1, le=10000), conn=Depends(db)):
-    """Leaf HTS codes for sitemap generation, in stable chunks."""
+            size: int = Query(5000, ge=1, le=10000),
+            conn=Depends(db), _=Depends(guard("cheap"))):
+    """Leaf HTS codes for sitemap generation, in stable chunks.
+
+    Metered: a hundred chunks of ten thousand enumerates the whole schedule,
+    and the assembled dataset is the thing worth having. Our own build passes
+    an API key, so it is unaffected.
+    """
     rows = conn.execute(
         "SELECT hts FROM hts WHERE is_leaf = 1 ORDER BY hts LIMIT ? OFFSET ?",
         (size, chunk * size),
@@ -366,7 +394,7 @@ def sitemap(chunk: int = Query(0, ge=0, le=100),
 
 
 @app.get("/api/chapters")
-def chapters(conn=Depends(db)):
+def chapters(conn=Depends(db), _=Depends(guard("cheap"))):
     rows = conn.execute(
         """SELECT chapter, count(*) codes,
                   min(CASE WHEN indent = 0 THEN description END) title

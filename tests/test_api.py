@@ -55,20 +55,21 @@ def check(name):
     return wrap
 
 
+def headers_of(path: str) -> dict[str, str]:
+    """Response headers, authenticated — a header assertion should not compete
+    with the tests that deliberately exhaust the anonymous budget."""
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("x-api-key", KEY)
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return {k.lower(): v for k, v in r.headers.items()}
+
+
 def items(n, desc="cotton knitted t-shirt"):
     return {"items": [{"sku": f"S{i}", "description": desc,
                        "country": "China", "value": 100} for i in range(n)]}
 
 
 # ------------------------------------------------------------------- contract
-
-@check("health reports counts and reasoning state")
-def _():
-    s, d = call("/api/health")
-    assert s == 200, s
-    assert d["counts"]["hts"] > 19_000, d["counts"]
-    assert "reasoning_enabled" in d
-
 
 @check("hts detail returns a priced duty stack")
 def _():
@@ -186,17 +187,69 @@ def _():
     assert not bad, bad[:3]
 
 
+@check("interactive docs and schema are not published")
+def _():
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        code, _ = call(path, key=KEY)
+        assert code == 404, f"{path} returned {code} — the whole API surface is mapped"
+
+
+@check("health tells an anonymous caller only that it is alive")
+def _():
+    code, body = call("/api/health")
+    # 429 means the anonymous budget is spent, which is also correct behaviour
+    # and not what this test is about.
+    if code == 429:
+        return
+    assert code == 200, code
+    assert body == {"status": "ok"}, body
+    assert "counts" not in body, "row counts disclosed without a key"
+    assert "reasoning_enabled" not in body, "code path disclosed without a key"
+
+
+@check("health gives operational detail to a keyed caller")
+def _():
+    code, body = call("/api/health", key=KEY)
+    assert code == 200, code
+    assert body["counts"]["hts"] > 19_000, body
+
+
+@check("bulk enumeration endpoints are metered")
+def _():
+    # A hundred chunks of ten thousand walks the whole schedule.
+    limited = False
+    for _ in range(140):
+        code, _body = call("/api/sitemap?chunk=0&size=100")
+        if code == 429:
+            limited = True
+            break
+    assert limited, "sitemap accepts unlimited anonymous calls"
+
+
+@check("our own build is not throttled by its key")
+def _():
+    code, body = call("/api/sitemap?chunk=0&size=10000", key=KEY)
+    assert code == 200, code
+    assert len(body["codes"]) == 10_000, len(body["codes"])
+
+
+@check("the server does not advertise its stack")
+def _():
+    server = headers_of("/api/health").get("server")
+    assert not server, f"Server header present: {server!r}"
+
+
 @check("security headers are present")
 def _():
-    req = urllib.request.Request(f"{BASE}/api/health")
-    with urllib.request.urlopen(req, timeout=30) as r:
-        h = {k.lower(): v for k, v in r.headers.items()}
+    h = headers_of("/api/health")
     for want in ("x-content-type-options", "x-frame-options", "referrer-policy"):
         assert want in h, f"missing {want}"
 
 
 def main() -> int:
-    s, _ = call("/api/health")
+    # Authenticated: the anonymous budget may already be spent by the very
+    # tests below, and a reachability probe should not compete with them.
+    s, _ = call("/api/health", key=KEY)
     if s != 200:
         print(f"API not reachable at {BASE}. Start it first.")
         return 2

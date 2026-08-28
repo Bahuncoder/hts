@@ -18,8 +18,11 @@ Environment=HTSDESK_BEHIND_PROXY=1
 
 # The in-process rate limiter counts per worker. Two workers double every
 # application limit, which is why nginx holds the authoritative one.
+# --no-server-header: uvicorn otherwise advertises itself, which narrows an
+# attacker's search for a matching advisory and tells a caller nothing useful.
+# It cannot be suppressed from application middleware, which runs earlier.
 ExecStart=/opt/htsdesk/.venv/bin/uvicorn api.main:app \
-    --host 127.0.0.1 --port 8099 --workers 2
+    --host 127.0.0.1 --port 8099 --workers 2 --no-server-header
 
 Restart=always
 RestartSec=5

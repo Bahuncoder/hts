@@ -219,6 +219,55 @@ folder and stops working. Findings email `HTSDESK_SECURITY_EMAIL` when set.
 
 ---
 
+## Third audit — the duty engine
+
+The engine was hardened first and then left alone while the account layer grew
+around it. Re-attacked, it had four issues, all fixed and covered by
+`tests/test_api.py`.
+
+### 17. The whole API surface was published — medium, fixed
+
+FastAPI serves `/docs`, `/redoc` and `/openapi.json` by default. All three
+answered: ten paths and five request schemas, handed to anyone who asked. That
+is a map of every parameter worth attacking, including the ones with the
+tightest limits.
+
+**Fixed.** They are off unless `HTSDESK_ENABLE_DOCS=1`, so they stay available
+in development and are absent in production.
+
+### 18. Health disclosed operational state to anyone — low, fixed
+
+`/api/health` returned row counts, build timestamps and `reasoning_enabled` to
+an unauthenticated caller. Together those say how complete the data is, when it
+was last refreshed, and which code path a classification will take — the last
+being useful to anyone probing for the slower one.
+
+**Fixed.** Anonymous callers get `{"status": "ok"}`, which is everything a
+health check needs. Detail requires a key.
+
+### 19. The dataset could be walked without a key — medium, fixed
+
+`/api/sitemap` was unmetered and returned ten thousand codes per call, with
+chunk indices to a hundred. That is the entire schedule, and the assembled
+dataset is the thing worth having. `/api/chapters` was similarly open.
+
+**Fixed.** Both now sit behind the standard meter. Our own build passes the
+engine key and is unaffected — that key is read server-side and never reaches
+the browser.
+
+### 20. The server advertised itself — low, fixed
+
+Responses carried `server: uvicorn`, which narrows an attacker's search for a
+matching advisory and tells a legitimate caller nothing.
+
+**The obvious fix did not work.** Setting the header in application middleware
+produced *two* `Server` headers, because uvicorn writes its own at the ASGI
+layer after the application has run. It is suppressed with
+`--no-server-header` on the command line instead, and the middleware carries a
+comment saying why it is not done there.
+
+---
+
 ## Verified clean
 
 Each was tested, not assumed.
