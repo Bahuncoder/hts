@@ -29,9 +29,13 @@ HTSDESK_API_KEY=devkey HTSDESK_API=http://127.0.0.1:8099 make web
 make check
 ```
 
-Runs the web build, 25 duty unit tests, 16 API security regressions and the
-classifier evaluation. The API must be running for the API tests; they will
-say so if it is not.
+Runs the web build, the duty, refresh and classifier-evaluation suites, the API
+contract and security regressions, the web integration suites (real routes over
+scratch databases with fake Stripe, engine and mail servers) and the browser
+suites. The API must be running for `test_api` (start it with
+`HTSDESK_API_KEYS=testkey123`); it says so if it is not. No test may touch
+`data/accounts.db`: the web tests create their own scratch database and refuse
+to use an existing one unless `HTSDESK_TEST_ALLOW_EXISTING_DB=1` is set.
 
 Do not deploy on a duty-test failure. Those tests encode what the engine must
 refuse to charge — an unscoped trade remedy, a suspended heading, a tariff the
@@ -50,6 +54,30 @@ owes.
 
 `deploy/htsdesk-ingest.timer` runs the daily refresh at 09:00 UTC, ahead of
 the US business day.
+
+### What a refresh does
+
+1. Downloads the schedule and Chapter 99 PDF into a new immutable directory,
+   `data/releases/<utc timestamp>/`, and refuses to continue if the files look
+   truncated (schedule under 20,000 rows, no 9903 headings).
+2. Builds the reference data in **one transaction**: clears and refills the
+   schedule, remedy rules and scope, rebuilds both search indexes, then
+   validates the result against absolute floors and the previous build (no more
+   than 10% shrink, every ruling and schedule line indexed). If validation
+   fails the transaction rolls back, the previous data keeps serving, and the
+   command exits non-zero with `BUILD REJECTED`.
+3. On success records the new `dataset_revision` and `release_dir`. The API
+   compares the revision on every request and reloads its engine (and clears the
+   classifier's caches) the first time it changes, so lookups and quotes never
+   disagree about the edition. Every quote and audit names its revision.
+4. Keeps the three newest releases; the older ones are deleted.
+
+Rollback: point the database at an earlier release by re-running
+`python3 ingest/build.py --release data/releases/<older>`.
+
+`make check` does not need a live refresh; `tests/test_refresh.py` proves the
+mechanism against a scratch database, including a removed code and a changed
+rate across two editions.
 
 `make rulings` is resumable and idempotent — it fetches only rulings whose body
 is still missing, newest first. Stopping it loses nothing; progress is
@@ -82,8 +110,17 @@ heading-level action, which is most of them. Mentions shorter than six digits
 are ignored as too loose to alert on.
 
 Re-running is safe. Alerts are unique per account, document and code, so a
-second pass over the same window creates nothing. `diff_state` records how far
-the last run read; pass `?since=YYYY-MM-DD` to reconsider an earlier window.
+second pass over the same window creates nothing.
+
+`diff_state` holds a composite cursor (`publication_date|document_number`), not
+just a date, and each run re-reads a 7-day lookback window behind it, so a page
+that ended part-way through a date or a document ingested a little late is still
+seen. The cursor moves only after every page was fetched and the alerts were
+committed; a failed engine call is reported as `ran: false` and changes nothing.
+With no stored cursor (new install, or one that was lost) a run starts 30 days
+back, not at the beginning of history, so no customer is alerted about old
+actions on day one. Pass `?since=YYYY-MM-DD` to backfill further deliberately. A
+document ingested more than a week after its publication date is still missed.
 
 ## Alert emails
 
@@ -108,11 +145,14 @@ Two rules worth knowing:
 
 - **Email is a paid feature; alerts are not.** A free account sees every alert
   in the app and receives no mail. Losing the email does not lose the fact.
-- **Every considered alert is stamped, whatever the outcome** — skipped for
-  plan, opted out, or genuinely sent. An unstamped alert is reconsidered on
-  every later run and would arrive as a backlog the moment the account upgrades
-  or opts back in. Greeting a new subscriber with months of history is the
-  wrong first impression.
+- **Skips are stamped; failures are not.** An alert skipped by design (free
+  plan, opted out, no provider configured) is stamped with its reason, so it is
+  never replayed as a backlog when the account upgrades or a key is added. A
+  *failed* send is different: the alert stays queued, the attempt and error are
+  recorded (`email_attempts`, `email_last_error`), and the next run retries it.
+  After 5 attempts it is stamped `failed_permanent` and logged. Delivery claims
+  the exact alerts it renders, so an alert inserted mid-send is not stamped
+  without being emailed and two concurrent runs cannot send the same batch.
 
 Unsubscribe links are signed with `HTSDESK_EMAIL_SECRET` and work without a
 session — someone who no longer wants our mail should not have to sign in to
@@ -190,9 +230,20 @@ replaces alongside.
 curl -s localhost:8099/api/health | jq
 ```
 
-`counts.hts` should be ~29,850 and `counts.ruling` ~200,960. A materially
-lower number means a rebuild ran against an incomplete download; re-run
-`make refresh`.
+`counts.hts` should be ~29,850 and `counts.ruling` ~200,960. Counts alone are
+not enough — the failure that matters is an index that no longer covers its
+table while the table looks fine — so also check:
+
+- `status` is `ok` (it is `degraded` when the precedent index is empty or does
+  not cover every ruling; an unkeyed call reports only the empty case);
+- `index_complete` is `true` and `index.rulings_indexed == index.rulings`;
+- `engine_current` is `true` (or `null` before the first quote). `false` means
+  the engine has not yet reloaded the database's `dataset_revision`;
+- `fee_constants_stale` is `false`.
+
+A materially lower count, or an incomplete index, means a build was interrupted
+outside the validated path (for example `cross.py` killed mid-reindex); re-run
+`make refresh`. `make preflight` checks the same things.
 
 `reasoning_enabled` reports whether `ANTHROPIC_API_KEY` is set. When false the
 classifier still runs on ruling precedent alone, at lower accuracy, and says

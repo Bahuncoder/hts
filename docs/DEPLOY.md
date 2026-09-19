@@ -13,12 +13,12 @@ on either host.
 | Thing | Suggested | Cost |
 |---|---|---|
 | VPS for the API | Hetzner CX22 | ~$5/mo |
-| Web hosting | Vercel free tier | $0 |
+| Web hosting | Vercel Pro (the free Hobby plan is non-commercial; check current terms) | ~$20/mo |
 | Accounts database | Turso free tier | $0 to start |
 | Domain | short and brandable | ~$12/yr |
 | Anthropic API key | for the reasoning layer | usage-based |
 
-Total to start: about $5/month plus API usage.
+Total to start: about $25/month plus API usage.
 
 An exact-match domain (`ushtscodes.com` and the like) is a liability now — it
 reads as thin-affiliate to Google. Pick a name you can build a brand on.
@@ -29,7 +29,7 @@ reads as thin-affiliate to Google. Pick a name you can build a brand on.
 adduser --system --group htsdesk
 git clone <repo> /opt/htsdesk && cd /opt/htsdesk
 python3 -m venv .venv
-.venv/bin/pip install fastapi uvicorn httpx pydantic
+.venv/bin/pip install -r requirements.txt   # pinned; never an unpinned pip install
 apt-get install -y poppler-utils          # pdftotext, for the Chapter 99 Notes
 
 .venv/bin/python ingest/refresh.py        # HTS + Notes + Federal Register
@@ -66,9 +66,18 @@ TURSO_AUTH_TOKEN=<turso db tokens create htsdesk>
 SITE_URL=https://yourdomain.com
 ```
 
-plus the Stripe, email-provider and `HTSDESK_EMAIL_SECRET` values from
-`.env.example`. `web/src/lib/store.ts` creates the schema itself on first
+plus the Stripe, email-provider, `HTSDESK_EMAIL_SECRET` and
+`HTSDESK_SIGNING_SECRET` values from `.env.example`. The signing secret makes
+saved catalogues server-produced (the audit proxy signs each result and saving
+verifies it), so it must be **identical on every instance or Vercel
+deployment** that serves the web app; without any secret, audits still run but
+saving reports that it is unavailable. `web/src/lib/store.ts` creates the schema itself on first
 connection — nothing to migrate by hand.
+
+Set `HTSDESK_BEHIND_PROXY=1` on Vercel. Every per-caller budget (audit
+requests, items per day, classification searches, sign-in throttling) is keyed
+on the client address; without it all visitors share one address, so one heavy
+user exhausts the allowance for everybody.
 
 `HTSDESK_ORIGINS` on the API does **not** need the web origin: the browser
 never calls the API directly, only the Next.js server does, server-side.
@@ -80,9 +89,12 @@ Turso account needed for development.
 
 ## Keeping data current
 
-`htsdesk-ingest.timer` runs `ingest/refresh.py` daily: it re-downloads the
-HTS schedule and the Chapter 99 PDF, re-extracts the U.S. Notes scope, rebuilds
-the database and polls the Federal Register.
+`htsdesk-ingest.timer` runs `ingest/refresh.py` daily: it downloads the HTS
+schedule and the Chapter 99 PDF into a new immutable `data/releases/<utc>/`
+directory, re-extracts the U.S. Notes scope, rebuilds the database in one
+validated transaction (a truncated or reshaped download is rejected and the
+previous data keeps serving), and polls the Federal Register. The API reloads
+its engine when the dataset revision changes; see `docs/RUNBOOK.md`.
 
 Ruling ingest is separate and incremental — the corpus only grows at the
 margin, so run `ingest/cross.py` weekly rather than daily.

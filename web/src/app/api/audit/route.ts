@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { API_BASE } from "@/lib/api";
 import { currentViewer } from "@/lib/auth";
+import { acquireLease, AUDIT_BUDGETS, chargeAudit, type Tier } from "@/lib/budget";
 import { PLANS } from "@/lib/plans";
+import { clientId } from "@/lib/throttle";
+import { signAudit, signedBodyFromEngine, signingSecret } from "@/lib/auditProof";
 
 /** Server-side proxy for the catalogue audit.
  *
@@ -11,32 +14,107 @@ import { PLANS } from "@/lib/plans";
  *  NEXT_PUBLIC_ is a published key.
  *
  *  It is also where the plan ceiling is enforced, because the ceiling is a
- *  real cost control: classification costs ~175 ms of CPU per item.
+ *  real cost control: classification costs ~175 ms of CPU per item. The
+ *  engine exempts this proxy's key from its own rate limit, so the per-caller
+ *  budgets and the one-audit-at-a-time lease live here (lib/budget.ts).
  */
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_BODY = 2_000_000;
 
-export async function POST(request: Request) {
-  const raw = await request.text();
-  if (raw.length > MAX_BODY) {
-    return NextResponse.json(
-      { detail: "Catalogue too large. Split it across several runs." },
-      { status: 413 },
-    );
+/** Reads at most `cap` bytes. Returns null as soon as the body is known to be
+ *  larger, rather than buffering all of it and checking afterwards. */
+async function readCapped(request: Request, cap: number): Promise<string | null> {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > cap) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
   }
+  return Buffer.concat(chunks).toString("utf8");
+}
 
-  let parsed: { items?: unknown[] };
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const tooLarge = () => NextResponse.json(
+  { detail: "Catalogue too large. Split it across several runs." },
+  { status: 413 },
+);
+
+/** Adds the proof that lets this result be saved. A saved catalogue must hold
+ *  figures our engine produced, so the save action accepts nothing that does
+ *  not carry this signature (lib/auditProof.ts).
+ *
+ *  Without a configured secret, production returns the audit unsigned rather
+ *  than signing with a guessable constant: the customer still gets their
+ *  numbers, and saving reports that it is unavailable. */
+function withProof(body: string): string {
+  let parsed: unknown;
+  try { parsed = JSON.parse(body); } catch { return body; }
+
+  const secret = signingSecret();
+  if (!secret) {
+    console.error(
+      "audit: HTSDESK_SIGNING_SECRET (or HTSDESK_EMAIL_SECRET / HTSDESK_ADMIN_TOKEN) is not " +
+      "set; returning the audit without a proof, so it cannot be saved",
+    );
+    return body;
+  }
+  const signed = signedBodyFromEngine(parsed);
+  if (!signed) {
+    console.error("audit: the engine response is not in the expected shape; returning it unsigned");
+    return body;
+  }
+  const proof = signAudit(signed, secret);
+  return JSON.stringify({ ...(parsed as object), proof, signed_at: signed.at });
+}
+
+const bad = (detail: string) => NextResponse.json({ detail }, { status: 400 });
+
+function throttled(retryAfter: number, detail: string, upgrade?: string) {
+  return NextResponse.json(
+    { detail, ...(upgrade ? { upgrade } : {}) },
+    { status: 429, headers: { "retry-after": String(retryAfter) } },
+  );
+}
+
+function waitText(seconds: number): string {
+  if (seconds < 90) return `${seconds} seconds`;
+  if (seconds < 90 * 60) return `${Math.ceil(seconds / 60)} minutes`;
+  return `${Math.ceil(seconds / 3600)} hours`;
+}
+
+export async function POST(request: Request) {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY) return tooLarge();
+
+  const raw = await readCapped(request, MAX_BODY);
+  if (raw === null) return tooLarge();
+
+  let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return NextResponse.json({ detail: "Malformed request body." }, { status: 400 });
+    return bad("Malformed request body.");
   }
+  if (!isObject(parsed) || !Array.isArray(parsed.items) || !parsed.items.every(isObject)) {
+    return bad("Send a JSON object with an items array of products.");
+  }
+  if (!parsed.items.length) return bad("Add at least one product to audit.");
 
   const viewer = await currentViewer();
   const plan = viewer?.plan ?? PLANS.free;
-  const count = Array.isArray(parsed.items) ? parsed.items.length : 0;
+  const count = parsed.items.length;
 
   if (count > plan.skus) {
     return NextResponse.json(
@@ -50,27 +128,57 @@ export async function POST(request: Request) {
     );
   }
 
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  const key = process.env.HTSDESK_API_KEY;
-  if (key) headers["x-api-key"] = key;
+  const tier: Tier = viewer ? viewer.plan.id : "anonymous";
+  const subject = viewer ? `account:${viewer.account.id}` : `client:${await clientId()}`;
+  const upgrade = tier === "anonymous" ? "/signup" : tier === "growth" ? undefined : "/pricing";
+  const upgradeHint = tier === "anonymous" ? " Create a free account for a larger allowance."
+    : tier === "growth" ? " Contact us if you need more."
+    : " Upgrade your plan for a larger allowance.";
+
+  const release = await acquireLease(subject);
+  if (!release) {
+    return throttled(5, "An audit is already running for you. Wait for it to finish, then submit the next one.");
+  }
 
   try {
-    const res = await fetch(`${API_BASE}/api/audit`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(parsed),
-      cache: "no-store",
-      signal: AbortSignal.timeout(55_000),
-    });
-    const body = await res.text();
-    return new NextResponse(body, {
-      status: res.status,
-      headers: { "content-type": "application/json" },
-    });
-  } catch {
-    return NextResponse.json(
-      { detail: "The duty engine is unavailable. Try again shortly." },
-      { status: 502 },
-    );
+    const charge = await chargeAudit(subject, tier, count);
+    if (!charge.ok) {
+      const limit = AUDIT_BUDGETS[tier];
+      const detail = charge.tooLarge
+        ? `This run is larger than the ${limit.items.max.toLocaleString()}-product daily allowance.${upgradeHint}`
+        : charge.over === "requests"
+          ? `You have reached the limit of ${limit.requests?.max} audits per ${limit.requests && limit.requests.windowMs >= 3_600_000 ? "hour" : "10 minutes"}. Try again in ${waitText(charge.retryAfter)}.${upgradeHint}`
+          : `This run would exceed your daily allowance of ${limit.items.max.toLocaleString()} products. More becomes available in ${waitText(charge.retryAfter)}.${upgradeHint}`;
+      return throttled(charge.retryAfter, detail, upgrade);
+    }
+
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    const key = process.env.HTSDESK_API_KEY;
+    if (key) headers["x-api-key"] = key;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/audit`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(parsed),
+        cache: "no-store",
+        signal: AbortSignal.timeout(55_000),
+      });
+      const body = await res.text();
+      // The engine did no work for a failure on its side; do not bill for it.
+      if (res.status >= 500) await charge.refund();
+      return new NextResponse(res.status === 200 ? withProof(body) : body, {
+        status: res.status,
+        headers: { "content-type": "application/json" },
+      });
+    } catch {
+      await charge.refund();
+      return NextResponse.json(
+        { detail: "The duty engine is unavailable. Try again shortly." },
+        { status: 502 },
+      );
+    }
+  } finally {
+    await release();
   }
 }

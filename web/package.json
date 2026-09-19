@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:integration": "node tests/billing.test.mjs && node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs",
+    "test:review": "node tests/review.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",

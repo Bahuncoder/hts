@@ -1,0 +1,389 @@
+"use client";
+
+import { Fragment, useMemo, useState } from "react";
+import Link from "next/link";
+import { Badge } from "@/components/ui";
+import { PartialMark, StatusChip } from "@/components/status";
+import { bucketOf, countLines, type AuditLine, type Bucket } from "@/lib/auditModel";
+
+export type AuditSummary = {
+  submitted: number;
+  priced: number;
+  unresolved: number;
+  truncated: boolean;
+  totals_complete: boolean;
+  entered_value: number;
+  duty: number;
+  mpf: number;
+  effective_rate_pct: number;
+  potentially_refundable: number;
+  assumptions: string[];
+  dataset_revision: string;
+};
+
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (n: number | undefined | null) =>
+  typeof n === "number" && Number.isFinite(n) ? usd.format(n) : "—";
+
+export const PAGE_SIZE = 100;
+
+type Filter = "all" | Bucket;
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "review", label: "Needs review" },
+  { id: "ready", label: "Ready" },
+  { id: "failed", label: "Failed" },
+];
+
+function Metric({
+  label, value, sub, partial, tone,
+}: {
+  label: string; value: string; sub?: string; partial?: number; tone?: "recover";
+}) {
+  return (
+    <div className="rounded-lg border p-4 border-border bg-surface">
+      <div className="text-[12px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className={`mono text-2xl font-semibold ${tone === "recover" ? "text-recover" : ""}`}>
+          {value}
+        </span>
+        {partial ? <PartialMark unresolved={partial} /> : null}
+      </div>
+      {sub ? <div className="mt-1 text-[12px] text-muted">{sub}</div> : null}
+    </div>
+  );
+}
+
+function List({ title, items }: { title: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <h4 className="lbl mb-1">{title}</h4>
+      <ul className="list-disc space-y-0.5 pl-5 text-[13px]">
+        {items.map((t, i) => <li key={i}>{t}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
+  const uniq = (xs: string[], not: string[]) => [...new Set(xs)].filter((x) => x && !not.includes(x));
+  const reasons = uniq([line.error ?? "", ...(line.review_reasons ?? [])], []);
+  const incomplete = uniq(line.incomplete ?? [], reasons);
+  const warnings = uniq(line.warnings ?? [], [...reasons, ...incomplete]);
+  const suggested = line.suggested ?? [];
+  const alternatives = line.alternatives ?? [];
+  const scope = line.scope_unverified ?? [];
+  const failed = bucketOf(line.status) === "failed";
+
+  return (
+    <div className="space-y-4 py-3 pl-1 pr-2 text-[13px]">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
+        <div><dt className="lbl">Row</dt><dd className="mono">{line.row}</dd></div>
+        <div><dt className="lbl">Origin</dt><dd>{line.country || "—"}</dd></div>
+        <div>
+          <dt className="lbl">Value</dt>
+          <dd className="mono">{line.entered_value !== undefined ? money(line.entered_value) : submitted > 0 ? `${money(submitted)} (as entered)` : "—"}</dd>
+        </div>
+        <div>
+          <dt className="lbl">Line duty, excl. MPF</dt>
+          <dd className="mono">{line.duty !== undefined ? money(line.duty) : "not priced"}</dd>
+        </div>
+      </dl>
+
+      {failed ? (
+        <p className="rounded border-l-2 py-1.5 pl-3 border-danger bg-caution-soft text-danger">
+          This line has no figures and is not in the totals.
+        </p>
+      ) : null}
+
+      <List title={failed ? "What went wrong" : "Why this needs review"} items={reasons} />
+      <List title="Duty is understated because" items={incomplete} />
+      <List title="Warnings" items={warnings} />
+
+      {scope.length ? (
+        <div>
+          <h4 className="lbl mb-1">Trade-remedy headings awaiting scope confirmation</h4>
+          <p className="mono text-[13px]">
+            {scope.map((h, i) => (
+              <span key={h}>{i ? ", " : ""}<Link href={`/hts/${h}`} className="hover:underline text-accent">{h}</Link></span>
+            ))}
+          </p>
+        </div>
+      ) : null}
+
+      {suggested.length ? (
+        <div>
+          <h4 className="lbl mb-1">Classifier candidates</h4>
+          <ol className="space-y-2">
+            {suggested.map((c) => (
+              <li key={c.hts} className="rounded border p-2 border-border">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                  <Link href={`/hts/${c.hts}`} className="mono font-medium hover:underline text-accent">{c.hts}</Link>
+                  {c.hts === line.hts ? <Badge tone="good">Used for this price</Badge> : null}
+                  <span className="text-muted">
+                    {c.confidence ? `${c.confidence} confidence` : ""}
+                    {typeof c.ruling_support === "number" ? ` · ${c.ruling_support} supporting rulings` : ""}
+                  </span>
+                </div>
+                {c.description ? <div className="text-muted">{c.description}</div> : null}
+                {c.rulings?.length ? (
+                  <div className="mt-1 text-[12px] text-faint">
+                    Rulings:{" "}
+                    {c.rulings.slice(0, 3).map((r, i) => (
+                      <span key={r.ruling}>
+                        {i ? ", " : ""}
+                        {r.url ? (
+                          <a href={r.url} target="_blank" rel="noopener noreferrer" className="hover:underline text-accent">
+                            {r.ruling}
+                          </a>
+                        ) : r.ruling}
+                        {r.revoked ? " (revoked)" : ""}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+
+      {alternatives.length ? (
+        <div>
+          <h4 className="lbl mb-1">Sibling statistical lines with different rates</h4>
+          <ul className="space-y-1">
+            {alternatives.map((a) => (
+              <li key={a.hts} className="flex flex-wrap gap-x-3">
+                <Link href={`/hts/${a.hts}`} className="mono hover:underline text-accent">{a.hts}</Link>
+                <span className="text-muted">{a.description}</span>
+                {a.general_rate ? <span className="mono text-faint">{a.general_rate}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function AuditResults({
+  summary, lines, inputs,
+}: {
+  summary: AuditSummary;
+  lines: AuditLine[];
+  /** The amount submitted for each line, shown where a line carries none. */
+  inputs: number[];
+}) {
+  const counts = useMemo(() => countLines(lines), [lines]);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [page, setPage] = useState(0);
+  const [open, setOpen] = useState<Set<number>>(new Set());
+
+  const shown = useMemo(
+    () => lines.map((line, i) => ({ line, i })).filter((x) => filter === "all" || bucketOf(x.line.status) === filter),
+    [lines, filter],
+  );
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const at = Math.min(page, pages - 1);
+  const slice = shown.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
+
+  const partial = !summary.totals_complete || counts.unresolved > 0;
+  const unresolved = counts.unresolved;
+  const filterCount: Record<Filter, number> = {
+    all: counts.submitted, review: counts.review, ready: counts.ready, failed: counts.failed,
+  };
+
+  const toggle = (i: number) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(i)) next.add(i);
+      return next;
+    });
+
+  return (
+    <section className="space-y-5" aria-label="Audit results">
+      <p className="text-[15px] font-medium" data-testid="reconciliation">
+        Submitted <span className="mono">{counts.submitted.toLocaleString()}</span>
+        {" · "}Ready <span className="mono">{counts.ready.toLocaleString()}</span>
+        {" · "}Needs attention <span className="mono">{unresolved.toLocaleString()}</span>
+      </p>
+      <p className="-mt-3 text-[13px] text-muted">
+        Ready means priced, complete, and nothing left to confirm.
+        {unresolved > 0
+          ? ` Needs attention is every other line: ${counts.review.toLocaleString()} priced but to be confirmed, and ${counts.failed.toLocaleString()} that could not be priced.`
+          : " Every line is priced and complete."}
+      </p>
+
+      {summary.truncated ? (
+        <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
+          The time budget for one run was reached, so some lines were not processed. They are listed below as
+          “Not processed” and are not in the totals. Run the remainder as a separate catalogue.
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric
+          label="Entered value"
+          value={money(summary.entered_value)}
+          sub={`${summary.priced.toLocaleString()} of ${counts.submitted.toLocaleString()} lines priced`}
+          partial={partial ? unresolved : undefined}
+        />
+        <Metric
+          label="Duty and fees"
+          value={money(summary.duty)}
+          sub={`${summary.effective_rate_pct}% effective · includes ${money(summary.mpf)} MPF`}
+          partial={partial ? unresolved : undefined}
+        />
+        <Metric
+          label="Potentially refundable"
+          value={money(summary.potentially_refundable)}
+          sub="Estimate: IEEPA duties struck down, not a filed claim"
+          tone="recover"
+          partial={partial ? unresolved : undefined}
+        />
+        <Metric
+          label="Needs attention"
+          value={unresolved.toLocaleString()}
+          sub={`${counts.review.toLocaleString()} to review · ${counts.failed.toLocaleString()} failed`}
+        />
+      </div>
+
+      <details className="text-[13px]">
+        <summary className="cursor-pointer text-muted hover:underline">
+          Assumptions behind these figures ({summary.assumptions.length})
+        </summary>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+          {summary.assumptions.map((a, i) => <li key={i}>{a}</li>)}
+        </ul>
+      </details>
+      <p className="-mt-3 text-[11px] text-faint">
+        Reference data revision:{" "}
+        <span className="mono">{summary.dataset_revision || "not reported"}</span>
+      </p>
+
+      <div role="group" aria-label="Filter lines" className="flex flex-wrap gap-2">
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            aria-pressed={filter === f.id}
+            onClick={() => { setFilter(f.id); setPage(0); }}
+            className={`rounded border px-3 py-1.5 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
+              filter === f.id ? "border-accent bg-accent-soft text-accent" : "border-rule text-muted"
+            }`}
+          >
+            {f.label} <span className="mono">({filterCount[f.id].toLocaleString()})</span>
+          </button>
+        ))}
+      </div>
+
+      {!shown.length ? (
+        <p className="py-6 text-[14px] text-muted">No lines match this filter.</p>
+      ) : (
+        <div className="scroll-x relative">
+          <table className="w-full text-[14px] md:min-w-[860px]">
+            <caption className="sr-only">
+              Audited lines, {shown.length} shown, page {at + 1} of {pages}
+            </caption>
+            <thead>
+              <tr className="border-b text-left border-border text-faint">
+                <th scope="col" className="hidden py-2 pr-3 font-medium md:table-cell">Row</th>
+                <th scope="col" className="py-2 pr-3 font-medium">Product</th>
+                <th scope="col" className="hidden py-2 pr-3 font-medium md:table-cell">HTS</th>
+                <th scope="col" className="hidden py-2 pr-3 font-medium md:table-cell">Origin</th>
+                <th scope="col" className="hidden py-2 pr-3 text-right font-medium sm:table-cell">Value</th>
+                <th scope="col" className="py-2 pr-3 text-right font-medium">Duty</th>
+                <th scope="col" className="py-2 pl-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slice.map(({ line: l, i }) => {
+                const expanded = open.has(i);
+                const detailId = `line-detail-${i}`;
+                const value = l.entered_value ?? (inputs[i] > 0 ? inputs[i] : undefined);
+                return (
+                  <Fragment key={i}>
+                    <tr className="border-b align-top border-hair">
+                      <td className="mono hidden py-2 pr-3 text-[13px] text-muted md:table-cell">{l.row}</td>
+                      <td className="max-w-[28rem] py-2 pr-3">
+                        <div className="flex items-baseline gap-2">
+                          <span className="mono text-[13px] text-faint md:hidden">#{l.row}</span>
+                          <span className="mono text-[13px] font-medium">{l.sku || "no SKU"}</span>
+                        </div>
+                        <div className="clamp-2 text-muted">{l.description || "—"}</div>
+                        <div className="mono mt-0.5 text-[12px] text-faint md:hidden">
+                          {l.hts ?? "no code"} · {l.country || "no origin"}
+                          {value !== undefined ? ` · ${money(value)}` : ""}
+                        </div>
+                      </td>
+                      <td className="mono hidden py-2 pr-3 text-[13px] md:table-cell">
+                        {l.hts ? (
+                          <Link href={`/hts/${l.hts}`} className="hover:underline text-accent">{l.hts}</Link>
+                        ) : "—"}
+                      </td>
+                      <td className="hidden py-2 pr-3 text-muted md:table-cell">{l.country || "—"}</td>
+                      <td className={`mono hidden py-2 pr-3 text-right sm:table-cell ${l.entered_value === undefined ? "text-faint" : ""}`}>
+                        {money(value)}
+                      </td>
+                      <td className="mono py-2 pr-3 text-right">
+                        {l.duty !== undefined ? money(l.duty) : "—"}
+                      </td>
+                      <td className="py-2 pl-2">
+                        <div className="flex flex-col items-start gap-1">
+                          <StatusChip status={l.status} />
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-controls={detailId}
+                            onClick={() => toggle(i)}
+                            className="text-[12px] hover:underline text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                          >
+                            {expanded ? "Hide details" : "Details"}
+                            <span className="sr-only"> for row {l.row}</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {expanded ? (
+                      <tr id={detailId} className="border-b border-hair bg-sunk">
+                        <td colSpan={7} className="px-2">
+                          <Detail line={l} submitted={inputs[i] ?? 0} />
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {pages > 1 ? (
+        <nav aria-label="Result pages" className="flex flex-wrap items-center gap-3 text-[13px]">
+          <button
+            type="button"
+            disabled={at === 0}
+            onClick={() => setPage(at - 1)}
+            className="rounded border px-3 py-1.5 border-rule disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span role="status" className="text-muted">
+            Lines {at * PAGE_SIZE + 1}–{Math.min((at + 1) * PAGE_SIZE, shown.length)} of {shown.length.toLocaleString()}
+          </span>
+          <button
+            type="button"
+            disabled={at >= pages - 1}
+            onClick={() => setPage(at + 1)}
+            className="rounded border px-3 py-1.5 border-rule disabled:opacity-40"
+          >
+            Next
+          </button>
+        </nav>
+      ) : null}
+    </section>
+  );
+}

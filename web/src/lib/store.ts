@@ -198,13 +198,31 @@ async function init(c: Client): Promise<void> {
     CREATE INDEX IF NOT EXISTS audit_account ON audit_log(account_id, at DESC);
     CREATE INDEX IF NOT EXISTS audit_event ON audit_log(event, at DESC);
 
-    -- Webhook ids we have already applied. Stripe retries and can deliver the
-    -- same event more than once; without this a retry could downgrade an
-    -- account that has since upgraded.
+    -- Webhook ids with a durable processing state (see migrate() for the
+    -- status columns). Stripe retries and can deliver the same event more than
+    -- once; only a SUCCEEDED id is a duplicate, a failed one must be redone.
     CREATE TABLE IF NOT EXISTS webhook_event (
       id          TEXT PRIMARY KEY,
       type        TEXT,
       received_at TEXT NOT NULL
+    );
+
+    -- Work already done by a caller of the public proxies (audit requests,
+    -- audited items), so a budget holds across workers and deploys.
+    CREATE TABLE IF NOT EXISTS usage_event (
+      scope   TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      at      TEXT NOT NULL,
+      cost    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS usage_key ON usage_event(scope, subject, at);
+
+    -- At most one in-flight expensive call per subject. The expiry is what
+    -- frees a lease held by a request that died without releasing it.
+    CREATE TABLE IF NOT EXISTS usage_lease (
+      subject    TEXT PRIMARY KEY,
+      token      TEXT NOT NULL,
+      expires_at TEXT NOT NULL
     );
   `);
   await migrate(c);
@@ -216,15 +234,63 @@ async function init(c: Client): Promise<void> {
 
 /** Additive column migrations. SQLite has no IF NOT EXISTS for ADD COLUMN, so
  *  the current columns are read first. */
+async function addColumns(c: Client, table: string, columns: Record<string, string>): Promise<void> {
+  const info = await c.execute(`PRAGMA table_info(${table})`);
+  const have = new Set(info.rows.map((r) => r.name as string));
+  for (const [name, ddl] of Object.entries(columns)) {
+    if (!have.has(name)) await c.execute(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
+  }
+}
+
 async function migrate(c: Client): Promise<void> {
-  const info = await c.execute("PRAGMA table_info(account)");
-  const cols = new Set(info.rows.map((r) => r.name as string));
-  if (!cols.has("alert_emails")) {
-    await c.execute("ALTER TABLE account ADD COLUMN alert_emails INTEGER NOT NULL DEFAULT 1");
-  }
-  if (!cols.has("email_verified_at")) {
-    await c.execute("ALTER TABLE account ADD COLUMN email_verified_at TEXT");
-  }
+  await addColumns(c, "account", {
+    alert_emails: "INTEGER NOT NULL DEFAULT 1",
+    email_verified_at: "TEXT",
+  });
+  // Rows that predate the state machine were claimed-then-applied under the
+  // old scheme, so they default to succeeded rather than being replayed.
+  await addColumns(c, "webhook_event", {
+    status: "TEXT NOT NULL DEFAULT 'succeeded'",
+    attempts: "INTEGER NOT NULL DEFAULT 1",
+    updated_at: "TEXT",
+    last_error: "TEXT",
+  });
+  await addColumns(c, "subscription", { stripe_subscription_created: "INTEGER" });
+  // email_status stays NULL until an alert is finished: sent, skipped_plan,
+  // skipped_opt_out, skipped_no_provider or failed_permanent. emailed_at is
+  // stamped for every finished alert so history is never replayed.
+  await addColumns(c, "alert", {
+    email_status: "TEXT",
+    email_attempts: "INTEGER NOT NULL DEFAULT 0",
+    email_last_error: "TEXT",
+    email_claim: "TEXT",
+    email_claimed_at: "TEXT",
+  });
+  // cursor is the composite "publication_date|document_number" position the
+  // engine's /api/changes pages by; last_seen_date is kept for display.
+  await addColumns(c, "diff_state", { cursor: "TEXT" });
+  // A saved catalogue keeps every line of the audit it came from, including
+  // the ones that could not be priced, plus the state they were in. Rows saved
+  // before this have status NULL and are labelled as such rather than
+  // guessed at.
+  await addColumns(c, "catalogue_item", {
+    row_number: "INTEGER",
+    status: "TEXT",
+    error: "TEXT",
+    review_json: "TEXT",
+    warnings_json: "TEXT",
+    incomplete_json: "TEXT",
+  });
+  // What the whole audit rested on: the reference-data revision, the stated
+  // assumptions, whether the totals were complete, and when the engine
+  // calculated them. mpf is the entry-level fee, which no single line carries.
+  await addColumns(c, "catalogue", {
+    dataset_revision: "TEXT",
+    assumptions_json: "TEXT",
+    totals_complete: "INTEGER",
+    calculated_at: "TEXT",
+    mpf: "REAL",
+  });
 }
 
 /** Convenience wrapper: opens the connection and runs one statement. */
@@ -243,6 +309,7 @@ export type Subscription = {
   plan: PlanId;
   status: string;
   current_period_end: string | null;
+  stripe_subscription_created?: number | null;
 };
 
 export async function accountByEmail(email: string) {
@@ -307,12 +374,14 @@ export async function upsertSubscription(s: Partial<Subscription> & { account_id
   const now = new Date().toISOString();
   await run(`
     INSERT INTO subscription(account_id, stripe_customer_id, stripe_subscription_id,
-                             plan, status, current_period_end, updated_at)
+                             stripe_subscription_created, plan, status,
+                             current_period_end, updated_at)
     VALUES(:account_id, :stripe_customer_id, :stripe_subscription_id,
-           :plan, :status, :current_period_end, :updated_at)
+           :stripe_subscription_created, :plan, :status, :current_period_end, :updated_at)
     ON CONFLICT(account_id) DO UPDATE SET
       stripe_customer_id     = COALESCE(excluded.stripe_customer_id, subscription.stripe_customer_id),
       stripe_subscription_id = excluded.stripe_subscription_id,
+      stripe_subscription_created = excluded.stripe_subscription_created,
       plan                   = excluded.plan,
       status                 = excluded.status,
       current_period_end     = excluded.current_period_end,
@@ -321,6 +390,7 @@ export async function upsertSubscription(s: Partial<Subscription> & { account_id
     account_id: s.account_id,
     stripe_customer_id: s.stripe_customer_id ?? null,
     stripe_subscription_id: s.stripe_subscription_id ?? null,
+    stripe_subscription_created: s.stripe_subscription_created ?? null,
     plan: s.plan ?? "free",
     status: s.status ?? "active",
     current_period_end: s.current_period_end ?? null,
@@ -336,15 +406,136 @@ export async function accountForCustomer(customerId: string): Promise<string | n
   return row?.account_id ?? null;
 }
 
-/** True the first time an event id is seen; false on a redelivery. */
-export async function claimWebhookEvent(id: string, type: string): Promise<boolean> {
+export type SubscriptionState = {
+  stripe_subscription_id: string;
+  stripe_subscription_created: number;
+  plan: PlanId;
+  status: string;
+  current_period_end: string | null;
+};
+
+const LIVE = ["active", "trialing"];
+
+/** Writes an authoritative Stripe subscription onto an account, unless the
+ *  account already holds a different subscription that should win.
+ *
+ *  Stripe does not order events, so a stale event about an OLD subscription
+ *  must not overwrite the one the customer is paying for now. A different
+ *  subscription replaces the stored one only when it is itself active or
+ *  trialing AND the stored one is not, or it was created later on Stripe's
+ *  clock. The read and write share one write transaction so two concurrent
+ *  deliveries cannot both pass the check.
+ *
+ *  Returns false when the state was ignored. */
+export async function applySubscriptionState(
+  accountId: string, customerId: string | null, sub: SubscriptionState,
+): Promise<boolean> {
+  const c = await db();
+  const tx = await c.transaction("write");
+  try {
+    const rs = await tx.execute({
+      sql: `SELECT stripe_subscription_id AS id, status, stripe_subscription_created AS created
+              FROM subscription WHERE account_id = ?`,
+      args: [accountId],
+    });
+    const cur = rs.rows[0] as unknown as
+      { id: string | null; status: string; created: number | null } | undefined;
+    if (cur?.id && cur.id !== sub.stripe_subscription_id) {
+      const supersedes = LIVE.includes(sub.status)
+        && (!LIVE.includes(cur.status) || sub.stripe_subscription_created > (cur.created ?? 0));
+      if (!supersedes) {
+        await tx.rollback();
+        return false;
+      }
+    }
+    await tx.execute({
+      sql: `INSERT INTO subscription(account_id, stripe_customer_id, stripe_subscription_id,
+                                     stripe_subscription_created, plan, status,
+                                     current_period_end, updated_at)
+            VALUES(?,?,?,?,?,?,?,?)
+            ON CONFLICT(account_id) DO UPDATE SET
+              stripe_customer_id     = COALESCE(excluded.stripe_customer_id, subscription.stripe_customer_id),
+              stripe_subscription_id = excluded.stripe_subscription_id,
+              stripe_subscription_created = excluded.stripe_subscription_created,
+              plan                   = excluded.plan,
+              status                 = excluded.status,
+              current_period_end     = excluded.current_period_end,
+              updated_at             = excluded.updated_at`,
+      args: [accountId, customerId, sub.stripe_subscription_id, sub.stripe_subscription_created,
+        sub.plan, sub.status, sub.current_period_end, new Date().toISOString()],
+    });
+    await tx.commit();
+    return true;
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
+/** Downgrades an account, but only if `subscriptionId` is the subscription it
+ *  currently holds. The deletion of an old subscription is then harmless to a
+ *  newer one. Returns whether anything changed. */
+export async function clearSubscriptionIfCurrent(
+  accountId: string, subscriptionId: string,
+): Promise<boolean> {
+  const rs = await run(`
+    UPDATE subscription
+       SET stripe_subscription_id = NULL, stripe_subscription_created = NULL,
+           plan = 'free', status = 'canceled', current_period_end = NULL, updated_at = ?
+     WHERE account_id = ? AND stripe_subscription_id = ?`,
+    [new Date().toISOString(), accountId, subscriptionId]);
+  return rs.rowsAffected > 0;
+}
+
+/** claimed: this delivery should be processed. duplicate: already applied.
+ *  in_progress: another delivery is processing it right now. */
+export type WebhookClaim = "claimed" | "duplicate" | "in_progress";
+
+/** A processing claim older than this is a crashed worker, not a live one. */
+const WEBHOOK_STALE_MS = 5 * 60_000;
+
+function isUniqueViolation(err: unknown): boolean {
+  const e = err as { code?: string; message?: string };
+  return /CONSTRAINT/i.test(e.code ?? "") && /unique|primary key/i.test(e.message ?? "");
+}
+
+/** Durable per-event state: processing -> succeeded | failed.
+ *
+ *  Only a primary-key conflict means "seen before"; any other database error
+ *  propagates so the caller answers 5xx and Stripe retries, rather than a
+ *  transient fault being acknowledged as a duplicate. A seen event is redone
+ *  when it failed or its claim went stale, and refused while another delivery
+ *  holds a fresh claim. */
+export async function claimWebhookEvent(id: string, type: string): Promise<WebhookClaim> {
+  const now = new Date().toISOString();
   try {
     await run(
-      "INSERT INTO webhook_event(id, type, received_at) VALUES(?, ?, ?)",
-      [id, type, new Date().toISOString()],
+      `INSERT INTO webhook_event(id, type, received_at, status, attempts, updated_at)
+       VALUES(?, ?, ?, 'processing', 1, ?)`,
+      [id, type, now, now],
     );
-    return true;
-  } catch {
-    return false;
+    return "claimed";
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
   }
+
+  const stale = new Date(Date.now() - WEBHOOK_STALE_MS).toISOString();
+  const res = await run(
+    `UPDATE webhook_event
+        SET status = 'processing', attempts = attempts + 1, updated_at = ?
+      WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND updated_at < ?))`,
+    [now, id, stale],
+  );
+  if (res.rowsAffected > 0) return "claimed";
+
+  const rs = await run("SELECT status FROM webhook_event WHERE id = ?", [id]);
+  return (rs.rows[0] as unknown as { status: string } | undefined)?.status === "succeeded"
+    ? "duplicate" : "in_progress";
+}
+
+export async function finishWebhookEvent(id: string, error?: string): Promise<void> {
+  await run(
+    "UPDATE webhook_event SET status = ?, last_error = ?, updated_at = ? WHERE id = ?",
+    [error === undefined ? "succeeded" : "failed", error ?? null, new Date().toISOString(), id],
+  );
 }

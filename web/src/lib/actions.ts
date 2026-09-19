@@ -105,27 +105,89 @@ export async function logoutAction(): Promise<void> {
 
 import { revalidatePath } from "next/cache";
 import { currentViewer } from "./auth";
-import {
-  deleteCatalogue, saveCatalogue, unwatchCode, watchCode,
-  type CatalogueItemInput,
-} from "./catalogues";
+import { deleteCatalogue, saveCatalogue, unwatchCode, watchCode } from "./catalogues";
+import { projectLine, type SavedLine, type SignedAudit } from "./auditModel";
+import { PROOF_MAX_AGE_MS, signingSecret, verifyAudit } from "./auditProof";
 import { markAllRead } from "./diff";
 
+/** What the browser sends to save an audit. It is not trusted: every figure in
+ *  it must be covered by the proof the audit proxy signed (lib/auditProof.ts),
+ *  so a catalogue can only ever hold results our engine produced.
+ *  `inputs` is the one exception: the amounts the customer typed, kept for
+ *  lines that could not be priced and so carry no amount of their own. */
+export type SavePayload = {
+  name: string;
+  lines: unknown[];
+  dataset_revision: string;
+  assumptions: string[];
+  mpf: number;
+  signed_at: string;
+  proof: string | null | undefined;
+  inputs?: number[];
+};
+
+const RERUN = "These results could not be verified, so they cannot be saved. Run the audit again to save it.";
+const MAX_SAVE_LINES = 5000;
+
 export async function saveCatalogueAction(
-  name: string, items: CatalogueItemInput[],
+  payload: SavePayload,
 ): Promise<{ id?: string; error?: string }> {
   const viewer = await currentViewer();
   if (!viewer) return { error: "Sign in to save a catalogue." };
 
-  const clean = name.trim().slice(0, 120) || "Untitled catalogue";
-  if (!items.length) return { error: "Nothing to save." };
-  if (items.length > viewer.plan.skus) {
-    return { error: `${items.length} products exceeds the ${viewer.plan.skus.toLocaleString()} allowed on ${viewer.plan.name}.` };
+  const secret = signingSecret();
+  if (!secret) {
+    console.error("saveCatalogueAction: no signing secret is configured; saving is unavailable");
+    return { error: "Saving is unavailable: signing is not configured. Your results are still on screen; you can export them as CSV." };
   }
 
-  const id = await saveCatalogue(viewer.account.id, clean, items);
+  const p = payload as Partial<SavePayload> | null;
+  if (!p || typeof p !== "object" || !Array.isArray(p.lines)) return { error: RERUN };
+  if (!p.lines.length) return { error: "Nothing to save." };
+  // The ceiling is on what was submitted, priced or not: a plan sized for N
+  // products does not get 2N by having some of them fail.
+  if (p.lines.length > viewer.plan.skus) {
+    return { error: `${p.lines.length} products exceeds the ${viewer.plan.skus.toLocaleString()} allowed on ${viewer.plan.name}.` };
+  }
+  if (p.lines.length > MAX_SAVE_LINES) return { error: RERUN };
+
+  const lines: SavedLine[] = [];
+  for (const raw of p.lines) {
+    const l = projectLine(raw);
+    if (!l) return { error: RERUN };
+    lines.push(l);
+  }
+  const strings = (v: unknown): v is string[] =>
+    Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === "string");
+  if (typeof p.dataset_revision !== "string" || !strings(p.assumptions)
+      || typeof p.mpf !== "number" || !Number.isFinite(p.mpf)
+      || typeof p.signed_at !== "string") {
+    return { error: RERUN };
+  }
+
+  const body: SignedAudit = {
+    v: 1, at: p.signed_at, dataset_revision: p.dataset_revision,
+    assumptions: p.assumptions, mpf: p.mpf, lines,
+  };
+  if (!verifyAudit(body, p.proof, secret)) {
+    console.warn(`saveCatalogueAction: refused for account ${viewer.account.id}: ${
+      p.proof ? "proof did not verify" : "no proof"}`);
+    return { error: RERUN };
+  }
+  const age = Date.now() - Date.parse(body.at);
+  if (!Number.isFinite(age) || age > PROOF_MAX_AGE_MS || age < -5 * 60_000) {
+    return { error: "These results are out of date, so they cannot be saved. Run the audit again to save it." };
+  }
+
+  // The amounts the customer submitted: their own input, never a calculation.
+  const inputs = Array.isArray(p.inputs) && p.inputs.length === lines.length
+    ? p.inputs.map((n) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : 0))
+    : [];
+
+  const clean = String(p.name ?? "").trim().slice(0, 120) || "Untitled catalogue";
+  const id = await saveCatalogue(viewer.account.id, clean, body, inputs);
   await audit("catalogue_saved", { accountId: viewer.account.id,
-    email: viewer.account.email, detail: `${items.length} products` });
+    email: viewer.account.email, detail: `${lines.length} products` });
   revalidatePath("/catalogues");
   return { id };
 }

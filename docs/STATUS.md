@@ -1,57 +1,109 @@
 # Build status
 
-## Working end to end
+Last updated 2026-09-19, after the independent audit in `PROJECT-AUDIT.md`.
+This is the single place readiness is stated; if it disagrees with another
+document, this one has been updated more recently or the other is wrong.
 
-| Component | State |
+**Not ready to sell as a paid product yet.** The engine's calculation
+integrity, refresh pipeline and billing/notification recovery were repaired
+after the audit (below). What remains before launch is measurement, coverage
+and operations work listed under "Release gate".
+
+## Built and tested
+
+| Area | State |
 |---|---|
-| Chapter 99 rate-line parser | 565/565 lines, 0 misparsed |
-| HTS tree + rate inheritance | 19,949 leaf codes |
+| Chapter 99 rate-line parser | 565/565 lines parsed |
+| HTS tree with rate inheritance | 19,949 statistical lines |
 | U.S. Notes scope extractor | 67 headings, 12,362 heading/code pairs |
-| Duty stack resolver | base + remedies + MPF/HMF, every line cited |
-| IEEPA segregation | struck-down duty reported as refundable |
-| CROSS ingest | 200,962 rulings, 267,738 code links |
-| Classifier | retrieval + optional GRI reasoning |
-| Federal Register monitor | 1,364 actions, full-text HTS extraction |
-| API | 10 endpoints |
-| Web | 6 pages + 19,954-URL sitemap |
+| Duty stack resolver | base + remedies + HMF per line, MPF per entry; every line cites its authority |
+| Origin handling | names, ISO codes and aliases resolve to one key; unrecognised origins are refused |
+| Rate grammar | ad valorem, quantity-based and unparsed parts separated; omitted parts reported in `incomplete` |
+| Preferences | matched to a named program or the one program covering the origin; fixed-membership FTAs eligibility-checked, others flagged as asserted |
+| Refresh pipeline | one validated transaction, versioned release directories, indexes rebuilt inside it, engine reloads on revision change |
+| Audit API | every row returned with a status, reasons and its own row number; summary reconciles and says whether totals are complete |
+| Billing | Stripe events have durable states, retry after failure, and reconcile against Stripe's current state (order-independent) |
+| Alerts | outbox with exact-id claims, bounded retries, cursor paging with lookback, failures never advance the cursor |
+| Public cost controls | request/item budgets per client or account, one audit in flight per caller, streamed body cap |
+| Accounts store | libSQL (Turso in production, embedded file in development) |
 
-## Classifier accuracy (400 held-out CBP rulings)
+## Test coverage
 
-| Metric | Retrieval only |
+| Suite | Count | What it exercises |
+|---|---|---|
+| `tests/test_duty.py` | 46 | duty arithmetic, refusals, rate grammar, preferences, origins, fees |
+| `tests/test_api.py` | 32 | API contract, security regressions, audit row/status behaviour, cursor paging |
+| `tests/test_refresh.py` | 10 | index survival, stale-data removal, rollback, engine reload across editions |
+| `tests/test_classify_eval.py` | 3 | a held-out ruling cannot vote for itself; reasoning cannot run in evaluation |
+| `web` `npm run test:integration` | 55 | real routes over scratch databases with fake Stripe/engine/mail servers |
+| browser suites (`make test-journey`, `test-security`, `test-authflow`) | 39+ | customer journey, cross-account access, throttling, CSV/XSS, reset and verify |
+
+The Python suites need `data/` for `test_api`, `test_refresh` and the
+evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
+
+## Classifier accuracy
+
+Measured 2026-09-19 with `tests/eval_classify.py`: 400 cases, retrieval only,
+the held-out ruling **and every ruling with the same subject** removed before
+scoring, abstentions counted as misses.
+
+| Metric | Result |
 |---|---|
-| top-1 heading (4-digit) | 58.2% |
-| top-1 subheading (6-digit) | 46.2% |
-| top-3 heading | 83.0% |
+| top-1 heading (4-digit) | 46.8% |
+| top-1 subheading (6-digit) | 34.8% |
+| top-1 8-digit | 29.0% |
+| **top-1 exact 10-digit line (what pricing uses)** | **15.0%** |
+| top-3 heading | 71.5% |
 
-Measured across four runs while iterating. Heading-level precedent voting was
-the one change that mattered, taking top-3 from 53% to 83%. Cleaning the ruling
-subjects cost about 2.5 points of top-1 — the malformed subjects had been
-carrying body text that happened to help matching — and scoring against ruling
-bodies has so far been neutral, because only ~13% of bodies are loaded. Both
-are worth re-measuring once the body ingest completes. Differences under about
-2.5 points at n=400 are noise.
+The figures previously published here (58.2% / 46.2% / 83.0%) were **not**
+held-out measurements: the answer had already voted for itself before being
+filtered out. They are withdrawn.
 
-Retrieval recall ceiling is 99.5% — the correct heading is almost always among
-the ruling votes, so ranking is where the remaining accuracy lives. The GRI
-reasoning layer picks from the top-3 set, so 83.2% is the ceiling it works
-against. That layer needs an API key and has not been measured yet.
+What this means for the product: the classifier is a candidate generator with
+precedent, not a filing-ready code. The audit already flags classified codes
+whose sibling statistical lines carry different rates (`suffix_review`), and
+classified rows are never presented as decided. The reasoning layer (needs
+`ANTHROPIC_API_KEY`) is unmeasured; measure it with a separate, labelled run
+before claiming anything for it.
 
 ## Known gaps
 
-- Reasoning layer unmeasured (no API key set)
-- ~78 remedy headings still unscoped: their notes describe goods in prose
-  rather than enumerating codes, which needs the reasoning layer
-- Specific and compound duties (cents/kg) need quantity data to be exact
-- Suspension detection covers footnote-declared cases only
-- AD/CVD orders not integrated (separate CBP dataset)
-- Federal Register HTS extraction has occasional false positives from
-  non-tariff numerics
-- Ruling bodies still loading; accuracy should improve as coverage grows
+- ~78 remedy headings are still unscoped: their notes describe goods in prose,
+  so every China/Vietnam-origin line is reported as `scope_review` rather than
+  ready. Honest, but noisy; it needs the reasoning layer or manual scoping.
+- Quantity-based duties (cents/kg, $/each) need quantity input, which does not
+  exist yet: such lines are flagged incomplete, never silently understated.
+- AD/CVD orders are not integrated (separate CBP/ITA dataset). For many
+  China/Vietnam/India goods this is the largest omitted charge and is **not
+  flagged** yet.
+- MPF preference exemptions are not modelled; the assumptions list says so.
+- The IEEPA "refundable" figure is a scenario estimate for one entry at the
+  entered value. There is no entry date, paid duty or liquidation status, so it
+  cannot substantiate a refund claim; the UI is worded accordingly.
+- The classifier's exact-line accuracy is low (above).
+- Alerts replay 7 days behind the cursor; a document ingested more than a week
+  after its publication date is still missed.
+- Re-pricing a saved catalogue is not built and is not sold.
+- Not built: entry-summary (CBP 7501) ingest, duty drawback, team seats, API
+  access.
+- MPF/HMF constants are FY2026; `FEE_CONSTANTS_EFFECTIVE_THROUGH` warns from
+  2026-10-01 but the FY2027 values must still be entered by a person.
 
-## Not built
+## Release gate
 
-- Accounts, billing, saved catalogues (needs Postgres — SQLite is reference
-  data only)
-- Entry-summary (CBP 7501) ingest for the overpayment audit
-- Duty drawback eligibility
-- Change alerts wired to a customer catalogue
+All must be true before taking money:
+
+- [x] A refreshed dataset produces consistent, versioned quotes; a removed code
+      or changed rate is reflected by every endpoint (`test_refresh`).
+- [x] Unsupported inputs never look complete: invalid codes/origins are errors,
+      omitted duty components are flagged.
+- [x] Failed billing and email work recovers; retries are not discarded.
+- [ ] Every imported row is accountable end to end (API done; audit UI, saved
+      catalogue and export being verified against the new statuses).
+- [x] Integration tests exercise production routes, over isolated databases.
+- [ ] Reasoning layer measured, or the product described without it.
+- [ ] AD/CVD at least flagged for affected origins.
+- [ ] FY2027 fee constants entered (due 2026-10-01).
+- [ ] Deployed to real Vercel/Turso/VPS with monitoring and offsite backups,
+      and a Stripe test-mode round trip and real email delivery exercised.
+- [ ] Terms, privacy and disclaimers reviewed by a customs attorney.

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { currentViewer } from "@/lib/auth";
 import { getCatalogue } from "@/lib/catalogues";
-import { AUDIT_COLUMNS, csvFilename, toCsv } from "@/lib/csv";
+import { AUDIT_COLUMNS, auditExportRow, csvFilename, toCsv } from "@/lib/csv";
+import { isPriced } from "@/lib/auditModel";
 import { audit } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -19,18 +20,16 @@ export async function GET(request: Request) {
     detail: `${cat.items.length} products`,
   });
 
+  // Every saved line is exported, unresolved ones included, through the same
+  // row builder as the audit page's download.
   const csv = toCsv(
-    cat.items.map((i) => ({
-      sku: i.sku ?? "",
-      description: i.description,
-      country: i.country,
-      hts: i.hts ?? "",
-      confidence: i.confidence ?? "",
-      entered_value: i.value?.toFixed(2) ?? "",
-      duty: i.duty?.toFixed(2) ?? "",
-      effective_rate_pct: i.effective_rate?.toFixed(2) ?? "",
-      refundable: i.refundable?.toFixed(2) ?? "",
-      flags: i.scope_unverified ? "scope unverified" : "",
+    cat.items.map((i) => auditExportRow({
+      row: i.row_number, sku: i.sku, description: i.description, country: i.country,
+      hts: i.hts, status: i.status, error: i.error,
+      review_reasons: i.review, warnings: i.warnings, incomplete: i.incomplete,
+      confidence: i.confidence,
+      entered_value: i.status && !isPriced(i.status) ? null : i.value,
+      duty: i.duty, effective_rate_pct: i.effective_rate, refundable: i.refundable,
     })),
     AUDIT_COLUMNS,
   );

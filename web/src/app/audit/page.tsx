@@ -1,5 +1,6 @@
 import AuditClient from "./AuditClient";
 import { currentViewer } from "@/lib/auth";
+import { PLANS } from "@/lib/plans";
 
 export const metadata = {
   title: "Catalogue duty audit — price your whole import exposure",
@@ -21,10 +22,12 @@ export default async function AuditPage() {
           Paste or upload your catalogue. Every line gets a classification, the
           full duty stack for its origin, and a flag where a trade
           remedy&rsquo;s scope needs confirming. Leave the HTS column blank and
-          it will be classified.
+          it will be classified. Nothing is dropped: a line that cannot be
+          priced comes back marked, with the reason, and the totals say when
+          they are partial.
         </p>
       </div>
-      <AuditClient signedIn={Boolean(viewer)} />
+      <AuditClient signedIn={Boolean(viewer)} maxRows={(viewer?.plan ?? PLANS.free).skus} />
     </div>
   );
 }

@@ -92,7 +92,9 @@ await step("signup creates an account and lands on it", async () => {
 await step("signing up again while signed in does not create a second account", async () => {
   const probe = await ctx.newPage();
   await probe.goto(`${BASE}/signup`, { waitUntil: "domcontentloaded" });
-
+  // The redirect is issued after the shell has streamed, so it lands a moment
+  // after DOMContentLoaded rather than as an HTTP 307.
+  await probe.waitForURL(/\/account/, { timeout: 10000 }).catch(() => {});
   assert.match(probe.url(), /\/account/,
     "an existing session should skip signup");
   await probe.close();
@@ -122,7 +124,8 @@ await step("the audit offers to save, and saving lands on the catalogue", async 
   ]);
   const body = await text();
   assert.match(body, /Journey test catalogue/);
-  assert.match(body, /every classified code is watched/i);
+  assert.match(body, /\d+ codes? watched/i, "the catalogue says how many codes it watches");
+  assert.match(body, /Submitted \d+ · Ready \d+ · Needs attention \d+/, "the saved catalogue reconciles");
 });
 
 await step("saving a catalogue watches its codes", async () => {

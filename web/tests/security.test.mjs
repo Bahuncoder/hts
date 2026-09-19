@@ -162,10 +162,20 @@ await check("CSV export neutralises spreadsheet formulas", async () => {
   let csv = ""; for await (const chunk of stream) csv += chunk;
   await user.ctx.close();
 
-  for (const line of csv.split("\r\n").filter((l) => /INJ-/.test(l))) {
-    const desc = line.split('","')[1] ?? "";
-    assert.ok(!/^[=+@\t\r]/.test(desc),
-      `a spreadsheet would evaluate this cell: ${JSON.stringify(desc.slice(0, 40))}`);
+  // Columns are found by header, not position: the export has gained a leading
+  // Row column, and a fixed index would silently test the wrong cell.
+  const rows = csv.replace(/^\ufeff/, "").split("\r\n").filter(Boolean)
+    .map((l) => l.slice(1, -1).split('","'));
+  const col = rows[0].indexOf("Description");
+  assert.ok(col >= 0, "no Description column");
+  const inj = rows.slice(1).filter((r) => /^INJ-/.test(r[rows[0].indexOf("SKU")] ?? ""));
+  assert.equal(inj.length, 2, "the injected rows must reach the export");
+  for (const r of inj) {
+    for (const cell of r) {
+      assert.ok(!/^[=+@\t\r]/.test(cell),
+        `a spreadsheet would evaluate this cell: ${JSON.stringify(cell.slice(0, 40))}`);
+    }
+    assert.ok(/^'/.test(r[col]), "the leading character is neutralised, not dropped");
   }
   assert.match(csv, /"1000\.00"/, "numeric values must not be mangled by the escaping");
 });

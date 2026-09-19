@@ -7,7 +7,18 @@ let _stripe: Stripe | null = null;
 export function stripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) return null;
-  if (!_stripe) _stripe = new Stripe(key, { apiVersion: "2026-07-29.dahlia" });
+  if (!_stripe) {
+    // Lets an integration test point the SDK at a local fake; unset in production.
+    const host = process.env.STRIPE_API_HOST;
+    _stripe = new Stripe(key, {
+      apiVersion: "2026-07-29.dahlia",
+      ...(host ? {
+        host,
+        port: process.env.STRIPE_API_PORT,
+        protocol: process.env.STRIPE_API_PROTOCOL === "https" ? "https" : "http",
+      } : {}),
+    });
+  }
   return _stripe;
 }
 

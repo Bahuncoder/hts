@@ -39,14 +39,18 @@ presented as a complete one.
 Every endpoint was unmetered. `/api/classify` costs 175 ms per call, so
 saturation was trivial.
 
-**Fixed** with an in-process limiter (`api/security.py`) at 120/min for
-lookups, 20/min for classification and 5/min for audits, returning 429 with
+**Fixed** with a per-client limiter (`api/security.py`) at 120/min for lookups,
+20/min for classification and 5/min for audits, returning 429 with
 `Retry-After`. Keyed callers bypass it.
 
-> The limiter is per process. Running `--workers 2` doubles every application
-> limit. nginx therefore holds the authoritative limit in a shared zone
-> (`deploy/nginx.conf`); the in-process one is a backstop for direct access.
-> Moving beyond one host needs a shared counter instead.
+> The counter lives in a small SQLite database shared by every worker (finding
+> 14), so it does not multiply with `--workers`; it survives restarts but not a
+> second host. nginx holds the outermost limit (`deploy/nginx.conf`) and is the
+> only one that also covers traffic carrying a valid key. Because the web app's
+> key bypasses this limiter, the web app meters what each caller may submit
+> before forwarding (`web/src/lib/budget.ts`): per-client and per-account audit
+> budgets, one audit in flight per caller, and a streamed body cap. Moving
+> beyond one host needs a shared counter instead.
 
 ### 3. Unbounded result limits — high, fixed
 

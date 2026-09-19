@@ -1,116 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveCatalogueAction } from "@/lib/actions";
-import { AUDIT_COLUMNS, toCsv } from "@/lib/csv";
+import { AUDIT_COLUMNS, auditExportRow, toCsv } from "@/lib/csv";
+import { projectLine, type AuditLine } from "@/lib/auditModel";
+import { EXPECTED_FORMAT, SAMPLE_CSV, TEMPLATE_CSV, parseCatalogue } from "@/lib/csvParse";
+import AuditResults, { type AuditSummary } from "./AuditResults";
 
-type Line = {
-  sku: string;
-  description: string;
-  hts: string | null;
-  confidence?: string;
-  country?: string;
-  entered_value?: number;
-  duty?: number;
-  effective_rate_pct?: number;
-  refundable?: number;
-  scope_unverified?: string[];
-  error?: string;
+type AuditResponse = {
+  summary: AuditSummary;
+  lines: AuditLine[];
+  proof?: string;
+  signed_at?: string;
 };
 
-type Result = {
-  summary: {
-    items: number;
-    submitted: number;
-    truncated: boolean;
-    entered_value: number;
-    duty: number;
-    effective_rate_pct: number;
-    potentially_refundable: number;
-    unclassified: number;
-    needs_scope_review: number;
-  };
-  lines: Line[];
+/** A completed audit, with what was needed to produce and later save it. */
+type Run = {
+  response: AuditResponse;
+  /** Amounts as submitted, one per line, for lines the engine could not price. */
+  inputs: number[];
+  ranAt: Date;
+  /** The catalogue text this was run from. */
+  text: string;
+  sample: boolean;
 };
 
-const SAMPLE = `sku,description,country,value,hts
-TS-001,mens knitted cotton t-shirt short sleeve,China,48000,
-BP-220,nylon backpack with zipper closure,China,31000,
-LI-20V,lithium-ion rechargeable battery pack 20V,Vietnam,75000,
-CH-14,upholstered wooden dining chair,China,52000,
-MG-09,ceramic coffee mug,Germany,12000,`;
+/** Files larger than the proxy accepts are refused here, with a reason,
+ *  rather than after an upload that ends in an unexplained 413. */
+const MAX_TEXT = 1_900_000;
 
-const money = (n: number) =>
-  n.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
+const focusRing =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
-/** Minimal CSV parse: handles quoted fields and embedded commas. */
-function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
+const timeOf = (d: Date) => d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (quoted) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else quoted = false;
-      } else cell += ch;
-      continue;
-    }
-    if (ch === '"') quoted = true;
-    else if (ch === ",") {
-      row.push(cell);
-      cell = "";
-    } else if (ch === "\n") {
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else if (ch !== "\r") cell += ch;
-  }
-  if (cell || row.length) {
-    row.push(cell);
-    rows.push(row);
-  }
-
-  const [head, ...body] = rows.filter((r) => r.some((c) => c.trim()));
-  if (!head) return [];
-  const keys = head.map((h) => h.trim().toLowerCase());
-  return body.map((r) =>
-    Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? "").trim()])),
-  );
+function isResponse(x: unknown): x is AuditResponse {
+  if (typeof x !== "object" || x === null) return false;
+  const r = x as { summary?: unknown; lines?: unknown };
+  return typeof r.summary === "object" && r.summary !== null && Array.isArray(r.lines);
 }
 
-function downloadCsv(lines: Line[]) {
-  // Shares the formula-neutralizing emitter with the saved-catalogue export
-  // (lib/csv.ts): product descriptions and SKUs here are attacker-controlled,
-  // and a bare quote-only emitter does not stop a leading `=` from being read
-  // as a formula when the file is opened in a spreadsheet.
-  const rows = lines.map((l) => ({
-    sku: l.sku,
-    description: l.description,
-    country: l.country ?? "",
-    hts: l.hts,
-    confidence: l.confidence ?? "",
-    entered_value: l.entered_value?.toFixed(2) ?? "",
-    duty: l.duty?.toFixed(2) ?? "",
-    effective_rate_pct: l.effective_rate_pct?.toFixed(2) ?? "",
-    refundable: l.refundable?.toFixed(2) ?? "",
-    flags: l.error ? l.error : l.scope_unverified?.length ? "scope unverified" : "",
-  }));
-  const csv = toCsv(rows, AUDIT_COLUMNS);
-  const url = URL.createObjectURL(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
-  );
+function downloadCsv(lines: AuditLine[]) {
+  // Shares the formula-neutralising emitter with the saved-catalogue export
+  // (lib/csv.ts): product descriptions and SKUs are attacker-controlled, and a
+  // bare quote-only emitter does not stop a leading `=` being read as a formula
+  // when the file is opened in a spreadsheet.
+  const csv = toCsv(lines.map((l) => auditExportRow(l)), AUDIT_COLUMNS);
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = `htsdesk-audit-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -118,56 +55,90 @@ function downloadCsv(lines: Line[]) {
   URL.revokeObjectURL(url);
 }
 
-export default function AuditClient({ signedIn }: { signedIn: boolean }) {
+export default function AuditClient({
+  signedIn, maxRows,
+}: {
+  signedIn: boolean;
+  /** Products per audit on the viewer's plan. The server enforces it. */
+  maxRows: number;
+}) {
   const router = useRouter();
+  const [text, setText] = useState("");
+  const [attempted, setAttempted] = useState(false);
+  const [entries, setEntries] = useState("1");
+  const [transport, setTransport] = useState<"vessel" | "air">("vessel");
+  const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [run, setRun] = useState<Run | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [text, setText] = useState(SAMPLE);
-  const [result, setResult] = useState<Result | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fileNote, setFileNote] = useState<string | null>(null);
 
-  async function run() {
+  useEffect(() => {
+    if (!busy) return;
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [busy]);
+
+  const parsed = useMemo(() => (text.trim() ? parseCatalogue(text) : null), [text]);
+  const isSample = text === SAMPLE_CSV;
+  const entryCount = Math.max(1, Math.min(100_000, Math.floor(Number(entries)) || 1));
+  const overPlan = parsed?.ok && parsed.items.length > maxRows;
+
+  async function runAudit() {
+    setAttempted(true);
+    if (busy) return;
+    const p = parseCatalogue(text);
+    if (!p.ok) return; // the problems are already on screen, in an alert
+
     setBusy(true);
+    setElapsed(0);
     setError(null);
-    setResult(null);
     try {
-      const rows = parseCsv(text);
-      const items = rows
-        .map((r) => ({
-          sku: r.sku ?? "",
-          description: r.description ?? "",
-          country: r.country ?? "",
-          value: Number(r.value ?? 0),
-          hts: r.hts ? r.hts : null,
-        }))
-        .filter((i) => i.description && i.country && i.value > 0);
-
-      if (!items.length) {
-        setError(
-          "No usable rows. Columns needed: description, country, value. sku and hts are optional.",
-        );
-        return;
-      }
-
+      // Every data row goes to the server, in order, with its row number. A
+      // row that cannot be read is sent with amount 0 so it comes back as an
+      // error line with a reason, never silently missing.
+      const items = p.items.map(({ row, sku, description, country, value, hts }) => ({
+        row, sku, description, country, value, hts,
+      }));
       const res = await fetch("/api/audit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, entries: entryCount, by_vessel: transport === "vessel" }),
+        signal: AbortSignal.timeout(70_000),
       });
-      const payload = await res.json();
+
+      let payload: unknown = null;
+      try { payload = await res.json(); } catch { /* not JSON: handled below */ }
+
       if (!res.ok) {
+        const detail = (payload as { detail?: unknown } | null)?.detail;
         setError(
-          typeof payload?.detail === "string"
-            ? payload.detail
-            : `Audit failed (${res.status}).`,
+          typeof detail === "string" ? detail
+            : res.status === 429 ? "You are sending audits too quickly. Wait a moment and try again."
+            : `The audit could not be completed (HTTP ${res.status}). Your catalogue is unchanged; try again.`,
         );
         return;
       }
-      setResult(payload as Result);
+      if (!isResponse(payload) || payload.lines.length !== items.length) {
+        setError("The audit returned an unexpected response, so nothing was shown. Try again.");
+        return;
+      }
+      setRun({
+        response: payload, inputs: p.items.map((i) => i.value),
+        ranAt: new Date(), text, sample: isSample,
+      });
+      setSaveError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unexpected error");
+      const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
+      setError(
+        timedOut
+          ? "The audit took too long and was stopped. Try a smaller catalogue, or try again."
+          : "Could not reach the audit service. Check your connection and try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -175,162 +146,237 @@ export default function AuditClient({ signedIn }: { signedIn: boolean }) {
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (f) setText(await f.text());
+    e.target.value = ""; // so choosing the same file again still fires
+    if (!f) return;
+    try {
+      const body = await f.text();
+      if (body.length > MAX_TEXT) {
+        setFileNote(`${f.name} is larger than the 2 MB limit for one audit. Split it into smaller files.`);
+        return;
+      }
+      setText(body);
+      setAttempted(false);
+      setFileNote(`Loaded ${f.name}.`);
+    } catch {
+      setFileNote(`Could not read ${f.name}. Try saving it as a CSV and choosing it again.`);
+    }
   }
 
-  const s = result?.summary;
-  const border = { borderColor: "var(--border)" };
+  async function save() {
+    if (!run || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const { response } = run;
+      const lines = response.lines.map((l) => projectLine(l));
+      if (lines.some((l) => l === null)) {
+        setSaveError("Run the audit again to save it.");
+        return;
+      }
+      const res = await saveCatalogueAction({
+        name,
+        lines,
+        dataset_revision: response.summary.dataset_revision ?? "",
+        assumptions: response.summary.assumptions ?? [],
+        mpf: response.summary.mpf ?? 0,
+        signed_at: response.signed_at ?? "",
+        proof: response.proof ?? null,
+        inputs: run.inputs,
+      });
+      if (res.error || !res.id) {
+        setSaveError(res.error ?? "Could not save. Try again.");
+        return;
+      }
+      router.push(`/catalogues/${res.id}`);
+    } catch {
+      setSaveError("Could not save just now. Your results are still here; try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const problems = parsed && !parsed.ok ? parsed.problems : [];
+  const stale = run !== null && run.text !== text;
+  const templateHref = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`;
+
+  const preflight = parsed?.ok ? parsed : null;
 
   return (
     <div className="space-y-6">
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={9}
-        spellCheck={false}
-        className="tabular w-full rounded-md border p-3 font-mono text-[13px]"
-        style={{ ...border, background: "var(--paper)", color: "var(--ink)" }}
-      />
+      <div className="space-y-2">
+        <label htmlFor="catalogue-text" className="block text-[15px] font-medium">
+          Your catalogue
+        </label>
+        <p id="catalogue-help" className="text-[13px] text-muted">
+          {EXPECTED_FORMAT}{" "}
+          <a href={templateHref} download="htsdesk-template.csv" className={`hover:underline text-accent ${focusRing}`}>
+            Download template
+          </a>
+        </p>
+        <textarea
+          id="catalogue-text"
+          aria-describedby="catalogue-help catalogue-preflight"
+          value={text}
+          onChange={(e) => { setText(e.target.value); setAttempted(false); }}
+          rows={9}
+          spellCheck={false}
+          placeholder={"sku,description,country,value,hts\nTS-001,mens knitted cotton t-shirt,China,48000,"}
+          className={`mono w-full rounded-md border p-3 text-[13px] border-border bg-paper text-ink ${focusRing}`}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          id="catalogue-file"
+          type="file"
+          accept=".csv,text/csv,text/plain"
+          onChange={onFile}
+          className="peer sr-only"
+        />
+        <label
+          htmlFor="catalogue-file"
+          className="cursor-pointer rounded-md border px-3 py-2 text-[14px] border-rule peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+        >
+          Upload CSV
+        </label>
+        <button
+          type="button"
+          onClick={() => { setText(SAMPLE_CSV); setAttempted(false); setFileNote(null); }}
+          className={`rounded-md border px-3 py-2 text-[14px] border-rule ${focusRing}`}
+        >
+          Try a sample
+        </button>
+        {text ? (
+          <button
+            type="button"
+            onClick={() => { setText(""); setAttempted(false); setFileNote(null); }}
+            className={`px-2 py-2 text-[14px] text-muted hover:underline ${focusRing}`}
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      <div id="catalogue-preflight" role={attempted && problems.length ? "alert" : "status"} className="space-y-2 text-[14px]">
+        {fileNote ? <p className="text-muted">{fileNote}</p> : null}
+        {isSample ? (
+          <p className="rounded border-l-2 py-2 pl-3 border-caution bg-caution-soft text-caution-ink">
+            This is sample data, not yours. Replace it with your catalogue, or clear it.
+          </p>
+        ) : null}
+        {preflight ? (
+          <p className="text-muted">
+            <span className="mono">{preflight.items.length.toLocaleString()}</span> rows read ·{" "}
+            <span className="mono">{preflight.incomplete.toLocaleString()}</span> look incomplete. Every row is
+            still audited; rows the engine cannot price come back marked, not dropped.
+            {preflight.ignored.length ? ` Ignored columns: ${preflight.ignored.join(", ")}.` : ""}
+          </p>
+        ) : null}
+        {overPlan ? (
+          <p className="text-caution-ink">
+            That is more than the {maxRows.toLocaleString()} products your plan audits at once. The audit will
+            refuse it; split the file.
+          </p>
+        ) : null}
+        {problems.length ? (
+          <div className="rounded border-l-2 py-2 pl-3 border-danger bg-caution-soft">
+            <p className="font-medium text-danger">This catalogue cannot be audited yet.</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-ink">
+              {problems.map((t, i) => <li key={i}>{t}</li>)}
+            </ul>
+            <p className="mt-2 text-muted">
+              {EXPECTED_FORMAT}{" "}
+              <a href={templateHref} download="htsdesk-template.csv" className={`hover:underline text-accent ${focusRing}`}>
+                Download template
+              </a>
+            </p>
+          </div>
+        ) : null}
+      </div>
+
+      <details className="rounded border p-3 text-[14px] border-border">
+        <summary className={`cursor-pointer font-medium ${focusRing}`}>
+          Assumptions: {entryCount} formal {entryCount === 1 ? "entry" : "entries"}, {transport === "vessel" ? "vessel" : "air"} shipment
+        </summary>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="lbl">Formal entries</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={100000}
+              step={1}
+              value={entries}
+              onChange={(e) => setEntries(e.target.value)}
+              className={`mono w-32 border px-3 py-2 text-[14px] border-border bg-surface text-ink ${focusRing}`}
+            />
+            <span className="text-[12px] text-muted">
+              How many customs entries this value is spread over. The Merchandise Processing Fee minimum
+              and maximum apply to each.
+            </span>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="lbl">Transport</span>
+            <select
+              value={transport}
+              onChange={(e) => setTransport(e.target.value as "vessel" | "air")}
+              className={`w-40 border px-3 py-2 text-[14px] border-border bg-surface text-ink ${focusRing}`}
+            >
+              <option value="vessel">Vessel (ocean)</option>
+              <option value="air">Air</option>
+            </select>
+            <span className="text-[12px] text-muted">Vessel shipments carry the Harbor Maintenance Fee; air does not.</span>
+          </label>
+        </div>
+      </details>
 
       <div className="flex flex-wrap items-center gap-3">
         <button
-          onClick={run}
+          type="button"
+          onClick={runAudit}
           disabled={busy}
-          className="rounded-md px-4 py-2 text-[15px] font-medium disabled:opacity-50 bg-accent text-paper"
+          className={`rounded-md px-4 py-2 text-[15px] font-medium disabled:opacity-50 bg-accent text-on-accent ${focusRing}`}
         >
           {busy ? "Auditing…" : "Run audit"}
         </button>
-        <label
-          className="cursor-pointer rounded-md border px-3 py-2 text-[14px]"
-          style={border}
-        >
-          Upload CSV
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={onFile}
-            className="hidden"
-          />
-        </label>
+        <p role="status" className="text-[14px] text-muted">
+          {busy
+            ? `Auditing ${preflight?.items.length.toLocaleString() ?? ""} rows… ${elapsed}s. Classifying takes a fraction of a second per product, so a large catalogue can take up to a minute.`
+            : ""}
+        </p>
       </div>
 
       {error ? (
-        <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-danger bg-caution-soft text-danger">
-          {error}
-        </p>
+        <div role="alert" className="rounded border-l-2 py-2 pl-3 text-[14px] border-danger bg-caution-soft text-danger">
+          <p>{error}</p>
+          {run ? (
+            <p className="mt-1 text-ink">
+              The results below are the previous successful audit, from {timeOf(run.ranAt)}.
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
-      {s ? (
+      {run ? (
         <>
-          {s.truncated ? (
-            <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution">
-              Time budget reached: {s.items} of {s.submitted} lines were priced.
-              The totals below cover only those lines. Split the catalogue to
-              price the rest.
+          {run.sample ? (
+            <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
+              These are results for the sample catalogue, not your data. They cannot be saved.
+            </p>
+          ) : null}
+          {stale ? (
+            <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
+              You have changed the catalogue since this audit ({timeOf(run.ranAt)}). Run the audit again to see
+              results for what is above.
             </p>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              [
-                "Entered value",
-                money(s.entered_value),
-                s.truncated
-                  ? `${s.items} of ${s.submitted} lines`
-                  : `${s.items} lines`,
-              ],
-              [
-                "Duty and fees",
-                money(s.duty),
-                `${s.effective_rate_pct}% effective`,
-              ],
-              [
-                "Potentially refundable",
-                money(s.potentially_refundable),
-                "IEEPA, struck down",
-              ],
-              [
-                "Needs review",
-                String(s.needs_scope_review + s.unclassified),
-                "scope or classification",
-              ],
-            ].map(([label, value, sub]) => (
-              <div
-                key={label}
-                className="rounded-lg border p-4"
-                style={{ ...border, background: "var(--surface)" }}
-              >
-                <div className="text-[12px] uppercase tracking-wide text-muted">
-                  {label}
-                </div>
-                <div className="tabular mt-1 text-2xl font-semibold">
-                  {value}
-                </div>
-                <div className="text-[12px] text-muted">{sub}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="scroll-x">
-            <table className="w-full min-w-[760px] text-[14px]">
-              <thead>
-                <tr
-                  className="border-b text-left"
-                  style={{ ...border, color: "var(--muted)" }}
-                >
-                  <th className="py-2 font-medium">SKU</th>
-                  <th className="py-2 font-medium">HTS</th>
-                  <th className="py-2 font-medium">Confidence</th>
-                  <th className="py-2 font-medium">Origin</th>
-                  <th className="py-2 text-right font-medium">Value</th>
-                  <th className="py-2 text-right font-medium">Duty</th>
-                  <th className="py-2 text-right font-medium">Rate</th>
-                  <th className="py-2 pl-3 font-medium">Flags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result!.lines.map((l, i) => (
-                  <tr key={`${l.sku}-${i}`} className="border-b" style={border}>
-                    <td className="py-2">{l.sku || "—"}</td>
-                    <td className="tabular py-2">
-                      {l.hts ? (
-                        <a
-                          href={`/hts/${l.hts}`}
-                          className="hover:underline text-accent"
-                        >
-                          {l.hts}
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="py-2">{l.confidence ?? "—"}</td>
-                    <td className="py-2">{l.country ?? "—"}</td>
-                    <td className="tabular py-2 text-right">
-                      {l.entered_value !== undefined
-                        ? money(l.entered_value)
-                        : "—"}
-                    </td>
-                    <td className="tabular py-2 text-right">
-                      {l.duty !== undefined ? money(l.duty) : "—"}
-                    </td>
-                    <td className="tabular py-2 text-right">
-                      {l.effective_rate_pct !== undefined
-                        ? `${l.effective_rate_pct}%`
-                        : "—"}
-                    </td>
-                    <td className="py-2 pl-3 text-[12px] text-muted">
-                      {l.error
-                        ? l.error
-                        : l.scope_unverified?.length
-                          ? `${l.scope_unverified.length} heading(s) need scope review`
-                          : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AuditResults
+            summary={run.response.summary}
+            lines={run.response.lines}
+            inputs={run.inputs}
+          />
 
           <div className="flex flex-wrap items-end gap-3 border-t pt-5 border-border">
             {signedIn ? (
@@ -341,76 +387,50 @@ export default function AuditClient({ signedIn }: { signedIn: boolean }) {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Autumn range, China"
-                    className="border px-3 py-2 text-[14px] sm:w-72"
-                    style={{
-                      ...border,
-                      background: "var(--surface)",
-                      color: "var(--ink)",
-                    }}
+                    className={`border px-3 py-2 text-[14px] sm:w-72 border-border bg-surface text-ink ${focusRing}`}
                   />
                 </label>
                 <button
-                  disabled={saving}
-                  onClick={async () => {
-                    setSaving(true);
-                    setSaveError(null);
-                    const priced = result!.lines.filter((l) => !l.error);
-                    const res = await saveCatalogueAction(
-                      name,
-                      priced.map((l) => ({
-                        sku: l.sku,
-                        description: l.description,
-                        country: l.country ?? "",
-                        value: l.entered_value ?? 0,
-                        hts: l.hts,
-                        confidence: l.confidence,
-                        duty: l.duty,
-                        effective_rate_pct: l.effective_rate_pct,
-                        refundable: l.refundable,
-                        scope_unverified: l.scope_unverified,
-                      })),
-                    );
-                    if (res.error) {
-                      setSaveError(res.error);
-                      setSaving(false);
-                      return;
-                    }
-                    router.push(`/catalogues/${res.id}`);
-                  }}
-                  className="px-4 py-2 text-[14px] font-medium disabled:opacity-60 bg-accent text-on-accent"
+                  type="button"
+                  disabled={saving || run.sample}
+                  onClick={save}
+                  className={`px-4 py-2 text-[14px] font-medium disabled:opacity-60 bg-accent text-on-accent ${focusRing}`}
                 >
                   {saving ? "Saving…" : "Save and watch these codes"}
-                </button>
-                <button
-                  onClick={() => downloadCsv(result!.lines)}
-                  className="px-4 py-2 text-[14px] font-medium"
-                  style={{ ...border, borderWidth: 1, borderStyle: "solid" }}
-                >
-                  Export CSV
                 </button>
               </>
             ) : (
               <p className="text-[14px] text-muted">
-                <a
-                  href="/signup"
-                  className="font-medium hover:underline text-accent"
-                >
+                <a href="/signup" className="font-medium hover:underline text-accent">
                   Create a free account
                 </a>{" "}
-                to save this catalogue — every code in it is then watched, and
-                you are told when a tariff action names one.
+                to save this catalogue — every priced code in it is then watched, and you are told when a
+                tariff action names one.
               </p>
             )}
+            <button
+              type="button"
+              onClick={() => downloadCsv(run.response.lines)}
+              className={`border px-4 py-2 text-[14px] font-medium border-rule ${focusRing}`}
+            >
+              Export CSV
+            </button>
           </div>
 
+          {saving ? <p role="status" className="text-[13px] text-muted">Saving your catalogue…</p> : null}
           {saveError ? (
-            <p className="text-[13px] text-danger">{saveError}</p>
+            <p role="alert" className="text-[13px] text-danger">{saveError}</p>
+          ) : null}
+          {signedIn ? (
+            <p className="text-[12px] text-faint">
+              Every line is saved, including the ones that could not be priced, so nothing drops off your
+              review list. Only priced lines with a real code are watched.
+            </p>
           ) : null}
 
           <p className="text-[13px] text-muted">
-            Classifications are ranked from CBP ruling precedent. Confirm
-            anything marked low confidence, and anything flagged for scope
-            review, before you file — the reasonable-care duty stays with the
+            Classifications are ranked from CBP ruling precedent. Confirm anything marked low confidence, and
+            anything flagged for scope review, before you file — the reasonable-care duty stays with the
             importer of record.
           </p>
         </>

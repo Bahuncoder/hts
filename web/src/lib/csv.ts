@@ -4,6 +4,8 @@
  *  spreadsheet that silently shifts a column is worse than no export. Excel
  *  needs CRLF and a BOM to read UTF-8 correctly.
  */
+import { LEGACY_LABEL, STATUS_LABEL, reviewNotes, type Status } from "./auditModel";
+
 export type CsvRow = Record<string, string | number | null | undefined>;
 
 // A field a spreadsheet would treat as a formula. Quoting alone does not help:
@@ -28,17 +30,61 @@ export function toCsv(rows: CsvRow[], columns: { key: string; label: string }[])
 }
 
 export const AUDIT_COLUMNS = [
+  { key: "row", label: "Row" },
   { key: "sku", label: "SKU" },
   { key: "description", label: "Description" },
   { key: "country", label: "Country of origin" },
   { key: "hts", label: "HTS code" },
+  { key: "status", label: "Status" },
+  { key: "review_notes", label: "Review notes" },
   { key: "confidence", label: "Confidence" },
   { key: "entered_value", label: "Entered value (USD)" },
-  { key: "duty", label: "Duty and fees (USD)" },
+  { key: "duty", label: "Line duty and HMF, excl. MPF (USD)" },
   { key: "effective_rate_pct", label: "Effective rate (%)" },
   { key: "refundable", label: "Potentially refundable (USD)" },
-  { key: "flags", label: "Flags" },
 ];
+
+type ExportLine = {
+  row?: number | null;
+  sku?: string | null;
+  description: string;
+  country: string;
+  hts?: string | null;
+  /** null for a row saved before statuses existed. */
+  status: Status | null;
+  error?: string | null;
+  review_reasons?: string[] | null;
+  warnings?: string[] | null;
+  incomplete?: string[] | null;
+  confidence?: string | null;
+  entered_value?: number | null;
+  duty?: number | null;
+  effective_rate_pct?: number | null;
+  refundable?: number | null;
+};
+
+const fixed = (n: number | null | undefined) =>
+  typeof n === "number" && Number.isFinite(n) ? n.toFixed(2) : "";
+
+/** One export row, for both the audit page's download and the saved-catalogue
+ *  export, so the two cannot drift apart. Unresolved lines are exported with
+ *  their status and reasons, and blank figures rather than zeros. */
+export function auditExportRow(l: ExportLine): CsvRow {
+  return {
+    row: l.row ?? "",
+    sku: l.sku ?? "",
+    description: l.description,
+    country: l.country,
+    hts: l.hts ?? "",
+    status: l.status ? STATUS_LABEL[l.status] : LEGACY_LABEL,
+    review_notes: reviewNotes(l).join(" | "),
+    confidence: l.confidence ?? "",
+    entered_value: fixed(l.entered_value),
+    duty: fixed(l.duty),
+    effective_rate_pct: fixed(l.effective_rate_pct),
+    refundable: fixed(l.refundable),
+  };
+}
 
 export function csvFilename(base: string): string {
   const stamp = new Date().toISOString().slice(0, 10);
