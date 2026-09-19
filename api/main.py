@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from api.security import (ANON_AUDIT_ITEMS, KEYED_AUDIT_ITEMS, MAX_TEXT,
                           clean_text, guard)
 from core.classify import classify as run_classify
+from core.duty import FEE_CONSTANTS_EFFECTIVE_THROUGH, fee_constants_stale
 from core.engine import TariffEngine
 from store.db import connect, get_meta
 
@@ -143,6 +144,8 @@ def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
         "cross_ingested_at": get_meta(conn, "cross_ingested_at"),
         "counts": counts,
         "reasoning_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "fee_constants_stale": fee_constants_stale(),
+        "fee_constants_effective_through": FEE_CONSTANTS_EFFECTIVE_THROUGH.isoformat(),
     }
 
 

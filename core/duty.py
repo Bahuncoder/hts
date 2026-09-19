@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 
 from core.ch99 import Ch99Rule, Effect
@@ -24,6 +25,17 @@ MPF_RATE = Decimal("0.003464")
 MPF_MIN = Decimal("33.58")
 MPF_MAX = Decimal("651.50")
 HMF_RATE = Decimal("0.00125")
+
+# 19 CFR 24.22(k) requires CBP to re-adjust MPF's floor/cap for inflation each
+# fiscal year; HMF and the MPF rate are set by statute and don't move on the
+# same clock, but all three get re-verified together every October. Past this
+# date the constants above are unconfirmed for the new fiscal year — compute()
+# surfaces that as a warning rather than silently serving stale figures.
+FEE_CONSTANTS_EFFECTIVE_THROUGH = date(2026, 9, 30)
+
+
+def fee_constants_stale(today: date | None = None) -> bool:
+    return (today or date.today()) > FEE_CONSTANTS_EFFECTIVE_THROUGH
 
 # Column 2 ("other") applies to a small set of non-normal-trade-relations countries.
 COLUMN_2_COUNTRIES = {"cuba", "north korea", "russia", "belarus"}
@@ -268,6 +280,12 @@ def compute(
         )
 
     # --- 3. user fees --------------------------------------------------------
+    if fee_constants_stale():
+        res.warnings.append(
+            f"MPF/HMF figures are FY2026 constants, unverified past "
+            f"{FEE_CONSTANTS_EFFECTIVE_THROUGH.isoformat()}; re-check 19 CFR "
+            "24.22/24.24 for the new fiscal year's amounts."
+        )
     if is_formal_entry:
         mpf = (value * MPF_RATE).quantize(Decimal("0.01"))
         mpf = min(max(mpf, MPF_MIN), MPF_MAX)
