@@ -35,8 +35,8 @@ and operations work listed under "Release gate".
 | `tests/test_api.py` | 32 | API contract, security regressions, audit row/status behaviour, cursor paging |
 | `tests/test_refresh.py` | 10 | index survival, stale-data removal, rollback, engine reload across editions |
 | `tests/test_classify_eval.py` | 3 | a held-out ruling cannot vote for itself; reasoning cannot run in evaluation |
-| `web` `npm run test:integration` | 55 | real routes over scratch databases with fake Stripe/engine/mail servers |
-| browser suites (`make test-journey`, `test-security`, `test-authflow`) | 39+ | customer journey, cross-account access, throttling, CSV/XSS, reset and verify |
+| `web` `npm run test:integration` | 88 | real routes over scratch databases with fake Stripe/engine/mail servers |
+| browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 64 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
 evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
@@ -98,8 +98,9 @@ All must be true before taking money:
 - [x] Unsupported inputs never look complete: invalid codes/origins are errors,
       omitted duty components are flagged.
 - [x] Failed billing and email work recovers; retries are not discarded.
-- [ ] Every imported row is accountable end to end (API done; audit UI, saved
-      catalogue and export being verified against the new statuses).
+- [x] Every imported row is accountable end to end: sent with its row number,
+      returned with a status, saved, exported, and counted in the reconciliation
+      (`web/tests/review.test.mjs`, browser).
 - [x] Integration tests exercise production routes, over isolated databases.
 - [ ] Reasoning layer measured, or the product described without it.
 - [ ] AD/CVD at least flagged for affected origins.
