@@ -47,3 +47,42 @@ def set_meta(conn: sqlite3.Connection, key: str, value) -> None:
 def get_meta(conn: sqlite3.Connection, key: str, default=None):
     row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else default
+
+
+def begin(conn: sqlite3.Connection) -> None:
+    """Open a write transaction that readers see all-or-nothing under WAL."""
+    conn.execute("BEGIN IMMEDIATE")
+
+
+def rebuild_hts_index(conn: sqlite3.Connection) -> int:
+    """Repopulate hts_fts from hts. The caller owns the transaction."""
+    conn.execute("DELETE FROM hts_fts")
+    conn.execute(
+        "INSERT INTO hts_fts(hts, description, full_path) "
+        "SELECT hts, description, full_path FROM hts WHERE is_leaf = 1")
+    return conn.execute("SELECT count(*) c FROM hts_fts").fetchone()["c"]
+
+
+def rebuild_ruling_index(conn: sqlite3.Connection) -> int:
+    """Repopulate ruling_fts from ruling. The caller owns the transaction.
+
+    Every ruling is indexed. Dropping and recreating the table empty, as the
+    schedule refresh used to, silently removed all classification precedent
+    while the ruling rows and health counts stayed intact.
+    """
+    conn.execute("DELETE FROM ruling_fts")
+    conn.execute(
+        "INSERT INTO ruling_fts(ruling_number, subject, body) "
+        "SELECT ruling_number, subject, COALESCE(body, '') FROM ruling")
+    return conn.execute("SELECT count(*) c FROM ruling_fts").fetchone()["c"]
+
+
+def index_coverage(conn: sqlite3.Connection) -> dict:
+    """Row counts of the searchable tables next to their indexes."""
+    one = lambda q: conn.execute(q).fetchone()[0]  # noqa: E731
+    return {
+        "leaves": one("SELECT count(*) FROM hts WHERE is_leaf = 1"),
+        "hts_indexed": one("SELECT count(*) FROM hts_fts"),
+        "rulings": one("SELECT count(*) FROM ruling"),
+        "rulings_indexed": one("SELECT count(*) FROM ruling_fts"),
+    }

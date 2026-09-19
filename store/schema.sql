@@ -92,3 +92,10 @@ CREATE TABLE IF NOT EXISTS fr_document (
 CREATE INDEX IF NOT EXISTS fr_pub ON fr_document(publication_date);
 
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+
+-- Search indexes. Created here, and rebuilt only inside a transaction (see
+-- store/db.py) so a reader never sees an empty or half-built index.
+CREATE VIRTUAL TABLE IF NOT EXISTS hts_fts USING fts5(
+    hts UNINDEXED, description, full_path, tokenize = 'porter unicode61');
+CREATE VIRTUAL TABLE IF NOT EXISTS ruling_fts USING fts5(
+    ruling_number UNINDEXED, subject, body, tokenize = 'porter unicode61');

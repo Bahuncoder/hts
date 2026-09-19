@@ -12,3 +12,5 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 data/*.log
+data/releases/
+data/current

@@ -17,6 +17,20 @@ USER_NAME=htsdesk
 need_root() { [ "$(id -u)" -eq 0 ] || { echo "run as root" >&2; exit 1; }; }
 need_root
 
+REQUIRE_READY=0
+[ "${1:-}" = "--require-ready" ] && REQUIRE_READY=1
+
+echo "==> prerequisites"
+MISSING=""
+for cmd in python3 rsync openssl pdftotext; do
+  command -v "$cmd" >/dev/null 2>&1 || MISSING="$MISSING $cmd"
+done
+if [ -n "$MISSING" ]; then
+  echo "missing:$MISSING" >&2
+  echo "on Debian/Ubuntu: apt-get install -y python3-venv rsync openssl poppler-utils" >&2
+  exit 1
+fi
+
 echo "==> user and directories"
 id -u "$USER_NAME" >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin "$USER_NAME"
 install -d -o "$USER_NAME" -g "$USER_NAME" -m 0750 "$APP" "$APP/data"
@@ -31,7 +45,7 @@ chown -R "$USER_NAME:$USER_NAME" "$APP"
 echo "==> python environment"
 [ -d "$APP/.venv" ] || python3 -m venv "$APP/.venv"
 "$APP/.venv/bin/pip" -q install --upgrade pip
-"$APP/.venv/bin/pip" -q install fastapi uvicorn httpx pydantic
+"$APP/.venv/bin/pip" -q install -r "$APP/requirements.txt"
 
 echo "==> secrets"
 if [ ! -f "/etc/htsdesk/api.env" ]; then
@@ -58,9 +72,18 @@ systemctl daemon-reload
 systemctl enable --now htsdesk-api
 systemctl enable --now htsdesk-ingest.timer htsdesk-diff.timer
 
-echo "==> preflight"
+echo "==> readiness"
+# Installation and readiness are different questions. A fresh host has no
+# provider keys yet, so preflight is expected to fail the first time; report it
+# plainly instead of hiding it, and let --require-ready make it fatal.
 set -a; . /etc/htsdesk/api.env; set +a
-sudo -u "$USER_NAME" -E "$APP/.venv/bin/python" "$APP/ops/preflight.py" || true
+if sudo -u "$USER_NAME" -E "$APP/.venv/bin/python" "$APP/ops/preflight.py"; then
+  READY=1
+else
+  READY=0
+  echo
+  echo "NOT READY: installed, but preflight reported failures (above)."
+fi
 
 cat <<'NEXT'
 
@@ -74,3 +97,6 @@ Next, by hand:
   5. Deploy web/ to Vercel separately (see docs/DEPLOY.md) with
      TURSO_DATABASE_URL and TURSO_AUTH_TOKEN set
 NEXT
+
+[ "$REQUIRE_READY" -eq 1 ] && [ "$READY" -ne 1 ] && exit 1
+exit 0

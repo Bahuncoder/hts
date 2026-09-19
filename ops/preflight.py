@@ -37,8 +37,29 @@ if ref.exists():
     rulings = conn.execute("SELECT count(*) FROM ruling").fetchone()[0]
     actions = conn.execute(
         "SELECT count(*) FROM fr_document WHERE tariff_action = 1").fetchone()[0]
+    revision = conn.execute("SELECT value FROM meta WHERE key='dataset_revision'").fetchone()
+    release = conn.execute("SELECT value FROM meta WHERE key='release_dir'").fetchone()
+    hts_idx = conn.execute("SELECT count(*) FROM hts_fts").fetchone()[0]
+    ruling_idx = conn.execute("SELECT count(*) FROM ruling_fts").fetchone()[0]
     conn.close()
     check("reference database present", True, str(ref))
+    # A populated ruling table with an empty index looks healthy and returns no
+    # precedent at all; row counts alone cannot show it.
+    check("schedule search index covers every line", hts_idx == leaves,
+          f"{hts_idx:,} indexed of {leaves:,}")
+    check("ruling search index covers every ruling", ruling_idx == rulings,
+          f"{ruling_idx:,} indexed of {rulings:,}")
+    if revision and revision[0]:
+        check("dataset revision recorded", True, revision[0])
+        if release and release[0]:
+            rel = Path(release[0])
+            rel = rel if rel.is_absolute() else ROOT / rel
+            check("active release files exist",
+                  (rel / "hts.json").exists() and (rel / "chapter99.txt").exists(),
+                  str(rel))
+    else:
+        warn("dataset revision recorded",
+             "legacy build with no revision — run `make refresh` once")
     check("HTS schedule loaded", leaves > 19_000, f"{leaves:,} leaf codes")
     check("CBP rulings loaded", rulings > 190_000, f"{rulings:,} rulings")
     # An empty feed is not an error, but it means alerts cannot fire.

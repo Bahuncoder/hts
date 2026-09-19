@@ -4,12 +4,22 @@ The HTS is reissued through the year, Chapter 99 changes with every trade
 action, and the Federal Register moves daily. This pulls all three and rebuilds
 the reference database. Ruling ingest is incremental and run separately, since
 the corpus only grows at the margin.
+
+Each refresh downloads into its own immutable release directory
+(data/releases/<utc timestamp>/), builds from it, and only then points the
+database at it. The build is validated before it is published (see
+ingest/build.py), so a truncated download or a reshaped upstream file leaves the
+previous release serving traffic. The API reloads its engine when the dataset
+revision changes, so lookups and quotes always come from the same edition.
 """
 from __future__ import annotations
 
 import asyncio
+import json
+import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -21,6 +31,11 @@ HTS_URL = ("https://hts.usitc.gov/reststop/exportList"
            "?from=0100&to=9999&format=JSON&styles=false")
 CH99_URL = ("https://hts.usitc.gov/reststop/file"
             "?release=currentRelease&filename=Chapter%2099")
+
+KEEP_RELEASES = 3
+# Well under the current ~30,000 schedule rows: enough to reject an error page
+# or a truncated body before spending time on a build.
+MIN_SCHEDULE_ROWS = 20_000
 
 
 def fetch(url: str, dest: Path) -> int:
@@ -34,20 +49,49 @@ def fetch(url: str, dest: Path) -> int:
     return dest.stat().st_size
 
 
+def check_downloads(release: Path) -> None:
+    rows = json.loads((release / "hts.json").read_text())
+    if not isinstance(rows, list) or len(rows) < MIN_SCHEDULE_ROWS:
+        raise SystemExit(
+            f"refresh aborted: schedule has {len(rows) if isinstance(rows, list) else 'no'} "
+            f"rows, expected at least {MIN_SCHEDULE_ROWS:,}")
+    if "9903" not in (release / "chapter99.txt").read_text(errors="ignore"):
+        raise SystemExit("refresh aborted: Chapter 99 text has no 9903 headings")
+
+
+def prune(releases: Path, active: Path) -> None:
+    dirs = sorted((d for d in releases.iterdir() if d.is_dir()), reverse=True)
+    for old in dirs[KEEP_RELEASES:]:
+        if old.resolve() != active.resolve():
+            shutil.rmtree(old, ignore_errors=True)
+
+
 def main() -> None:
     data = ROOT / "data"
-    data.mkdir(exist_ok=True)
+    releases = data / "releases"
+    releases.mkdir(parents=True, exist_ok=True)
+    release = releases / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    release.mkdir()
 
-    print(f"HTS schedule      {fetch(HTS_URL, data / 'hts_2026.json'):,} bytes")
-    print(f"Chapter 99 notes  {fetch(CH99_URL, data / 'chapter99.pdf'):,} bytes")
+    try:
+        print(f"HTS schedule      {fetch(HTS_URL, release / 'hts.json'):,} bytes")
+        print(f"Chapter 99 notes  {fetch(CH99_URL, release / 'chapter99.pdf'):,} bytes")
 
-    # The U.S. Notes exist only as PDF prose; layout mode preserves the
-    # subdivision indentation the scope parser keys on.
-    subprocess.run(
-        ["pdftotext", "-layout", str(data / "chapter99.pdf"), str(data / "chapter99.txt")],
-        check=True)
+        # The U.S. Notes exist only as PDF prose; layout mode preserves the
+        # subdivision indentation the scope parser keys on.
+        subprocess.run(
+            ["pdftotext", "-layout", str(release / "chapter99.pdf"),
+             str(release / "chapter99.txt")], check=True)
+        check_downloads(release)
 
-    subprocess.run([sys.executable, str(ROOT / "ingest" / "build.py")], check=True)
+        # Exits non-zero, publishing nothing, if validation fails.
+        subprocess.run([sys.executable, str(ROOT / "ingest" / "build.py"),
+                        "--release", str(release)], check=True)
+    except BaseException:
+        shutil.rmtree(release, ignore_errors=True)
+        raise
+
+    prune(releases, release)
 
     from ingest.fedreg import poll
     asyncio.run(poll(30))

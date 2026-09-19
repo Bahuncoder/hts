@@ -22,7 +22,7 @@ from pathlib import Path
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from store.db import connect, init, set_meta
+from store.db import begin, connect, init, rebuild_ruling_index, set_meta
 
 SEARCH = "https://rulings.cbp.gov/api/search"
 DETAIL = "https://rulings.cbp.gov/api/ruling/{}"
@@ -175,17 +175,14 @@ async def crawl_bodies(conn, *, limit: int, concurrency: int):
 
 
 def reindex(conn) -> int:
-    conn.executescript("""
-        DROP TABLE IF EXISTS ruling_fts;
-        CREATE VIRTUAL TABLE ruling_fts USING fts5(
-            ruling_number UNINDEXED, subject, body,
-            tokenize = 'porter unicode61'
-        );
-        INSERT INTO ruling_fts(ruling_number, subject, body)
-            SELECT ruling_number, subject, COALESCE(body,'') FROM ruling;
-    """)
-    conn.commit()
-    return conn.execute("SELECT count(*) c FROM ruling_fts").fetchone()["c"]
+    try:
+        begin(conn)
+        n = rebuild_ruling_index(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return n
 
 
 async def main():
