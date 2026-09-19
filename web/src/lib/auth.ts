@@ -58,33 +58,40 @@ export function passwordProblem(password: string): string | null {
   return null;
 }
 
-export function signUp(email: string, password: string,
-                       opts: { verified?: boolean } = {}): { id: string } {
+export async function signUp(email: string, password: string,
+                             opts: { verified?: boolean } = {}): Promise<{ id: string }> {
   const id = crypto.randomUUID();
-  createAccount(id, email.trim().toLowerCase(), hashPassword(password));
+  await createAccount(id, email.trim().toLowerCase(), hashPassword(password));
   if (opts.verified) {
-    db().prepare("UPDATE account SET email_verified_at = ? WHERE id = ?")
-      .run(new Date().toISOString(), id);
+    await (await db()).execute({
+      sql: "UPDATE account SET email_verified_at = ? WHERE id = ?",
+      args: [new Date().toISOString(), id],
+    });
   }
   return { id };
 }
 
-export function setPassword(accountId: string, password: string): void {
-  db().prepare("UPDATE account SET password_hash = ? WHERE id = ?")
-    .run(hashPassword(password), accountId);
+export async function setPassword(accountId: string, password: string): Promise<void> {
+  const c = await db();
+  await c.execute({
+    sql: "UPDATE account SET password_hash = ? WHERE id = ?",
+    args: [hashPassword(password), accountId],
+  });
   // Every existing session is invalidated: a reset is what someone does when
   // they believe the account is compromised, and leaving the intruder signed
   // in defeats the point.
-  db().prepare("DELETE FROM session WHERE account_id = ?").run(accountId);
+  await c.execute({ sql: "DELETE FROM session WHERE account_id = ?", args: [accountId] });
 }
 
-export function markEmailVerified(accountId: string): void {
-  db().prepare("UPDATE account SET email_verified_at = ? WHERE id = ?")
-    .run(new Date().toISOString(), accountId);
+export async function markEmailVerified(accountId: string): Promise<void> {
+  await (await db()).execute({
+    sql: "UPDATE account SET email_verified_at = ? WHERE id = ?",
+    args: [new Date().toISOString(), accountId],
+  });
 }
 
-export function authenticate(email: string, password: string): string | null {
-  const acct = accountByEmail(email.trim().toLowerCase());
+export async function authenticate(email: string, password: string): Promise<string | null> {
+  const acct = await accountByEmail(email.trim().toLowerCase());
   if (!acct) {
     // Hash anyway so a missing account is not detectably faster than a wrong
     // password — otherwise timing enumerates registered emails.
@@ -97,8 +104,10 @@ export function authenticate(email: string, password: string): string | null {
 export async function startSession(accountId: string): Promise<void> {
   const token = crypto.randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
-  db().prepare("INSERT INTO session(token, account_id, expires_at) VALUES(?, ?, ?)")
-    .run(token, accountId, expires.toISOString());
+  await (await db()).execute({
+    sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?, ?, ?)",
+    args: [token, accountId, expires.toISOString()],
+  });
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -111,7 +120,9 @@ export async function startSession(accountId: string): Promise<void> {
 export async function endSession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
-  if (token) db().prepare("DELETE FROM session WHERE token = ?").run(token);
+  if (token) {
+    await (await db()).execute({ sql: "DELETE FROM session WHERE token = ?", args: [token] });
+  }
   jar.delete(COOKIE);
 }
 
@@ -120,16 +131,20 @@ export type Viewer = { account: Account; subscription: Subscription; plan: Plan 
 export async function currentViewer(): Promise<Viewer | null> {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
-  const row = db().prepare("SELECT account_id, expires_at FROM session WHERE token = ?")
-    .get(token) as { account_id: string; expires_at: string } | undefined;
+  const c = await db();
+  const rs = await c.execute({
+    sql: "SELECT account_id, expires_at FROM session WHERE token = ?",
+    args: [token],
+  });
+  const row = rs.rows[0] as unknown as { account_id: string; expires_at: string } | undefined;
   if (!row) return null;
   if (new Date(row.expires_at) < new Date()) {
-    db().prepare("DELETE FROM session WHERE token = ?").run(token);
+    await c.execute({ sql: "DELETE FROM session WHERE token = ?", args: [token] });
     return null;
   }
-  const account = accountById(row.account_id);
+  const account = await accountById(row.account_id);
   if (!account) return null;
-  const subscription = subscriptionFor(account.id);
+  const subscription = await subscriptionFor(account.id);
   // An unpaid or cancelled subscription falls back to free rather than
   // locking the account out — they keep what free buys.
   const entitled = subscription.status === "active" || subscription.status === "trialing";

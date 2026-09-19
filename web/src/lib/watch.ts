@@ -23,15 +23,18 @@ function since(): string {
   return new Date(Date.now() - LOOKBACK_HOURS * 3600_000).toISOString();
 }
 
-export function scanAuditLog(): Finding[] {
+export async function scanAuditLog(): Promise<Finding[]> {
   const from = since();
   const out: Finding[] = [];
+  const c = await db();
 
-  for (const row of db().prepare(`
-    SELECT email, count(*) AS n FROM audit_log
-     WHERE event = 'signin_failed' AND at >= ? AND email IS NOT NULL
-     GROUP BY email HAVING n >= ? ORDER BY n DESC LIMIT 20`)
-    .all(from, FAILED_PER_EMAIL) as { email: string; n: number }[]) {
+  const byEmail = await c.execute({
+    sql: `SELECT email, count(*) AS n FROM audit_log
+           WHERE event = 'signin_failed' AND at >= ? AND email IS NOT NULL
+           GROUP BY email HAVING n >= ? ORDER BY n DESC LIMIT 20`,
+    args: [from, FAILED_PER_EMAIL],
+  });
+  for (const row of byEmail.rows as unknown as { email: string; n: number }[]) {
     out.push({
       kind: "credential_stuffing",
       subject: row.email,
@@ -42,12 +45,13 @@ export function scanAuditLog(): Finding[] {
 
   // Many failures from one client spread over many addresses is spraying,
   // which the per-email limit alone does not catch.
-  for (const row of db().prepare(`
-    SELECT client, count(*) AS n, count(DISTINCT email) AS emails FROM audit_log
-     WHERE event = 'signin_failed' AND at >= ? AND client IS NOT NULL
-     GROUP BY client HAVING n >= ? OR emails >= ? ORDER BY n DESC LIMIT 20`)
-    .all(from, FAILED_PER_CLIENT, SPRAY_DISTINCT_EMAILS) as
-    { client: string; n: number; emails: number }[]) {
+  const byClient = await c.execute({
+    sql: `SELECT client, count(*) AS n, count(DISTINCT email) AS emails FROM audit_log
+           WHERE event = 'signin_failed' AND at >= ? AND client IS NOT NULL
+           GROUP BY client HAVING n >= ? OR emails >= ? ORDER BY n DESC LIMIT 20`,
+    args: [from, FAILED_PER_CLIENT, SPRAY_DISTINCT_EMAILS],
+  });
+  for (const row of byClient.rows as unknown as { client: string; n: number; emails: number }[]) {
     out.push({
       kind: row.emails >= SPRAY_DISTINCT_EMAILS ? "password_spraying" : "brute_force",
       subject: row.client,
@@ -56,27 +60,32 @@ export function scanAuditLog(): Finding[] {
     });
   }
 
-  for (const row of db().prepare(`
-    SELECT count(*) AS n FROM audit_log WHERE event = 'signin_throttled' AND at >= ?`)
-    .all(from) as { n: number }[]) {
-    if (row.n > 0) {
-      out.push({
-        kind: "throttle_trips",
-        subject: "all clients",
-        count: row.n,
-        detail: `the sign-in throttle refused ${row.n} attempt(s)`,
-      });
-    }
+  const throttled = await c.execute({
+    sql: "SELECT count(*) AS n FROM audit_log WHERE event = 'signin_throttled' AND at >= ?",
+    args: [from],
+  });
+  const throttledN = (throttled.rows[0] as unknown as { n: number }).n;
+  if (throttledN > 0) {
+    out.push({
+      kind: "throttle_trips",
+      subject: "all clients",
+      count: throttledN,
+      detail: `the sign-in throttle refused ${throttledN} attempt(s)`,
+    });
   }
 
   // A reset completed without a matching request means a token was used that
   // nobody asked for, which should be impossible.
-  const asked = (db().prepare(
-    "SELECT count(*) AS n FROM audit_log WHERE event = 'password_reset_requested' AND at >= ?"
-  ).get(from) as { n: number }).n;
-  const done = (db().prepare(
-    "SELECT count(*) AS n FROM audit_log WHERE event = 'password_reset_completed' AND at >= ?"
-  ).get(from) as { n: number }).n;
+  const askedRs = await c.execute({
+    sql: "SELECT count(*) AS n FROM audit_log WHERE event = 'password_reset_requested' AND at >= ?",
+    args: [from],
+  });
+  const doneRs = await c.execute({
+    sql: "SELECT count(*) AS n FROM audit_log WHERE event = 'password_reset_completed' AND at >= ?",
+    args: [from],
+  });
+  const asked = (askedRs.rows[0] as unknown as { n: number }).n;
+  const done = (doneRs.rows[0] as unknown as { n: number }).n;
   if (done > asked) {
     out.push({
       kind: "unrequested_reset",

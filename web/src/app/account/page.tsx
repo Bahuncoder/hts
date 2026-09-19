@@ -38,8 +38,8 @@ export default async function AccountPage({
   const { checkout } = await searchParams;
   const { account, subscription, plan } = viewer;
   const alertEmailsOn = account.alert_emails !== 0;
-  const watchedCount = listWatched(account.id).length;
-  const activity = recentForAccount(account.id, 10);
+  const watchedCount = (await listWatched(account.id)).length;
+  const activity = await recentForAccount(account.id, 10);
 
   const renews = subscription.current_period_end
     ? new Date(subscription.current_period_end).toLocaleDateString("en-US", {

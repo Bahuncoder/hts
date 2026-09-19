@@ -13,10 +13,10 @@ export default async function AlertsPage() {
   const viewer = await currentViewer();
   if (!viewer) redirect("/login");
 
-  const alerts = listAlerts(viewer.account.id, 100);
-  const unread = unreadCount(viewer.account.id);
-  const watched = listWatched(viewer.account.id);
-  const status = diffStatus();
+  const alerts = await listAlerts(viewer.account.id, 100);
+  const unread = await unreadCount(viewer.account.id);
+  const watched = await listWatched(viewer.account.id);
+  const status = await diffStatus();
 
   return (
     <div className="space-y-7">

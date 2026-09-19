@@ -27,7 +27,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
   const wait = await checkThrottle("signup", email);
   if (wait) return { error: `Too many attempts. Try again in ${wait} minutes.` };
 
-  const existing = accountByEmail(email);
+  const existing = await accountByEmail(email);
 
   // With email available, signup never reveals whether an address is already
   // registered: both branches return the identical "check your inbox" notice
@@ -36,13 +36,13 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
   // synchronously.
   if (emailEnabled()) {
     if (existing) {
-      const token = issue("password_reset", { accountId: existing.id, email });
+      const token = await issue("password_reset", { accountId: existing.id, email });
       const mail = passwordResetEmail(token);
       await send({ ...mail, to: email, kind: "signup_existing", accountId: existing.id });
       await audit("password_reset_requested", { accountId: existing.id, email,
         detail: "signup attempted on an existing address" });
     } else {
-      const token = issue("email_verify", {
+      const token = await issue("email_verify", {
         email,
         // The password is already hashed here; the account is only created
         // when the link is used, so an unverified address leaves no record.
@@ -63,7 +63,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
     return { error: "An account with that email already exists. Sign in instead." };
   }
 
-  const { id } = signUp(email, password);
+  const { id } = await signUp(email, password);
   await audit("signup", { accountId: id, email, detail: "email unverified (no provider)" });
   await startSession(id);
   redirect("/account");
@@ -81,14 +81,14 @@ export async function loginAction(_prev: FormState, form: FormData): Promise<For
     return { error: `Too many sign-in attempts. Try again in ${wait} minutes.` };
   }
 
-  const id = authenticate(email, password);
+  const id = await authenticate(email, password);
   // One message for both failures: distinguishing them enumerates accounts.
   if (!id) {
     await recordFailure("login", email);
     await audit("signin_failed", { email });
     return { error: "That email and password do not match." };
   }
-  clearAttempts("login", email);
+  await clearAttempts("login", email);
   await audit("signin", { accountId: id, email });
   await startSession(id);
   redirect("/account");
@@ -123,7 +123,7 @@ export async function saveCatalogueAction(
     return { error: `${items.length} products exceeds the ${viewer.plan.skus.toLocaleString()} allowed on ${viewer.plan.name}.` };
   }
 
-  const id = saveCatalogue(viewer.account.id, clean, items);
+  const id = await saveCatalogue(viewer.account.id, clean, items);
   await audit("catalogue_saved", { accountId: viewer.account.id,
     email: viewer.account.email, detail: `${items.length} products` });
   revalidatePath("/catalogues");
@@ -133,7 +133,7 @@ export async function saveCatalogueAction(
 export async function deleteCatalogueAction(form: FormData): Promise<void> {
   const viewer = await currentViewer();
   if (!viewer) return;
-  const removed = deleteCatalogue(viewer.account.id, String(form.get("id") ?? ""));
+  const removed = await deleteCatalogue(viewer.account.id, String(form.get("id") ?? ""));
   if (removed) {
     await audit("catalogue_deleted", { accountId: viewer.account.id,
       email: viewer.account.email });
@@ -146,9 +146,9 @@ export async function watchCodeAction(form: FormData): Promise<void> {
   if (!viewer) return;
   const hts = String(form.get("hts") ?? "");
   if (String(form.get("watched") ?? "") === "1") {
-    unwatchCode(viewer.account.id, hts);
+    await unwatchCode(viewer.account.id, hts);
   } else {
-    watchCode(viewer.account.id, hts);
+    await watchCode(viewer.account.id, hts);
   }
   revalidatePath(`/hts/${hts}`);
   revalidatePath("/alerts");
@@ -157,7 +157,7 @@ export async function watchCodeAction(form: FormData): Promise<void> {
 export async function markAlertsReadAction(): Promise<void> {
   const viewer = await currentViewer();
   if (!viewer) return;
-  markAllRead(viewer.account.id);
+  await markAllRead(viewer.account.id);
   revalidatePath("/alerts");
 }
 
@@ -166,7 +166,7 @@ export async function toggleAlertEmailsAction(form: FormData): Promise<void> {
   if (!viewer) return;
   const { setAlertEmails } = await import("./store");
   const turningOn = String(form.get("on") ?? "") !== "1";
-  setAlertEmails(viewer.account.id, turningOn);
+  await setAlertEmails(viewer.account.id, turningOn);
   await audit("alert_emails_changed", { accountId: viewer.account.id,
     email: viewer.account.email, detail: turningOn ? "on" : "off" });
   revalidatePath("/account");
@@ -182,9 +182,9 @@ export async function requestResetAction(_prev: FormState, form: FormData): Prom
 
   const wait = await checkThrottle("reset", email);
   if (!wait) {
-    const account = accountByEmail(email);
+    const account = await accountByEmail(email);
     if (account) {
-      const token = issue("password_reset", { accountId: account.id, email });
+      const token = await issue("password_reset", { accountId: account.id, email });
       const mail = passwordResetEmail(token);
       await send({ ...mail, to: email, kind: "password_reset", accountId: account.id });
       await audit("password_reset_requested", { accountId: account.id, email });
@@ -206,13 +206,13 @@ export async function completeResetAction(_prev: FormState, form: FormData): Pro
   const weak = passwordProblem(password);
   if (weak) return { error: weak };
 
-  const claim = consume("password_reset", token);
+  const claim = await consume("password_reset", token);
   if (!claim?.accountId) {
     return { error: "That link has expired or has already been used. Ask for a new one." };
   }
 
-  setPassword(claim.accountId, password);
-  const account = accountById(claim.accountId);
+  await setPassword(claim.accountId, password);
+  const account = await accountById(claim.accountId);
   await audit("password_reset_completed", {
     accountId: claim.accountId, email: account?.email,
     detail: "all sessions invalidated",
@@ -226,14 +226,14 @@ export async function completeResetAction(_prev: FormState, form: FormData): Pro
 export async function completeVerifyAction(token: string): Promise<
   { ok: true } | { ok: false; reason: string }
 > {
-  const claim = consume("email_verify", token);
+  const claim = await consume("email_verify", token);
   if (!claim?.email) {
     return { ok: false, reason: "That link has expired or has already been used." };
   }
 
-  const already = accountByEmail(claim.email);
+  const already = await accountByEmail(claim.email);
   if (already) {
-    markEmailVerified(already.id);
+    await markEmailVerified(already.id);
     await audit("email_verified", { accountId: already.id, email: claim.email });
     await startSession(already.id);
     return { ok: true };
@@ -245,8 +245,8 @@ export async function completeVerifyAction(token: string): Promise<
   if (!hash) return { ok: false, reason: "That link is no longer usable. Sign up again." };
 
   const id = crypto.randomUUID();
-  createAccount(id, claim.email, hash);
-  markEmailVerified(id);
+  await createAccount(id, claim.email, hash);
+  await markEmailVerified(id);
   await audit("signup", { accountId: id, email: claim.email, detail: "email verified" });
   await startSession(id);
   return { ok: true };

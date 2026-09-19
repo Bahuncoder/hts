@@ -11,17 +11,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 
 const dir = mkdtempSync(path.join(tmpdir(), "htsdesk-cat-"));
 const results = [];
-const check = (name, fn) => {
-  try { fn(); results.push([name, null]); }
+const check = async (name, fn) => {
+  try { await fn(); results.push([name, null]); }
   catch (e) { results.push([name, e.message]); }
 };
 
-const acc = new Database(path.join(dir, "accounts.db"));
-acc.exec(`
+const acc = createClient({ url: `file:${path.join(dir, "accounts.db")}` });
+await acc.executeMultiple(`
   CREATE TABLE watched_code (account_id TEXT, digits TEXT, hts TEXT,
     catalogue_id TEXT, created_at TEXT, PRIMARY KEY(account_id,digits,catalogue_id));
   CREATE TABLE alert (id TEXT PRIMARY KEY, account_id TEXT, document_number TEXT,
@@ -31,8 +31,8 @@ acc.exec(`
 `);
 
 const watch = (a, hts, cat) =>
-  acc.prepare("INSERT OR IGNORE INTO watched_code VALUES(?,?,?,?,?)")
-     .run(a, hts.replace(/\./g, ""), hts, cat, new Date().toISOString());
+  acc.execute({ sql: "INSERT OR IGNORE INTO watched_code VALUES(?,?,?,?,?)",
+    args: [a, hts.replace(/\./g, ""), hts, cat, new Date().toISOString()] });
 
 // The matcher under test, mirroring src/lib/diff.ts.
 function match(mentions, watchedDigits) {
@@ -42,68 +42,70 @@ function match(mentions, watchedDigits) {
                  .sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
-check("a heading-level action reaches a statistical line beneath it", () => {
+await check("a heading-level action reaches a statistical line beneath it", () => {
   assert.equal(match(["2804.61"], "2804610000"), "280461",
     "an action naming 2804.61 must reach a watched 2804.61.00.00");
 });
 
-check("an unrelated code is not matched", () => {
+await check("an unrelated code is not matched", () => {
   assert.equal(match(["2804.61"], "6109100012"), null);
 });
 
-check("matching is directional, not merely a shared chapter", () => {
+await check("matching is directional, not merely a shared chapter", () => {
   assert.equal(match(["2804.69"], "2804610000"), null,
     "sibling subheadings must not match each other");
 });
 
-check("the narrowest matching prefix wins", () => {
+await check("the narrowest matching prefix wins", () => {
   assert.equal(match(["6109.10", "6109.10.00"], "6109100012"), "61091000",
     "the more specific mention is the one worth naming in the alert");
 });
 
-check("four-digit noise is ignored", () => {
+await check("four-digit noise is ignored", () => {
   assert.equal(match(["2804"], "2804610000"), null,
     "a bare heading number is too loose to alert on");
 });
 
-check("watching the same code twice from one catalogue is idempotent", () => {
-  watch("a1", "2804.61.00.00", "cat1");
-  watch("a1", "2804.61.00.00", "cat1");
-  const n = acc.prepare("SELECT count(*) n FROM watched_code WHERE account_id='a1'").get().n;
-  assert.equal(n, 1);
+await check("watching the same code twice from one catalogue is idempotent", async () => {
+  await watch("a1", "2804.61.00.00", "cat1");
+  await watch("a1", "2804.61.00.00", "cat1");
+  const rs = await acc.execute("SELECT count(*) n FROM watched_code WHERE account_id='a1'");
+  assert.equal(rs.rows[0].n, 1);
 });
 
-check("the same code in two catalogues is watched under each", () => {
-  watch("a1", "2804.61.00.00", "cat2");
-  const n = acc.prepare("SELECT count(*) n FROM watched_code WHERE account_id='a1'").get().n;
-  assert.equal(n, 2, "deleting one catalogue must not silently unwatch the other");
+await check("the same code in two catalogues is watched under each", async () => {
+  await watch("a1", "2804.61.00.00", "cat2");
+  const rs = await acc.execute("SELECT count(*) n FROM watched_code WHERE account_id='a1'");
+  assert.equal(rs.rows[0].n, 2, "deleting one catalogue must not silently unwatch the other");
 });
 
-check("an alert is created once per account, document and code", () => {
-  const ins = acc.prepare(`INSERT OR IGNORE INTO alert
-    (id,account_id,document_number,title,publication_date,html_url,digits,hts,created_at)
-    VALUES(?,?,?,?,?,?,?,?,?)`);
-  const args = ["a1", "2026-17049", "Silicon Metal", "2026-08-21", "https://x",
-                "2804610000", "2804.61.00.00", new Date().toISOString()];
-  assert.equal(ins.run(crypto.randomUUID(), ...args).changes, 1);
-  assert.equal(ins.run(crypto.randomUUID(), ...args).changes, 0,
+await check("an alert is created once per account, document and code", async () => {
+  const ins = (id) => acc.execute({
+    sql: `INSERT OR IGNORE INTO alert
+      (id,account_id,document_number,title,publication_date,html_url,digits,hts,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?)`,
+    args: [id, "a1", "2026-17049", "Silicon Metal", "2026-08-21", "https://x",
+           "2804610000", "2804.61.00.00", new Date().toISOString()],
+  });
+  assert.equal((await ins(crypto.randomUUID())).rowsAffected, 1);
+  assert.equal((await ins(crypto.randomUUID())).rowsAffected, 0,
     "re-running the diff must not alert the same person twice");
 });
 
 // --- CSV -------------------------------------------------------------------
 const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
-check("CSV escapes embedded quotes", () => {
+await check("CSV escapes embedded quotes", () => {
   assert.equal(cell('a "premium" range'), '"a ""premium"" range"');
 });
 
-check("CSV keeps a comma inside one field", () => {
+await check("CSV keeps a comma inside one field", () => {
   const row = [cell("Silicon metal, 99% purity"), cell("Norway")].join(",");
   assert.equal(row.split('","').length, 2,
     "an unquoted comma shifts every column after it");
 });
 
-check("CSV renders an empty value as an empty field, not the word null", () => {
+await check("CSV renders an empty value as an empty field, not the word null", () => {
   assert.equal(cell(null), '""');
   assert.equal(cell(undefined), '""');
 });

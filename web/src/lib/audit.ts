@@ -32,17 +32,18 @@ export async function audit(
   opts: { accountId?: string | null; email?: string | null; detail?: string } = {},
 ): Promise<void> {
   try {
-    db().prepare(
-      "INSERT INTO audit_log(id, account_id, email, event, client, detail, at) VALUES(?,?,?,?,?,?,?)"
-    ).run(
-      crypto.randomUUID(),
-      opts.accountId ?? null,
-      opts.email ? opts.email.toLowerCase() : null,
-      event,
-      await clientId(),
-      opts.detail ?? null,
-      new Date().toISOString(),
-    );
+    await (await db()).execute({
+      sql: "INSERT INTO audit_log(id, account_id, email, event, client, detail, at) VALUES(?,?,?,?,?,?,?)",
+      args: [
+        crypto.randomUUID(),
+        opts.accountId ?? null,
+        opts.email ? opts.email.toLowerCase() : null,
+        event,
+        await clientId(),
+        opts.detail ?? null,
+        new Date().toISOString(),
+      ],
+    });
   } catch (err) {
     // An audit failure must never take down the action it describes.
     console.error("audit write failed", event, err);
@@ -54,8 +55,10 @@ export type AuditRow = {
   detail: string | null; at: string;
 };
 
-export function recentForAccount(accountId: string, limit = 20): AuditRow[] {
-  return db().prepare(
-    "SELECT id, event, client, detail, at FROM audit_log WHERE account_id = ? ORDER BY at DESC LIMIT ?"
-  ).all(accountId, limit) as AuditRow[];
+export async function recentForAccount(accountId: string, limit = 20): Promise<AuditRow[]> {
+  const rs = await (await db()).execute({
+    sql: "SELECT id, event, client, detail, at FROM audit_log WHERE account_id = ? ORDER BY at DESC LIMIT ?",
+    args: [accountId, limit],
+  });
+  return rs.rows as unknown as AuditRow[];
 }

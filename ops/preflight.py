@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Checks a deployment before it takes traffic.
+"""Checks the API host's deployment before it takes traffic.
 
 Every item here corresponds to something that has actually gone wrong, or that
 fails silently in a way nobody notices until a customer does.
+
+Scoped to the API host only: the web app deploys separately to Vercel, with
+its own environment (Stripe keys, email secret, Turso credentials) set in the
+Vercel dashboard rather than here, so those are not checkable from this
+script. Verify them with `vercel env ls` before a web deploy instead.
 """
 from __future__ import annotations
 
@@ -44,15 +49,6 @@ if ref.exists():
 else:
     check("reference database present", False, f"missing at {ref}")
 
-acc = Path(os.environ.get("HTSDESK_ACCOUNTS_DB", ROOT / "data" / "accounts.db"))
-if acc.exists():
-    mode = oct(acc.stat().st_mode & 0o777)
-    check("accounts database readable", True, f"{acc} mode {mode}")
-    check("accounts database not world-readable",
-          not (acc.stat().st_mode & 0o004), f"mode {mode}")
-else:
-    warn("accounts database", "not created yet — it appears on first signup")
-
 # --- secrets ----------------------------------------------------------------
 def env(name: str) -> str | None:
     v = os.environ.get(name)
@@ -61,35 +57,12 @@ def env(name: str) -> str | None:
 
 check("HTSDESK_ADMIN_TOKEN set", bool(env("HTSDESK_ADMIN_TOKEN")),
       "without it the diff runner refuses every call")
-check("HTSDESK_EMAIL_SECRET set", bool(env("HTSDESK_EMAIL_SECRET")),
-      "signs unsubscribe links")
-check("SITE_URL set", bool(env("SITE_URL")),
-      "sitemaps, metadata and every emailed link derive from it")
+check("HTSDESK_WEB_URL set", bool(env("HTSDESK_WEB_URL")),
+      "the diff trigger posts here — the Vercel deployment's origin")
 
-for name in ("HTSDESK_ADMIN_TOKEN", "HTSDESK_EMAIL_SECRET"):
-    v = env(name)
-    if v:
-        check(f"{name} is not trivially short", len(v) >= 24, f"{len(v)} characters")
-
-mail = env("RESEND_API_KEY") or env("POSTMARK_API_KEY")
-if mail:
-    check("mail provider configured", True)
-else:
-    warn("mail provider configured",
-         "alerts, password reset and verified signup all need it")
-if not mail:
-    warn("signup enumeration", "returns to the visible fallback without email")
-
-stripe_key = env("STRIPE_SECRET_KEY")
-if stripe_key:
-    check("Stripe configured", True)
-else:
-    warn("Stripe configured", "paid plans cannot be purchased without it")
-if stripe_key:
-    check("Stripe webhook secret set", bool(env("STRIPE_WEBHOOK_SECRET")),
-          "without it no subscription ever activates")
-    for plan in ("STARTER", "GROWTH"):
-        check(f"price id for {plan.title()}", bool(env(f"STRIPE_PRICE_{plan}")))
+token = env("HTSDESK_ADMIN_TOKEN")
+if token:
+    check("HTSDESK_ADMIN_TOKEN is not trivially short", len(token) >= 24, f"{len(token)} characters")
 
 if env("ANTHROPIC_API_KEY"):
     check("reasoning layer enabled", True)
@@ -103,14 +76,6 @@ check("CORS closed by default", origins.strip() == "" or "*" not in origins,
       f"HTSDESK_ORIGINS={origins!r}")
 proxy = os.environ.get("HTSDESK_BEHIND_PROXY", "0")
 warn("proxy header trust", f"HTSDESK_BEHIND_PROXY={proxy} — set 1 only behind nginx")
-
-# --- backups ----------------------------------------------------------------
-bdir = Path(os.environ.get("HTSDESK_BACKUP_DIR", "/var/backups/htsdesk"))
-backups = sorted(bdir.glob("accounts-*.db.gz")) if bdir.exists() else []
-if backups:
-    check("accounts backups exist", True, f"{len(backups)} in {bdir}")
-else:
-    warn("accounts backups exist", f"none in {bdir} — enable htsdesk-backup.timer")
 
 failed = [r for r in results if r[1] is False]
 width = max(len(n) for n, _, _ in results)

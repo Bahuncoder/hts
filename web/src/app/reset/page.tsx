@@ -16,7 +16,7 @@ export default async function ResetPage({
 }) {
   const { token } = await searchParams;
 
-  if (!token || !peek("password_reset", token)) {
+  if (!token || !(await peek("password_reset", token))) {
     return (
       <div className="mx-auto max-w-[400px] space-y-4 py-8">
         <h1 className="serif text-3xl tracking-tight">

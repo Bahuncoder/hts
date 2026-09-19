@@ -87,7 +87,7 @@ async function deliver(msg: Message): Promise<SendResult> {
 
 export async function send(msg: Message): Promise<SendResult> {
   const result = await deliver(msg);
-  logEmail({
+  await logEmail({
     account_id: msg.accountId ?? null,
     to_address: msg.to,
     kind: msg.kind,

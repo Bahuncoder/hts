@@ -1,29 +1,54 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import Database from "better-sqlite3";
 import path from "node:path";
+import { createClient, type Client, type InArgs } from "@libsql/client";
 import type { PlanId } from "./plans";
 
 /** Account store.
  *
  *  Separate from the reference database, which is read-only and rebuilt from
- *  public sources. This one is the only thing we cannot regenerate, so it
- *  lives on its own file and is the only thing that needs backing up.
+ *  public sources. This one is the only thing we cannot regenerate.
+ *
+ *  Backed by libSQL: a remote Turso database in production (no persistent
+ *  local disk on Vercel to keep a SQLite file on), or a local embedded file
+ *  in development (TURSO_DATABASE_URL unset). Same SQL dialect either way,
+ *  so the schema below is unchanged from the original better-sqlite3 version
+ *  — only the client is async now.
  */
-const DB_PATH = process.env.HTSDESK_ACCOUNTS_DB
+const LOCAL_PATH = process.env.HTSDESK_ACCOUNTS_DB
   ?? path.join(process.cwd(), "..", "data", "accounts.db");
+const REMOTE_URL = process.env.TURSO_DATABASE_URL;
+const DB_URL = REMOTE_URL ?? `file:${LOCAL_PATH}`;
 
-let _db: Database.Database | null = null;
+let _client: Client | null = null;
+let _ready: Promise<void> | null = null;
 
-export function db(): Database.Database {
-  if (_db) return _db;
-  const d = new Database(DB_PATH);
-  // Every account, catalogue and alert lives in this file. SQLite creates it
-  // with the process umask, which on a default box leaves it world-readable.
-  try { fs.chmodSync(DB_PATH, 0o600); } catch { /* not ours to change */ }
-  d.pragma("journal_mode = WAL");
-  d.pragma("busy_timeout = 5000");
-  d.exec(`
+function client(): Client {
+  if (!_client) {
+    _client = createClient({ url: DB_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+  }
+  return _client;
+}
+
+/** Resolves once the connection is open and the schema exists. Cached across
+ *  calls in the same warm instance so every query does not re-run DDL. */
+export async function db(): Promise<Client> {
+  const c = client();
+  if (!_ready) _ready = init(c);
+  await _ready;
+  return c;
+}
+
+async function init(c: Client): Promise<void> {
+  if (!REMOTE_URL) {
+    // Every account, catalogue and alert lives in this file. SQLite creates
+    // it with the process umask, which on a default box leaves it
+    // world-readable.
+    await c.execute("PRAGMA journal_mode = WAL");
+    await c.execute("PRAGMA busy_timeout = 5000");
+  }
+
+  await c.executeMultiple(`
     CREATE TABLE IF NOT EXISTS account (
       id            TEXT PRIMARY KEY,
       email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -182,23 +207,29 @@ export function db(): Database.Database {
       received_at TEXT NOT NULL
     );
   `);
-  migrate(d);
-  _db = d;
-  return d;
+  await migrate(c);
+
+  if (!REMOTE_URL) {
+    try { fs.chmodSync(LOCAL_PATH, 0o600); } catch { /* not ours to change */ }
+  }
 }
 
 /** Additive column migrations. SQLite has no IF NOT EXISTS for ADD COLUMN, so
  *  the current columns are read first. */
-function migrate(d: Database.Database): void {
-  const cols = new Set(
-    (d.prepare("PRAGMA table_info(account)").all() as { name: string }[]).map((c) => c.name),
-  );
+async function migrate(c: Client): Promise<void> {
+  const info = await c.execute("PRAGMA table_info(account)");
+  const cols = new Set(info.rows.map((r) => r.name as string));
   if (!cols.has("alert_emails")) {
-    d.exec("ALTER TABLE account ADD COLUMN alert_emails INTEGER NOT NULL DEFAULT 1");
+    await c.execute("ALTER TABLE account ADD COLUMN alert_emails INTEGER NOT NULL DEFAULT 1");
   }
   if (!cols.has("email_verified_at")) {
-    d.exec("ALTER TABLE account ADD COLUMN email_verified_at TEXT");
+    await c.execute("ALTER TABLE account ADD COLUMN email_verified_at TEXT");
   }
+}
+
+/** Convenience wrapper: opens the connection and runs one statement. */
+async function run(sql: string, args: InArgs = []) {
+  return (await db()).execute({ sql, args });
 }
 
 export type Account = {
@@ -214,63 +245,71 @@ export type Subscription = {
   current_period_end: string | null;
 };
 
-export function accountByEmail(email: string) {
-  return db().prepare("SELECT * FROM account WHERE email = ?").get(email) as
-    (Account & { password_hash: string }) | undefined;
+export async function accountByEmail(email: string) {
+  const rs = await run("SELECT * FROM account WHERE email = ?", [email]);
+  return rs.rows[0] as unknown as (Account & { password_hash: string }) | undefined;
 }
 
-export function accountById(id: string) {
-  return db().prepare(
-    "SELECT id, email, created_at, alert_emails, email_verified_at FROM account WHERE id = ?"
-  ).get(id) as Account | undefined;
+export async function accountById(id: string) {
+  const rs = await run(
+    "SELECT id, email, created_at, alert_emails, email_verified_at FROM account WHERE id = ?",
+    [id],
+  );
+  return rs.rows[0] as unknown as Account | undefined;
 }
 
-export function setAlertEmails(accountId: string, on: boolean): void {
-  db().prepare("UPDATE account SET alert_emails = ? WHERE id = ?")
-    .run(on ? 1 : 0, accountId);
+export async function setAlertEmails(accountId: string, on: boolean): Promise<void> {
+  await run("UPDATE account SET alert_emails = ? WHERE id = ?", [on ? 1 : 0, accountId]);
 }
 
-export function logEmail(row: {
+export async function logEmail(row: {
   account_id: string | null; to_address: string; kind: string;
   subject: string; status: string; detail?: string;
-}): void {
-  db().prepare(`
+}): Promise<void> {
+  await run(`
     INSERT INTO email_log(id, account_id, to_address, kind, subject, status, detail, created_at)
-    VALUES(?,?,?,?,?,?,?,?)`).run(
+    VALUES(?,?,?,?,?,?,?,?)`, [
     crypto.randomUUID(), row.account_id, row.to_address, row.kind,
     row.subject, row.status, row.detail ?? null, new Date().toISOString(),
-  );
+  ]);
 }
 
-export function createAccount(id: string, email: string, passwordHash: string) {
+export async function createAccount(id: string, email: string, passwordHash: string): Promise<void> {
   const now = new Date().toISOString();
-  const tx = db().transaction(() => {
-    db().prepare(
-      "INSERT INTO account(id, email, password_hash, created_at) VALUES(?, ?, ?, ?)"
-    ).run(id, email, passwordHash, now);
-    db().prepare(
-      "INSERT INTO subscription(account_id, plan, status, updated_at) VALUES(?, 'free', 'active', ?)"
-    ).run(id, now);
-  });
-  tx();
+  const c = await db();
+  const tx = await c.transaction("write");
+  try {
+    await tx.execute({
+      sql: "INSERT INTO account(id, email, password_hash, created_at) VALUES(?, ?, ?, ?)",
+      args: [id, email, passwordHash, now],
+    });
+    await tx.execute({
+      sql: "INSERT INTO subscription(account_id, plan, status, updated_at) VALUES(?, 'free', 'active', ?)",
+      args: [id, now],
+    });
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
 }
 
-export function subscriptionFor(accountId: string): Subscription {
-  const row = db().prepare("SELECT * FROM subscription WHERE account_id = ?")
-    .get(accountId) as Subscription | undefined;
+export async function subscriptionFor(accountId: string): Promise<Subscription> {
+  const rs = await run("SELECT * FROM subscription WHERE account_id = ?", [accountId]);
+  const row = rs.rows[0] as unknown as Subscription | undefined;
   return row ?? {
     account_id: accountId, stripe_customer_id: null, stripe_subscription_id: null,
     plan: "free", status: "active", current_period_end: null,
   };
 }
 
-export function upsertSubscription(s: Partial<Subscription> & { account_id: string }) {
+export async function upsertSubscription(s: Partial<Subscription> & { account_id: string }): Promise<void> {
   const now = new Date().toISOString();
-  db().prepare(`
+  await run(`
     INSERT INTO subscription(account_id, stripe_customer_id, stripe_subscription_id,
                              plan, status, current_period_end, updated_at)
-    VALUES(@account_id, @stripe_customer_id, @stripe_subscription_id,
-           @plan, @status, @current_period_end, @updated_at)
+    VALUES(:account_id, :stripe_customer_id, :stripe_subscription_id,
+           :plan, :status, :current_period_end, :updated_at)
     ON CONFLICT(account_id) DO UPDATE SET
       stripe_customer_id     = COALESCE(excluded.stripe_customer_id, subscription.stripe_customer_id),
       stripe_subscription_id = excluded.stripe_subscription_id,
@@ -278,7 +317,7 @@ export function upsertSubscription(s: Partial<Subscription> & { account_id: stri
       status                 = excluded.status,
       current_period_end     = excluded.current_period_end,
       updated_at             = excluded.updated_at
-  `).run({
+  `, {
     account_id: s.account_id,
     stripe_customer_id: s.stripe_customer_id ?? null,
     stripe_subscription_id: s.stripe_subscription_id ?? null,
@@ -289,19 +328,21 @@ export function upsertSubscription(s: Partial<Subscription> & { account_id: stri
   });
 }
 
-export function accountForCustomer(customerId: string): string | null {
-  const row = db().prepare(
-    "SELECT account_id FROM subscription WHERE stripe_customer_id = ?"
-  ).get(customerId) as { account_id: string } | undefined;
+export async function accountForCustomer(customerId: string): Promise<string | null> {
+  const rs = await run(
+    "SELECT account_id FROM subscription WHERE stripe_customer_id = ?", [customerId],
+  );
+  const row = rs.rows[0] as unknown as { account_id: string } | undefined;
   return row?.account_id ?? null;
 }
 
 /** True the first time an event id is seen; false on a redelivery. */
-export function claimWebhookEvent(id: string, type: string): boolean {
+export async function claimWebhookEvent(id: string, type: string): Promise<boolean> {
   try {
-    db().prepare(
-      "INSERT INTO webhook_event(id, type, received_at) VALUES(?, ?, ?)"
-    ).run(id, type, new Date().toISOString());
+    await run(
+      "INSERT INTO webhook_event(id, type, received_at) VALUES(?, ?, ?)",
+      [id, type, new Date().toISOString()],
+    );
     return true;
   } catch {
     return false;

@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdmin, refuse } from "@/lib/adminAuth";
 import { renderAlertDigest } from "@/lib/emails/alertDigest";
 import { emailProvider } from "@/lib/email";
-import { db } from "@/lib/store";
-import type { Alert } from "@/lib/diff";
+import { listAlerts } from "@/lib/diff";
 
 export const runtime = "nodejs";
 
@@ -16,9 +15,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "pass ?account=<id>" }, { status: 400 });
   }
 
-  const alerts = db().prepare(
-    "SELECT * FROM alert WHERE account_id = ? ORDER BY publication_date DESC LIMIT 20"
-  ).all(account) as Alert[];
+  const alerts = await listAlerts(account, 20);
 
   if (!alerts.length) {
     return NextResponse.json({ error: "no alerts for that account" }, { status: 404 });

@@ -338,10 +338,13 @@ def ruling(number: str, conn=Depends(db), _=Depends(guard("cheap"))):
 
 @app.get("/api/changes")
 def changes(days: int = Query(90, ge=1, le=3650),
-            limit: int = Query(50, ge=1, le=200),
+            since: str | None = Query(None,
+                description="ISO date; overrides days and returns oldest-first, "
+                            "for a caller paging forward from a cursor"),
+            limit: int = Query(50, ge=1, le=2000),
             all_documents: bool = Query(False,
                 description="Include documents that merely mention a tariff term"),
-            conn=Depends(db), _=Depends(guard("cheap"))):
+            conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
     """Tariff actions published in the Federal Register.
 
     Searching the Register for "Section 232" also returns foreign-trade-zone
@@ -349,17 +352,23 @@ def changes(days: int = Query(90, ge=1, le=3650),
     mushroom council membership adjustment. Only scored tariff actions are
     returned by default.
     """
-    where = "publication_date >= date('now', ?)"
-    params: list = [f"-{days} days"]
+    if since:
+        where, params, order = "publication_date > ?", [since], "ASC"
+    else:
+        where, params, order = "publication_date >= date('now', ?)", [f"-{days} days"], "DESC"
     if not all_documents:
         where += " AND tariff_action = 1"
+
+    # The higher ceiling is for the keyed, server-to-server diff job paging
+    # through history; an anonymous caller gets the page-sized default.
+    limit = min(limit, 2000 if keyed else 200)
 
     rows = conn.execute(
         f"""SELECT document_number, title, doc_type, publication_date, html_url,
                    abstract, hts_mentions, tariff_action
               FROM fr_document
              WHERE {where}
-             ORDER BY publication_date DESC LIMIT ?""",
+             ORDER BY publication_date {order} LIMIT ?""",
         (*params, limit),
     ).fetchall()
 

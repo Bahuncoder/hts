@@ -22,7 +22,7 @@ export default async function UnsubscribePage({
 }) {
   const { a: accountId, t: token } = await searchParams;
   const ok = accountId && token && verifyUnsubscribe(accountId, token);
-  const account = ok ? accountById(accountId) : undefined;
+  const account = ok ? await accountById(accountId) : undefined;
 
   if (!ok || !account) {
     return (
@@ -42,7 +42,7 @@ export default async function UnsubscribePage({
     );
   }
 
-  setAlertEmails(accountId, false);
+  await setAlertEmails(accountId, false);
 
   return (
     <div className="mx-auto max-w-[560px] space-y-5 py-4">

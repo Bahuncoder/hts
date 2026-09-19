@@ -38,11 +38,13 @@ export async function clientId(): Promise<string> {
   return h.get("x-real-ip") ?? "local";
 }
 
-function overBy(scope: string, subject: string, limit: number): number | null {
+async function overBy(scope: string, subject: string, limit: number): Promise<number | null> {
   const since = cutoff();
-  const rows = db().prepare(
-    "SELECT at FROM auth_attempt WHERE scope = ? AND subject = ? AND at >= ? ORDER BY at"
-  ).all(scope, subject, since) as { at: string }[];
+  const rs = await (await db()).execute({
+    sql: "SELECT at FROM auth_attempt WHERE scope = ? AND subject = ? AND at >= ? ORDER BY at",
+    args: [scope, subject, since],
+  });
+  const rows = rs.rows as unknown as { at: string }[];
   if (rows.length < limit) return null;
   const oldest = new Date(rows[0].at).getTime();
   const waitMs = oldest + WINDOW_MINUTES * 60_000 - Date.now();
@@ -51,36 +53,43 @@ function overBy(scope: string, subject: string, limit: number): number | null {
 
 /** Checked BEFORE authenticating. Returns minutes to wait when over. */
 export async function checkThrottle(scope: string, email: string): Promise<number | null> {
-  sweep();
+  await sweep();
   const client = await clientId();
-  return overBy(scope, `email:${email.toLowerCase()}`, PER_EMAIL)
-      ?? overBy(scope, `client:${client}`, PER_CLIENT);
+  return (await overBy(scope, `email:${email.toLowerCase()}`, PER_EMAIL))
+      ?? (await overBy(scope, `client:${client}`, PER_CLIENT));
 }
 
 /** Called only when an attempt FAILED. A success costs the caller nothing. */
 export async function recordFailure(scope: string, email: string): Promise<void> {
   const now = new Date().toISOString();
   const client = await clientId();
-  const insert = db().prepare(
-    "INSERT INTO auth_attempt(scope, subject, at) VALUES(?, ?, ?)");
-  insert.run(scope, `email:${email.toLowerCase()}`, now);
-  insert.run(scope, `client:${client}`, now);
+  const c = await db();
+  await c.execute({
+    sql: "INSERT INTO auth_attempt(scope, subject, at) VALUES(?, ?, ?)",
+    args: [scope, `email:${email.toLowerCase()}`, now],
+  });
+  await c.execute({
+    sql: "INSERT INTO auth_attempt(scope, subject, at) VALUES(?, ?, ?)",
+    args: [scope, `client:${client}`, now],
+  });
 }
 
 /** Clears an email's failures after a genuine sign-in, so someone mistyping
  *  once does not carry a penalty into the rest of the day. */
-export function clearAttempts(scope: string, email: string): void {
-  db().prepare("DELETE FROM auth_attempt WHERE scope = ? AND subject = ?")
-    .run(scope, `email:${email.toLowerCase()}`);
+export async function clearAttempts(scope: string, email: string): Promise<void> {
+  await (await db()).execute({
+    sql: "DELETE FROM auth_attempt WHERE scope = ? AND subject = ?",
+    args: [scope, `email:${email.toLowerCase()}`],
+  });
 }
 
 let lastSweep = 0;
 
 /** Drops rows outside the window. Cheap, and keeps the table from growing
  *  without bound on a busy instance. */
-function sweep(): void {
+async function sweep(): Promise<void> {
   const now = Date.now();
   if (now - lastSweep < 60_000) return;
   lastSweep = now;
-  db().prepare("DELETE FROM auth_attempt WHERE at < ?").run(cutoff());
+  await (await db()).execute({ sql: "DELETE FROM auth_attempt WHERE at < ?", args: [cutoff()] });
 }

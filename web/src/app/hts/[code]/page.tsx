@@ -50,7 +50,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
 
   const q = d.quote;
   const viewer = await currentViewer();
-  const watched = viewer ? isWatched(viewer.account.id, d.hts) : false;
+  const watched = viewer ? await isWatched(viewer.account.id, d.hts) : false;
 
   return (
     <div className="space-y-8">

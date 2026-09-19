@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import path from "node:path";
-import Database from "better-sqlite3";
+import { createClient } from "@libsql/client";
 
 const BASE = process.env.HTSDESK_TEST_WEB ?? "http://127.0.0.1:3000";
 const TOKEN = process.env.HTSDESK_ADMIN_TOKEN ?? "admin-test-token";
@@ -27,31 +27,38 @@ const DB = process.env.HTSDESK_ACCOUNTS_DB
 const PAID = `email-paid-${Date.now()}`;
 const FREE = `email-free-${Date.now()}`;
 
-function seed() {
-  const d = new Database(DB);
+async function seed() {
+  const d = createClient({ url: `file:${DB}` });
   const now = new Date().toISOString();
   for (const [id, plan] of [[PAID, "growth"], [FREE, "free"]]) {
-    d.prepare("INSERT OR IGNORE INTO account(id,email,password_hash,created_at) VALUES(?,?,?,?)")
-      .run(id, `${id}@example.test`, "scrypt$0$0", now);
-    d.prepare("INSERT OR IGNORE INTO subscription(account_id,plan,status,updated_at) VALUES(?,?,?,?)")
-      .run(id, plan, "active", now);
+    await d.execute({
+      sql: "INSERT OR IGNORE INTO account(id,email,password_hash,created_at) VALUES(?,?,?,?)",
+      args: [id, `${id}@example.test`, "scrypt$0$0", now],
+    });
+    await d.execute({
+      sql: "INSERT OR IGNORE INTO subscription(account_id,plan,status,updated_at) VALUES(?,?,?,?)",
+      args: [id, plan, "active", now],
+    });
     for (const [dg, h] of [["2804610000", "2804.61.00.00"], ["1301900000", "1301.90.00.00"]]) {
-      d.prepare("INSERT OR IGNORE INTO watched_code VALUES(?,?,?,NULL,?)").run(id, dg, h, now);
+      await d.execute({ sql: "INSERT OR IGNORE INTO watched_code VALUES(?,?,?,NULL,?)",
+        args: [id, dg, h, now] });
     }
   }
-  d.prepare("DELETE FROM diff_state").run();
+  await d.execute("DELETE FROM diff_state");
   d.close();
 }
 
-function cleanup() {
-  const d = new Database(DB);
-  d.exec("PRAGMA foreign_keys=ON");
-  for (const id of [PAID, FREE]) d.prepare("DELETE FROM account WHERE id=?").run(id);
-  d.prepare("DELETE FROM diff_state").run();
+async function cleanup() {
+  const d = createClient({ url: `file:${DB}` });
+  await d.execute("PRAGMA foreign_keys=ON");
+  for (const id of [PAID, FREE]) {
+    await d.execute({ sql: "DELETE FROM account WHERE id=?", args: [id] });
+  }
+  await d.execute("DELETE FROM diff_state");
   d.close();
 }
 
-seed();
+await seed();
 
 const results = [];
 const check = async (name, fn) => {

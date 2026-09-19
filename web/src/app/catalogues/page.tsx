@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function CataloguesPage() {
   const viewer = await currentViewer();
   if (!viewer) redirect("/login");
-  const catalogues = listCatalogues(viewer.account.id);
+  const catalogues = await listCatalogues(viewer.account.id);
 
   return (
     <div className="space-y-7">

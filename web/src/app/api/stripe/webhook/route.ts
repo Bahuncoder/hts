@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid signature" }, { status: 400 });
   }
 
-  if (!claimWebhookEvent(event.id, event.type)) {
+  if (!(await claimWebhookEvent(event.id, event.type))) {
     return NextResponse.json({ received: true, duplicate: true });
   }
 
@@ -64,7 +64,7 @@ async function apply(s: Stripe, event: Stripe.Event) {
       const subId = typeof session.subscription === "string"
         ? session.subscription : session.subscription.id;
       const sub = await s.subscriptions.retrieve(subId);
-      upsertSubscription({
+      await upsertSubscription({
         account_id: accountId,
         stripe_customer_id: customerId,
         ...fromSubscription(sub),
@@ -77,12 +77,12 @@ async function apply(s: Stripe, event: Stripe.Event) {
     case "customer.subscription.deleted": {
       const sub = event.data.object as Stripe.Subscription;
       const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-      const accountId = sub.metadata?.account_id ?? accountForCustomer(customerId);
+      const accountId = sub.metadata?.account_id ?? await accountForCustomer(customerId);
       if (!accountId) {
         console.warn("subscription event for unknown customer", customerId);
         break;
       }
-      upsertSubscription({
+      await upsertSubscription({
         account_id: accountId,
         stripe_customer_id: customerId,
         ...(event.type === "customer.subscription.deleted"

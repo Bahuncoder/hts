@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   if (!viewer) return NextResponse.json({ error: "sign in first" }, { status: 401 });
 
   const id = new URL(request.url).searchParams.get("id") ?? "";
-  const cat = getCatalogue(viewer.account.id, id);
+  const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   await audit("catalogue_exported", {

@@ -15,7 +15,7 @@ export default async function CataloguePage({
   const viewer = await currentViewer();
   if (!viewer) redirect("/login");
   const { id } = await params;
-  const cat = getCatalogue(viewer.account.id, id);
+  const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) notFound();
 
   const total = cat.items.reduce((a, i) => a + (i.value ?? 0), 0);

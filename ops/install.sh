@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Installs HTSDesk on a fresh Debian/Ubuntu host.
+# Installs the HTSDesk API on a fresh Debian/Ubuntu host.
+#
+# The web app is not built or run here: it deploys separately to Vercel and
+# has no persistent local state of its own (accounts live in Turso). This
+# host runs the engine, the reference-data ingest, and the daily change-diff
+# trigger only.
 #
 # Idempotent: safe to re-run after a code update. It does not touch
 # /etc/htsdesk/*.env, so re-running never clobbers secrets.
@@ -15,13 +20,11 @@ need_root
 echo "==> user and directories"
 id -u "$USER_NAME" >/dev/null 2>&1 || useradd --system --home "$APP" --shell /usr/sbin/nologin "$USER_NAME"
 install -d -o "$USER_NAME" -g "$USER_NAME" -m 0750 "$APP" "$APP/data"
-install -d -o "$USER_NAME" -g "$USER_NAME" -m 0750 /var/backups/htsdesk
 install -d -o root -g root -m 0750 /etc/htsdesk
 
 echo "==> application"
 rsync -a --delete \
-  --exclude 'data/' --exclude '.git/' --exclude 'web/node_modules/' \
-  --exclude 'web/.next/' --exclude '.venv/' \
+  --exclude 'data/' --exclude '.git/' --exclude 'web/' --exclude '.venv/' \
   "$SRC/" "$APP/"
 chown -R "$USER_NAME:$USER_NAME" "$APP"
 
@@ -30,23 +33,17 @@ echo "==> python environment"
 "$APP/.venv/bin/pip" -q install --upgrade pip
 "$APP/.venv/bin/pip" -q install fastapi uvicorn httpx pydantic
 
-echo "==> web build"
-sudo -u "$USER_NAME" bash -lc "cd '$APP/web' && npm ci --omit=dev=false && rm -rf .next && npm run build"
-
 echo "==> secrets"
-for f in api.env web.env; do
-  if [ ! -f "/etc/htsdesk/$f" ]; then
-    install -o root -g root -m 0600 /dev/null "/etc/htsdesk/$f"
-    {
-      echo "# generated $(date -u +%FT%TZ) — fill in the rest from .env.example"
-      echo "HTSDESK_ADMIN_TOKEN=$(openssl rand -hex 32)"
-      echo "HTSDESK_EMAIL_SECRET=$(openssl rand -hex 32)"
-    } >> "/etc/htsdesk/$f"
-    echo "    created /etc/htsdesk/$f with fresh secrets — add the provider keys"
-  else
-    echo "    /etc/htsdesk/$f exists, left alone"
-  fi
-done
+if [ ! -f "/etc/htsdesk/api.env" ]; then
+  install -o root -g root -m 0600 /dev/null "/etc/htsdesk/api.env"
+  {
+    echo "# generated $(date -u +%FT%TZ) — fill in the rest from .env.example"
+    echo "HTSDESK_ADMIN_TOKEN=$(openssl rand -hex 32)"
+  } >> "/etc/htsdesk/api.env"
+  echo "    created /etc/htsdesk/api.env with fresh secrets — add the provider keys"
+else
+  echo "    /etc/htsdesk/api.env exists, left alone"
+fi
 
 echo "==> reference data"
 if [ ! -f "$APP/data/htsdesk.db" ]; then
@@ -58,19 +55,22 @@ fi
 echo "==> services"
 install -m 0644 "$APP/deploy"/htsdesk-*.service "$APP/deploy"/htsdesk-*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now htsdesk-api htsdesk-web
-systemctl enable --now htsdesk-ingest.timer htsdesk-diff.timer htsdesk-backup.timer
+systemctl enable --now htsdesk-api
+systemctl enable --now htsdesk-ingest.timer htsdesk-diff.timer
 
 echo "==> preflight"
-set -a; . /etc/htsdesk/web.env; set +a
+set -a; . /etc/htsdesk/api.env; set +a
 sudo -u "$USER_NAME" -E "$APP/.venv/bin/python" "$APP/ops/preflight.py" || true
 
 cat <<'NEXT'
 
 Next, by hand:
-  1. Fill /etc/htsdesk/api.env and web.env from .env.example
-     (Stripe keys and price ids, a mail provider key, ANTHROPIC_API_KEY, SITE_URL)
+  1. Fill /etc/htsdesk/api.env from .env.example
+     (HTSDESK_API_KEYS for the web app to call in as, ANTHROPIC_API_KEY,
+     HTSDESK_WEB_URL — the Vercel deployment's origin, for the diff trigger)
   2. Point deploy/nginx.conf at your hostname, install it, and run certbot
-  3. systemctl restart htsdesk-api htsdesk-web
+  3. systemctl restart htsdesk-api
   4. Re-run ops/preflight.py — it should report no failures
+  5. Deploy web/ to Vercel separately (see docs/DEPLOY.md) with
+     TURSO_DATABASE_URL and TURSO_AUTH_TOKEN set
 NEXT

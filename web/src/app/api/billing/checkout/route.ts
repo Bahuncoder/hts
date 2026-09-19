@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   // Reuse the customer so a second subscription does not orphan the first.
-  const existing = subscriptionFor(viewer.account.id);
+  const existing = await subscriptionFor(viewer.account.id);
   let customerId = existing.stripe_customer_id;
   if (!customerId) {
     const customer = await s.customers.create({
@@ -31,8 +31,8 @@ export async function POST(request: Request) {
       metadata: { account_id: viewer.account.id },
     });
     customerId = customer.id;
-    upsertSubscription({ account_id: viewer.account.id, stripe_customer_id: customerId,
-                         plan: existing.plan, status: existing.status });
+    await upsertSubscription({ account_id: viewer.account.id, stripe_customer_id: customerId,
+                               plan: existing.plan, status: existing.status });
   }
 
   const session = await s.checkout.sessions.create({
