@@ -37,6 +37,9 @@ export default async function AccountPage({
   if (!viewer) redirect("/login");
   const { checkout } = await searchParams;
   const { account, subscription, plan } = viewer;
+  const paymentConfirmed =
+    plan.id !== "free" &&
+    (subscription.status === "active" || subscription.status === "trialing");
   const alertEmailsOn = account.alert_emails !== 0;
   const watchedCount = (await listWatched(account.id)).length;
   const activity = await recentForAccount(account.id, 10);
@@ -64,10 +67,26 @@ export default async function AccountPage({
       </div>
 
       {checkout === "done" ? (
-        <p className="border-l-2 py-2 pl-3 text-[14px] border-accent bg-accent-soft text-accent">
-          Payment received. If the plan below still says Free, the confirmation
-          from Stripe is a moment behind — reload in a few seconds.
-        </p>
+        // The query string only says the visitor came back from Stripe. A
+        // payment is confirmed when this account's subscription is active on
+        // a paid plan, which is set by Stripe's webhook, not by this URL.
+        paymentConfirmed ? (
+          <p
+            role="status"
+            className="border-l-2 py-2 pl-3 text-[14px] border-accent bg-accent-soft text-accent"
+          >
+            Payment confirmed. Your {plan.name} plan is active.
+          </p>
+        ) : (
+          <p
+            role="status"
+            className="border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink"
+          >
+            Confirming your payment with Stripe — this can take a minute.
+            Reload this page to check. If the plan below still says Free after
+            a few minutes, write to hello@htsdesk.com.
+          </p>
+        )
       ) : null}
 
       <div className="grid gap-5 md:grid-cols-3">

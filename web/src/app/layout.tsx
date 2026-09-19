@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Lockup } from "@/components/Logo";
+import { NavLink, SiteNav } from "@/components/SiteNav";
 import { currentViewer } from "@/lib/auth";
 import "./globals.css";
 
@@ -42,43 +43,41 @@ export default async function RootLayout({
           href="https://fonts.gstatic.com"
           crossOrigin=""
         />
+        {/* Root-layout <head> is the App Router place for site-wide font
+            links; the rule below is written for the Pages Router and flags
+            this as page-scoped, which it is not. */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap"
         />
       </head>
       <body>
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:px-3 focus:py-2 focus:text-[14px] focus:font-medium focus:bg-accent focus:text-on-accent"
+        >
+          Skip to main content
+        </a>
         <header className="border-b border-border">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
             <Link href="/" aria-label="HTSDesk home">
               <Lockup />
             </Link>
-            <nav className="flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
-              {[...NAV, ...(viewer ? SIGNED_IN_NAV : [])].map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="hover:underline text-muted"
-                >
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
+            <SiteNav
+              items={[...NAV, ...(viewer ? SIGNED_IN_NAV : [])]}
+            />
             <div className="ml-auto flex items-center gap-4 text-[14px]">
               {viewer ? (
                 <>
                   <span className="mono hidden text-[12px] sm:inline text-faint">
                     {viewer.plan.name}
                   </span>
-                  <Link href="/account" className="hover:underline text-muted">
-                    Account
-                  </Link>
+                  <NavLink href="/account">Account</NavLink>
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="hover:underline text-muted">
-                    Sign in
-                  </Link>
+                  <NavLink href="/login">Sign in</NavLink>
                   <Link
                     href="/signup"
                     className="px-3 py-1.5 font-medium bg-accent text-on-accent"
@@ -91,7 +90,9 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-8">
+          {children}
+        </main>
 
         <footer className="mt-16 px-4 py-8 text-[13px] border-t border-border text-faint">
           <div className="mx-auto max-w-6xl space-y-2">

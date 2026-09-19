@@ -13,6 +13,7 @@ export const IN_BUILD = [
   "Savings analysis — FTA eligibility and alternate defensible codes",
   "Classification binder export for your reasonable-care file",
   "Team seats and shared catalogues",
+  "Re-price a saved catalogue and compare it with the last run",
   "Entry audit — upload CBP 7501s and compare declared against computed",
   "API access",
 ] as const;
@@ -39,7 +40,7 @@ export const PLANS: Record<PlanId, Plan> = {
       "25 products per audit",
       "Full duty stack with the authority for every line",
       "All 19,949 code pages and their CBP rulings",
-      "Refundable-duty figure where IEEPA reaches a code",
+      "IEEPA scenario estimate where it reaches a code (not a claim amount)",
     ],
   },
   starter: {
@@ -48,7 +49,6 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       "100 products, saved and monitored",
       "Email when a tariff action names one of your codes",
-      "Saved catalogues you can re-price as rates move",
       "CSV export",
     ],
   },
@@ -58,7 +58,6 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       "1,000 products, saved and monitored",
       "Everything in Starter",
-      "Priority on classification review requests",
     ],
   },
 };

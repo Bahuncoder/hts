@@ -1,48 +1,96 @@
-import { API_BASE, money2, search, type Quote } from "@/lib/api";
-import { Card, HtsLink, Note, Stat } from "@/components/ui";
+import Link from "next/link";
+import { getQuote, money2, search, type Quote } from "@/lib/api";
+import { Card, Note, Stat } from "@/components/ui";
+import { Field, RadioGroup, inputClass } from "@/components/Field";
+import { ORIGINS } from "@/lib/origins";
+import { FailureNotice } from "@/components/FailureNotice";
+import {
+  IncompleteReasons,
+  RefundScenario,
+  ScenarioLine,
+  isComplete,
+} from "@/components/QuoteFigures";
 
 export const metadata = {
-  title: "US import duty calculator — full landed duty by HTS code",
+  title: "US import duty calculator — duty and fees by HTS code",
   description:
-    "Compute US import duty including Section 232, Section 301, MPF and HMF, with the legal authority for every line.",
+    "Estimate US import duty and fees for one entry, including Section 232, Section 301, MPF and HMF, with the legal authority for every line. A scenario estimate, not a filing.",
 };
 
 export const dynamic = "force-dynamic";
 
-async function quote(
-  hts: string,
-  country: string,
-  value: number,
-): Promise<Quote | null> {
-  try {
-    const res = await fetch(`${API_BASE}/api/quote`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ hts, country, value }),
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as Quote;
-  } catch {
-    return null;
-  }
+type Params = Record<string, string | string[] | undefined>;
+
+const one = (v: string | string[] | undefined) =>
+  (Array.isArray(v) ? v[0] : v) ?? undefined;
+
+/** Accepts "10000", "10,000" and "$2,499.50". Anything else is not a value. */
+function parseValue(raw: string): number | null {
+  const n = Number(raw.replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n > 0 && n <= 1e12 ? n : null;
 }
 
 export default async function CalculatorPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    hts?: string;
-    country?: string;
-    value?: string;
-    q?: string;
-  }>;
+  searchParams: Promise<Params>;
 }) {
   const sp = await searchParams;
-  const country = sp.country || "China";
-  const value = Number(sp.value || 10000);
-  const result = sp.hts ? await quote(sp.hts, country, value) : null;
-  const matches = sp.q ? await search(sp.q) : null;
+
+  // Everything the visitor typed is kept verbatim so a failure never costs
+  // them their entry.
+  const hts = (one(sp.hts) ?? "").trim();
+  const country = (one(sp.country) ?? "").trim();
+  const rawValue = one(sp.value) ?? "10000";
+  const transport = one(sp.transport) === "air" ? "air" : "sea";
+  const entry = one(sp.entry) === "informal" ? "informal" : "formal";
+  const program = (one(sp.program) ?? "").trim().toUpperCase().slice(0, 8);
+  const q = (one(sp.q) ?? "").trim();
+
+  const scenario: Record<string, string> = {
+    hts,
+    country,
+    value: rawValue,
+    transport,
+    entry,
+    program,
+  };
+  const href = (over: Record<string, string> = {}) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...scenario, ...over })) {
+      if (v) p.set(k, v);
+    }
+    return `/calculator?${p}`;
+  };
+
+  // --- price the code --------------------------------------------------
+  const value = parseValue(rawValue);
+  let inputProblem: string | null = null;
+  if (hts) {
+    if (!country) {
+      inputProblem =
+        "Enter a country of origin so the right duties are applied.";
+    } else if (value === null) {
+      inputProblem =
+        "Enter an entered value above $0, for example 10000 or 2499.50.";
+    }
+  }
+  const quote =
+    hts && !inputProblem && value !== null
+      ? await getQuote({
+          hts,
+          country,
+          value,
+          byVessel: transport === "sea",
+          formalEntry: entry === "formal",
+          preferenceProgram: program || undefined,
+        })
+      : null;
+
+  // --- find a code -----------------------------------------------------
+  const searchProblem =
+    q && q.length < 2 ? "Type at least 2 characters to search." : null;
+  const matches = q && !searchProblem ? await search(q) : null;
 
   return (
     <div className="space-y-8">
@@ -53,64 +101,178 @@ export default async function CalculatorPage({
         <p className="text-muted">
           The full stack, not just the MFN rate: trade remedies, merchandise
           processing fee and harbor maintenance fee, each traced to its
-          authority.
+          authority. The result is a scenario estimate for one entry at the
+          value you enter.
         </p>
       </div>
 
-      <form
-        action="/calculator"
-        className="grid max-w-3xl gap-3 sm:grid-cols-[1fr_auto_auto_auto]"
-      >
-        <input
-          name="hts"
-          defaultValue={sp.hts ?? ""}
-          placeholder="6109.10.00.12"
-          className="rounded-md border px-3 py-2 text-[15px] border-border bg-paper text-ink"
-        />
-        <input
-          name="country"
-          defaultValue={country}
-          placeholder="China"
-          className="rounded-md border px-3 py-2 text-[15px] sm:w-36 border-border bg-paper text-ink"
-        />
-        <input
-          name="value"
-          type="number"
-          defaultValue={value}
-          min={1}
-          className="tabular rounded-md border px-3 py-2 text-[15px] sm:w-32 border-border bg-paper text-ink"
-        />
-        <button className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-paper">
+      <form action="/calculator" className="max-w-4xl space-y-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Field
+            id="hts"
+            label="HTS code"
+            hint="10 digits, with or without dots."
+          >
+            <input
+              id="hts"
+              name="hts"
+              defaultValue={hts}
+              placeholder="6109.10.00.12"
+              required
+              autoComplete="off"
+              inputMode="decimal"
+              aria-describedby="hts-hint"
+              className={`tabular ${inputClass}`}
+            />
+          </Field>
+          <Field
+            id="country"
+            label="Country of origin"
+            hint="Where the goods were made, not where they ship from."
+          >
+            <input
+              id="country"
+              name="country"
+              defaultValue={country}
+              placeholder="e.g. Vietnam"
+              required
+              list="origins"
+              autoComplete="off"
+              aria-describedby="country-hint"
+              className={inputClass}
+            />
+            <datalist id="origins">
+              {ORIGINS.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+          </Field>
+          <Field
+            id="value"
+            label="Entered value (USD)"
+            hint="Goods value in dollars, e.g. 2499.50."
+          >
+            <input
+              id="value"
+              name="value"
+              type="number"
+              step="0.01"
+              min="0.01"
+              inputMode="decimal"
+              defaultValue={rawValue}
+              required
+              aria-describedby="value-hint"
+              className={`tabular ${inputClass}`}
+            />
+          </Field>
+          <Field
+            id="program"
+            label="Preference program (optional)"
+            hint="Only if you are claiming a special rate; we do not check your eligibility."
+          >
+            <input
+              id="program"
+              name="program"
+              defaultValue={program}
+              placeholder="e.g. KR"
+              maxLength={8}
+              autoCapitalize="characters"
+              autoComplete="off"
+              aria-describedby="program-hint"
+              className={inputClass}
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RadioGroup
+            legend="Transport"
+            name="transport"
+            value={transport}
+            hint="Sea shipments pay the Harbor Maintenance Fee; air shipments do not."
+            options={[
+              { value: "sea", label: "Sea (vessel)" },
+              { value: "air", label: "Air" },
+            ]}
+          />
+          <RadioGroup
+            legend="Entry type"
+            name="entry"
+            value={entry}
+            hint="The Merchandise Processing Fee is added for formal entries only."
+            options={[
+              { value: "formal", label: "Formal entry" },
+              { value: "informal", label: "Informal entry" },
+            ]}
+          />
+        </div>
+
+        <button
+          type="submit"
+          className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-on-accent"
+        >
           Calculate
         </button>
       </form>
 
-      <form action="/calculator" className="flex max-w-2xl gap-2">
-        <input
-          name="q"
-          defaultValue={sp.q ?? ""}
-          placeholder="Don't know the code? Search descriptions…"
-          className="min-w-0 flex-1 rounded-md border px-3 py-2 text-[14px] border-border bg-paper text-ink"
-        />
-        <button className="rounded-md border px-3 py-2 text-[14px] border-border">
-          Search
-        </button>
+      {/* A second GET form. It carries the scenario as hidden fields so
+          searching for a code does not throw the visitor's inputs away. */}
+      <form action="/calculator" className="max-w-2xl" role="search">
+        {Object.entries(scenario).map(([k, v]) =>
+          v ? <input key={k} type="hidden" name={k} value={v} /> : null,
+        )}
+        <label htmlFor="q" className="block text-[13px] font-medium">
+          Don&rsquo;t know the code? Search descriptions
+        </label>
+        <div className="mt-1 flex gap-2">
+          <input
+            id="q"
+            name="q"
+            defaultValue={q}
+            placeholder="e.g. cotton t-shirt"
+            autoComplete="off"
+            className={`min-w-0 flex-1 ${inputClass}`}
+          />
+          <button
+            type="submit"
+            className="rounded-md border px-3 py-2 text-[14px] border-border"
+          >
+            Search
+          </button>
+        </div>
       </form>
 
-      {matches?.results?.length ? (
+      {searchProblem ? <Note role="alert">{searchProblem}</Note> : null}
+      {matches && !matches.ok ? (
+        <FailureNotice
+          failure={matches}
+          retryHref={href({ q })}
+          subject="code search"
+        />
+      ) : null}
+      {matches?.ok && matches.data.results.length === 0 ? (
+        <p role="status" className="text-[14px] text-muted">
+          No codes matched &ldquo;{q}&rdquo;. Try the material or what the
+          goods do.
+        </p>
+      ) : null}
+      {matches?.ok && matches.data.results.length > 0 ? (
         <Card>
-          <div className="text-[12px] uppercase tracking-wide text-muted">
-            Matching codes
+          <div
+            id="matches-label"
+            className="text-[12px] uppercase tracking-wide text-muted"
+          >
+            Matching codes for &ldquo;{q}&rdquo;
           </div>
-          <ul className="mt-2 space-y-1.5 text-[14px]">
-            {matches.results.slice(0, 8).map((r) => (
+          <ul aria-labelledby="matches-label" className="mt-2 space-y-1.5 text-[14px]">
+            {matches.data.results.slice(0, 8).map((r) => (
               <li key={r.hts}>
-                <a
-                  href={`/calculator?hts=${r.hts}&country=${encodeURIComponent(country)}&value=${value}`}
+                <Link
+                  href={href({ hts: r.hts, q: "" })}
                   className="tabular font-medium hover:underline text-accent"
                 >
                   {r.hts}
-                </a>{" "}
+                </Link>{" "}
                 <span className="text-muted">{r.description}</span>
               </li>
             ))}
@@ -118,79 +280,142 @@ export default async function CalculatorPage({
         </Card>
       ) : null}
 
-      {result ? (
-        <>
-          <div className="grid gap-5 sm:grid-cols-3">
-            <Card>
-              <Stat
-                label="Total duty and fees"
-                value={money2(result.total_duty)}
-              />
-            </Card>
-            <Card>
-              <Stat
-                label="Effective rate"
-                value={`${result.effective_rate_pct}%`}
-              />
-            </Card>
-            <Card>
-              <Stat
-                label="Landed cost"
-                value={money2(result.landed_cost)}
-                sub={`on ${money2(result.entered_value)} entered`}
-              />
-            </Card>
-          </div>
+      {inputProblem ? <Note role="alert">{inputProblem}</Note> : null}
+      {quote && !quote.ok ? (
+        <FailureNotice
+          failure={quote}
+          retryHref={href()}
+          subject="the duty estimate"
+        />
+      ) : null}
 
-          <div className="scroll-x">
-            <table className="w-full min-w-[520px] text-[14px]">
-              <thead>
-                <tr className="border-b text-left border-border text-muted">
-                  <th className="py-2 font-medium">Component</th>
-                  <th className="py-2 text-right font-medium">Rate</th>
-                  <th className="py-2 text-right font-medium">Amount</th>
-                  <th className="py-2 pl-4 font-medium">Authority</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.components.map((c) => (
-                  <tr key={c.label} className="border-b border-border">
-                    <td className="py-2">{c.label}</td>
-                    <td className="tabular py-2 text-right">
-                      {c.rate_pct !== null ? `${c.rate_pct}%` : "—"}
-                    </td>
-                    <td className="tabular py-2 text-right">
-                      {money2(c.amount)}
-                    </td>
-                    <td className="py-2 pl-4 text-[13px] text-muted">
-                      {c.authority}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="text-[14px]">
-            Full detail for this code: <HtsLink code={result.hts} />
-          </p>
-
-          {result.refundable_amount > 0 ? (
-            <Note>
-              {money2(result.refundable_amount)} of this derives from IEEPA
-              provisions the Supreme Court invalidated on 20 February 2026 and
-              may be recoverable by protest.
-            </Note>
-          ) : null}
-          {result.warnings.map((w) => (
-            <Note key={w}>{w}</Note>
-          ))}
-        </>
-      ) : sp.hts ? (
-        <Note>
-          No result for that code. Check it is a 10-digit statistical line.
-        </Note>
+      {quote?.ok ? (
+        <Estimate
+          result={quote.data}
+          country={country}
+          bySea={transport === "sea"}
+          formal={entry === "formal"}
+          program={program || undefined}
+        />
       ) : null}
     </div>
+  );
+}
+
+function Estimate({
+  result,
+  country,
+  bySea,
+  formal,
+  program,
+}: {
+  result: Quote;
+  country: string;
+  bySea: boolean;
+  formal: boolean;
+  program?: string;
+}) {
+  const complete = isComplete(result);
+  const flag = complete ? undefined : "Estimate is incomplete";
+  const tone = complete ? undefined : "warn";
+  return (
+    <section aria-label="Estimate" className="space-y-6">
+      <ScenarioLine
+        quote={result}
+        byVessel={bySea}
+        formalEntry={formal}
+        program={program}
+      />
+
+      <div className="grid gap-5 sm:grid-cols-3">
+        <Card>
+          <Stat
+            label="Total duty and fees"
+            value={money2(result.total_duty)}
+            flag={flag}
+            tone={tone}
+          >
+            <IncompleteReasons quote={result} />
+          </Stat>
+        </Card>
+        <Card>
+          <Stat
+            label="Effective rate"
+            value={`${result.effective_rate_pct}%`}
+            sub="total duty and fees as a share of entered value"
+            flag={flag}
+            tone={tone}
+          />
+        </Card>
+        <Card>
+          <Stat
+            label="Landed cost (value + duty and fees)"
+            value={money2(result.landed_cost)}
+            sub={`${money2(result.entered_value)} entered value plus duty and fees; freight, insurance and brokerage are not included`}
+            flag={flag}
+            tone={tone}
+          />
+        </Card>
+      </div>
+
+      <div className="scroll-x">
+        <table className="w-full min-w-[520px] text-[14px]">
+          <caption className="sr-only">
+            Duty and fee components for HTS {result.hts} from{" "}
+            {result.country}
+          </caption>
+          <thead>
+            <tr className="border-b text-left border-border text-muted">
+              <th scope="col" className="py-2 font-medium">
+                Component
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Rate
+              </th>
+              <th scope="col" className="py-2 text-right font-medium">
+                Amount
+              </th>
+              <th scope="col" className="py-2 pl-4 font-medium">
+                Authority
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.components.map((c) => (
+              <tr key={c.label} className="border-b border-border">
+                <td className="py-2">{c.label}</td>
+                <td className="tabular py-2 text-right">
+                  {c.rate_pct !== null ? `${c.rate_pct}%` : "—"}
+                </td>
+                <td className="tabular py-2 text-right">
+                  {money2(c.amount)}
+                </td>
+                <td className="py-2 pl-4 text-[13px] text-muted">
+                  {c.authority}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-[14px]">
+        Full detail for this code:{" "}
+        <Link
+          href={`/hts/${result.hts}?country=${encodeURIComponent(country)}`}
+          className="tabular font-medium hover:underline text-accent"
+        >
+          {result.hts}
+        </Link>
+      </p>
+
+      <RefundScenario
+        amount={result.refundable_amount}
+        entered={result.entered_value}
+      />
+      {result.warnings.map((w) => (
+        <Note key={w}>{w}</Note>
+      ))}
+    </section>
   );
 }

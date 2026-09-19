@@ -1,13 +1,15 @@
 import { currentViewer } from "@/lib/auth";
-import { IN_BUILD, PLANS, type PlanId } from "@/lib/plans";
+import { IN_BUILD, PAID_PLANS, PLANS, priceIdFor, type PlanId } from "@/lib/plans";
 import { billingEnabled } from "@/lib/stripe";
 import { SubscribeButton } from "@/components/BillingButtons";
 import { Note } from "@/components/ui";
 
+// Derived from PLANS so the search-result line can never name a tier that
+// does not exist.
+const paidPrices = PAID_PLANS.map((id) => `$${PLANS[id].priceMonthly.toLocaleString("en-US")}`);
 export const metadata = {
   title: "Pricing",
-  description:
-    "HTSDesk pricing. Classify 25 products free, then $99, $499 or $1,999 a month by catalogue size.",
+  description: `HTSDesk pricing. Audit ${PLANS.free.skus} products free, then ${paidPrices.join(" or ")} a month by catalogue size.`,
 };
 
 export const dynamic = "force-dynamic";
@@ -35,7 +37,16 @@ function Tick() {
   );
 }
 
-export default async function PricingPage() {
+/** A paid plan can be bought only if checkout is configured and this plan has
+ *  a price behind it; otherwise the button would lead to a failed purchase. */
+const purchasable = (id: PlanId) => billingEnabled() && Boolean(priceIdFor(id));
+
+export default async function PricingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string }>;
+}) {
+  const { checkout } = await searchParams;
   const viewer = await currentViewer();
   const signedIn = Boolean(viewer);
   const current = viewer?.plan.id ?? null;
@@ -44,19 +55,23 @@ export default async function PricingPage() {
     <div className="space-y-9">
       <div className="max-w-[720px] space-y-3">
         <h1 className="serif text-4xl leading-[1.06] tracking-tight">
-          Priced against what you&rsquo;d otherwise overpay
+          Plans by catalogue size
         </h1>
         <p className="text-[16px] text-muted">
-          A single misclassified entry averages{" "}
-          <span className="mono text-ink">$3,847</span> in duty you did not owe.
-          Every plan bills monthly and cancels in one click.
+          Start free. Paid plans bill monthly and raise the number of products
+          you can audit, save and monitor.
         </p>
       </div>
 
-      {!billingEnabled() ? (
-        <Note>
-          Billing is not switched on yet — the paid plans cannot be purchased
-          until Stripe keys are configured. Free accounts work now.
+      {checkout === "cancelled" ? (
+        <Note role="status">
+          Checkout was cancelled. Nothing was charged.
+        </Note>
+      ) : null}
+
+      {PAID_PLANS.some((id) => !purchasable(id)) ? (
+        <Note role="status">
+          Paid plans are not open for purchase yet. Free accounts work now.
         </Note>
       ) : null}
 
@@ -64,32 +79,19 @@ export default async function PricingPage() {
         {ORDER.map((id) => {
           const plan = PLANS[id];
           const isCurrent = current === id;
-          const featured = id === "growth";
           return (
             <div
               key={id}
-              className="relative flex flex-col gap-4 p-6"
+              className="flex flex-col gap-4 p-6"
               style={{
                 background: "var(--surface)",
                 color: "var(--ink)",
-                border: featured
-                  ? "1.5px solid var(--accent)"
-                  : "1px solid var(--border)",
+                border: "1px solid var(--border)",
               }}
             >
-              {featured ? (
-                <span className="absolute -top-[11px] left-6 px-2 py-1 text-[10px] font-semibold tracking-[0.1em] bg-accent text-on-accent">
-                  MOST IMPORTERS
-                </span>
-              ) : null}
 
               <div className="space-y-1">
-                <div
-                  className="lbl"
-                  style={featured ? { color: "var(--accent)" } : undefined}
-                >
-                  {plan.name}
-                </div>
+                <h2 className="lbl">{plan.name}</h2>
                 <div className="flex items-baseline gap-1">
                   <span className="mono text-[34px] font-medium tracking-[-0.02em]">
                     ${plan.priceMonthly.toLocaleString()}
@@ -132,13 +134,20 @@ export default async function PricingPage() {
                   >
                     {signedIn ? "Included" : "Start free"}
                   </a>
-                ) : (
+                ) : purchasable(id) ? (
                   <SubscribeButton
                     plan={id}
                     signedIn={signedIn}
-                    primary={featured}
                     label={`Choose ${plan.name}`}
                   />
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full py-2.5 text-[14px] font-medium border border-rule text-faint opacity-70"
+                  >
+                    Not available yet
+                  </button>
                 )}
               </div>
             </div>
@@ -189,8 +198,9 @@ export default async function PricingPage() {
           </h2>
           <p className="text-[13.5px] leading-[1.55] text-muted">
             Remedies whose product scope lives in the U.S. Notes are withheld
-            from the total and listed separately. You will see an understated
-            figure with a flag, never a confident wrong one.
+            from the total and listed separately. When a figure leaves
+            something out, it is marked incomplete next to the number, with the
+            reason.
           </p>
         </div>
       </div>

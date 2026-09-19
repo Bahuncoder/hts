@@ -60,18 +60,27 @@ export function Stat({
   value,
   sub,
   tone,
+  flag,
+  children,
 }: {
   label: string;
   value: string;
   sub?: string;
-  tone?: "good" | "warn";
+  tone?: "good" | "warn" | "recover";
+  /** A visible text marker beside the figure, for a number that must not be
+   *  read as final. Colour alone never carries this. */
+  flag?: string;
+  /** Detail that belongs directly under the figure, e.g. why it is flagged. */
+  children?: React.ReactNode;
 }) {
   const color =
     tone === "warn"
       ? "var(--caution)"
-      : tone === "good"
-        ? "var(--accent)"
-        : "var(--ink)";
+      : tone === "recover"
+        ? "var(--recover)"
+        : tone === "good"
+          ? "var(--accent)"
+          : "var(--ink)";
   return (
     <div>
       <div className="text-[12px] uppercase tracking-wide text-muted">
@@ -80,7 +89,13 @@ export function Stat({
       <div className="tabular mt-1 text-2xl font-semibold" style={{ color }}>
         {value}
       </div>
+      {flag ? (
+        <div className="mt-1">
+          <Badge tone="warn">{flag}</Badge>
+        </div>
+      ) : null}
       {sub ? <div className="text-[12px] text-muted">{sub}</div> : null}
+      {children}
     </div>
   );
 }
@@ -96,9 +111,18 @@ export function HtsLink({ code }: { code: string }) {
   );
 }
 
-export function Note({ children }: { children: React.ReactNode }) {
+export function Note({
+  children,
+  role,
+}: {
+  children: React.ReactNode;
+  role?: "alert" | "status";
+}) {
   return (
-    <p className="rounded border-l-2 py-2 pl-3 text-[13px] border-caution bg-caution-soft text-caution">
+    <p
+      role={role}
+      className="rounded border-l-2 py-2 pl-3 text-[13px] border-caution bg-caution-soft text-caution"
+    >
       {children}
     </p>
   );

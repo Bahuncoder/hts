@@ -55,8 +55,11 @@ export default function TermsPage() {
           cannot resolve mechanically, we exclude that remedy from the duty
           figure and flag it, rather than guessing. Duty figures may therefore
           be understated. Where a provision has been struck down but remains
-          printed in the schedule, we report it separately as potentially
-          refundable rather than as duty owed. Neither treatment is a promise
+          printed in the schedule, we report it separately as a scenario
+          estimate of duty that may be recoverable, rather than as duty owed.
+          That figure is calculated for one entry at the value you enter; we do
+          not know which entries you filed, what you paid or their liquidation
+          status, so it is not a claim amount. Neither treatment is a promise
           about what CBP will assess or refund.
         </p>
       </Section>

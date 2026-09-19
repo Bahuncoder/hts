@@ -62,9 +62,25 @@ export default async function AlertsPage() {
       ) : alerts.length === 0 ? (
         <Card>
           <p className="text-[15px] text-muted">
-            Nothing has moved under your codes. That is the usual answer, and it
-            is the one worth paying for — we read every tariff action so you do
-            not have to check.
+            {status?.last_run_at ? (
+              <>
+                No tariff action we have read names your codes as of the last
+                check on{" "}
+                {new Date(status.last_run_at).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })}
+                . That is the usual answer. We match Federal Register notices
+                that cite HTS numbers, so a change published without naming a
+                code would not appear here.
+              </>
+            ) : (
+              <>
+                Monitoring has not run yet, so an empty list does not mean
+                nothing has changed. Alerts appear here after the first daily
+                check.
+              </>
+            )}
           </p>
         </Card>
       ) : (

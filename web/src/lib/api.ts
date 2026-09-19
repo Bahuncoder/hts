@@ -33,7 +33,15 @@ export type Quote = {
   refundable: DutyComponent[];
   refundable_amount: number;
   warnings: string[];
+  /** Chapter 99 headings that cover this origin but whose product scope is
+   *  only in the U.S. Notes; excluded from the total. */
   scope_unverified: string[];
+  /** Reasons the total omits something it should include. */
+  incomplete?: string[];
+  /** False when `incomplete` or `scope_unverified` is non-empty. */
+  complete?: boolean;
+  country_code?: string;
+  dataset_revision?: string;
 };
 
 export type Ruling = {
@@ -77,22 +85,118 @@ export type HtsDetail = {
   }[];
 };
 
-async function get<T>(path: string, revalidate = 3600): Promise<T | null> {
+/** Why an engine call did not produce data.
+ *
+ *  Callers must be able to tell "this code does not exist" from "we could not
+ *  ask", so a failure is never collapsed to null:
+ *  - not_found: the engine answered 404 (a real missing resource)
+ *  - invalid: the engine answered 400/422; `message` is customer-readable
+ *  - rate_limited: 429; `retryAfter` is seconds when the engine said so
+ *  - unavailable: network error, timeout, 5xx, an unreadable body, or a
+ *    credential problem the customer cannot fix
+ */
+export type Failure = {
+  ok: false;
+  kind: "not_found" | "invalid" | "rate_limited" | "unavailable";
+  message?: string;
+  retryAfter?: number;
+};
+
+export type Outcome<T> = { ok: true; data: T } | Failure;
+
+/** Long enough for a cold engine, short enough that a hung one does not hold
+ *  a page render open. */
+const TIMEOUT_MS = 10_000;
+
+const unavailable: Failure = { ok: false, kind: "unavailable" };
+
+/** The engine's `detail` is a string for errors it raises itself and an array
+ *  of field errors for request-shape validation (422). Only the former is
+ *  written for customers. */
+async function detailOf(res: Response): Promise<string | undefined> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      headers: engineHeaders(),
-      next: { revalidate },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    const body = (await res.json()) as { detail?: unknown };
+    return typeof body.detail === "string" && body.detail.trim()
+      ? body.detail.trim()
+      : undefined;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
+async function call<T>(
+  path: string,
+  init: RequestInit & { next?: { revalidate?: number | false } } = {},
+): Promise<Outcome<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: { ...engineHeaders(), ...(init.headers as Record<string, string>) },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch {
+    return unavailable;
+  }
+
+  if (res.ok) {
+    try {
+      return { ok: true, data: (await res.json()) as T };
+    } catch {
+      return unavailable;
+    }
+  }
+
+  if (res.status === 404) {
+    return { ok: false, kind: "not_found", message: await detailOf(res) };
+  }
+  if (res.status === 400 || res.status === 422) {
+    return { ok: false, kind: "invalid", message: await detailOf(res) };
+  }
+  if (res.status === 429) {
+    const secs = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
+    return {
+      ok: false,
+      kind: "rate_limited",
+      retryAfter: Number.isFinite(secs) && secs > 0 ? secs : undefined,
+    };
+  }
+  // 5xx, and 401/403 (a misconfigured key is ours to fix, not the visitor's).
+  return unavailable;
+}
+
+const get = <T>(path: string, revalidate = 3600) =>
+  call<T>(path, { next: { revalidate } });
+
+export type QuoteInput = {
+  hts: string;
+  country: string;
+  value: number;
+  byVessel?: boolean;
+  formalEntry?: boolean;
+  /** Special-rate program indicator (KR, S, AU...). Sent only when the
+   *  customer states one; eligibility is never inferred. */
+  preferenceProgram?: string;
+};
+
+export const getQuote = (q: QuoteInput) =>
+  call<Quote>("/api/quote", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      hts: q.hts,
+      country: q.country,
+      value: q.value,
+      by_vessel: q.byVessel ?? true,
+      formal_entry: q.formalEntry ?? true,
+      ...(q.preferenceProgram ? { preference_program: q.preferenceProgram } : {}),
+    }),
+    cache: "no-store",
+  });
+
 export const getHts = (code: string, country = "China", value = 10000) =>
   get<HtsDetail>(
-    `/api/hts/${code}?country=${encodeURIComponent(country)}&value=${value}`,
+    `/api/hts/${encodeURIComponent(code)}?country=${encodeURIComponent(country)}&value=${value}`,
   );
 
 export const search = (q: string) =>
@@ -107,29 +211,75 @@ export const classify = (q: string) =>
     300,
   );
 
-export const getChanges = (days = 90) =>
-  get<{
-    days: number;
-    count: number;
-    changes: {
-      document_number: string;
-      title: string;
-      doc_type: string;
-      publication_date: string;
-      html_url: string;
-      abstract: string;
-      hts_mentions: string[];
-      tariff_action: boolean;
-    }[];
-  }>(`/api/changes?days=${days}`, 900);
+export type ChangesFeed = {
+  days: number;
+  count: number;
+  has_more?: boolean;
+  changes: {
+    document_number: string;
+    title: string;
+    doc_type: string;
+    publication_date: string;
+    html_url: string;
+    abstract: string;
+    hts_mentions: string[];
+    tariff_action: boolean;
+  }[];
+};
 
+export const getChanges = (days = 90, limit = 200) =>
+  get<ChangesFeed>(`/api/changes?days=${days}&limit=${limit}`, 900);
+
+/** Row counts are only returned to a keyed caller, so `counts` can be absent
+ *  even when the engine is healthy. Callers must not read that as zero. */
 export const getHealth = () =>
   get<{
     status: string;
-    hts_edition: string;
-    counts: Record<string, number>;
-    reasoning_enabled: boolean;
+    hts_edition?: string;
+    counts?: Record<string, number>;
+    reasoning_enabled?: boolean;
   }>("/api/health", 300);
+
+/** Customer-facing wording for a failed call. Never mentions operators,
+ *  pollers or configuration: a visitor cannot act on those. */
+export function failureCopy(f: Failure): {
+  title: string;
+  body: string;
+  retryable: boolean;
+} {
+  switch (f.kind) {
+    case "not_found":
+      return {
+        title: "Not found",
+        body: f.message ?? "We could not find that.",
+        retryable: false,
+      };
+    case "invalid":
+      return {
+        title: "Check what you entered",
+        body:
+          f.message ??
+          "Some of the values were not valid. Correct them and try again.",
+        retryable: false,
+      };
+    case "rate_limited": {
+      const wait = f.retryAfter
+        ? `${f.retryAfter} second${f.retryAfter === 1 ? "" : "s"}`
+        : "a minute";
+      return {
+        title: "Too many requests",
+        body: `Please wait ${wait} and try again. What you entered is kept.`,
+        retryable: true,
+      };
+    }
+    case "unavailable":
+      return {
+        title: "Temporarily unavailable",
+        body: "We could not reach the tariff data just now. What you entered is kept — try again in a minute.",
+        retryable: true,
+      };
+  }
+}
 
 export const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });

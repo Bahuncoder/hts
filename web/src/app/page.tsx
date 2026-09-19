@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { getHealth } from "@/lib/api";
-import { Card, Stat } from "@/components/ui";
+import { Card, Note, Stat } from "@/components/ui";
 
 export const revalidate = 900;
 
 export default async function Home() {
   const health = await getHealth();
-  const c = health?.counts ?? {};
+  // Counts are absent when the engine is unreachable and also when it answers
+  // without them. Either way the figure is unknown, which is not the same as
+  // zero, so it is shown as unavailable.
+  const c = health.ok ? health.data.counts : undefined;
+  const count = (n: number | undefined) =>
+    typeof n === "number" ? n.toLocaleString() : "unavailable";
+  const edition = health.ok ? health.data.hts_edition : undefined;
 
   return (
     <div className="space-y-14">
@@ -37,32 +43,39 @@ export default async function Home() {
         </div>
       </section>
 
+      {!c ? (
+        <Note role="status">
+          Live dataset figures are temporarily unavailable. The tools below
+          still work if you try them.
+        </Note>
+      ) : null}
+
       <section className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <Stat
             label="HTS lines"
-            value={(c.hts ?? 0).toLocaleString()}
-            sub={`${health?.hts_edition ?? ""} edition`}
+            value={count(c?.hts)}
+            sub={edition ? `${edition} edition` : "edition not reported"}
           />
         </Card>
         <Card>
           <Stat
             label="CBP rulings indexed"
-            value={(c.ruling ?? 0).toLocaleString()}
+            value={count(c?.ruling)}
             sub="classification precedent"
           />
         </Card>
         <Card>
           <Stat
             label="Chapter 99 rules"
-            value={(c.ch99_rule ?? 0).toLocaleString()}
+            value={count(c?.ch99_rule)}
             sub="trade remedies parsed"
           />
         </Card>
         <Card>
           <Stat
             label="Scoped product codes"
-            value={(c.ch99_scope ?? 0).toLocaleString()}
+            value={count(c?.ch99_scope)}
             sub="from the U.S. Notes"
           />
         </Card>
@@ -92,12 +105,16 @@ export default async function Home() {
           </Card>
           <Card>
             <h3 className="font-medium">
-              Struck-down duties are money owed to you
+              Struck-down duties are shown separately
             </h3>
             <p className="mt-2 text-[14px] text-muted">
-              The Supreme Court invalidated the IEEPA tariffs in February 2026.
-              Those provisions are still in the schedule. We report them
-              separately as potentially refundable rather than as duty owed.
+              The Supreme Court invalidated the IEEPA tariffs in February 2026,
+              but those provisions are still in the schedule. We keep them out
+              of the duty total and show a scenario estimate: if IEEPA duty was
+              paid on an entry like this, about that much may be recoverable.
+              Actual eligibility depends on the entries you filed, their
+              liquidation status and CBP&rsquo;s refund process; the figure is
+              not a claim amount.
             </p>
           </Card>
         </div>

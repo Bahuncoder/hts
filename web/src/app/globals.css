@@ -158,3 +158,16 @@ body {
 .clamp-2 { -webkit-line-clamp: 2; }
 
 .scroll-x { overflow-x: auto; }
+
+/* Several components write `tabular`; it was never defined, so those figures
+   were not tabular. Same rule as .mono without the typeface change. */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Keyboard focus is always visible. This recolours the browser's own focus
+   indicator for contrast on both themes; it never removes it. <main> is only
+   focusable so the skip link can land there, so it is the one exception. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+main:focus { outline: none; }

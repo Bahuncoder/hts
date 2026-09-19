@@ -1,5 +1,9 @@
 import { classify } from "@/lib/api";
+import { allow, CLASSIFY_LIMIT } from "@/lib/budget";
+import { clientId } from "@/lib/throttle";
 import { Badge, Card, HtsLink, Note } from "@/components/ui";
+import { FailureNotice } from "@/components/FailureNotice";
+import { inputClass } from "@/components/Field";
 
 export const metadata = {
   title: "HTS classification — describe your product",
@@ -12,10 +16,22 @@ export const dynamic = "force-dynamic";
 export default async function ClassifyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string | string[] }>;
 }) {
-  const { q } = await searchParams;
-  const result = q ? await classify(q) : null;
+  const { q: rawQ } = await searchParams;
+  const q = (Array.isArray(rawQ) ? rawQ[0] : rawQ)?.trim() ?? "";
+  // The engine needs three characters to classify; say so rather than spend a
+  // budgeted call to be told it.
+  const tooShort = q.length > 0 && q.length < 3;
+  // Each search is engine work paid for with the shared key, so it is
+  // budgeted per client like the audit proxy.
+  const wait =
+    q && !tooShort
+      ? await allow("classify", `client:${await clientId()}`, CLASSIFY_LIMIT)
+      : null;
+  const outcome = q && !tooShort && wait === null ? await classify(q) : null;
+  const result = outcome?.ok ? outcome.data : null;
+  const retryHref = `/classify?q=${encodeURIComponent(q)}`;
 
   return (
     <div className="space-y-8">
@@ -30,24 +46,70 @@ export default async function ClassifyPage({
         </p>
       </div>
 
-      <form action="/classify" className="flex max-w-2xl flex-wrap gap-2">
-        <input
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder="men's knitted cotton t-shirt, 100% cotton, short sleeve"
-          className="min-w-0 flex-1 rounded-md border px-3 py-2 text-[15px] border-border bg-paper text-ink"
-        />
-        <button className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-paper">
-          Classify
-        </button>
+      <form action="/classify" className="max-w-2xl" role="search">
+        <label htmlFor="q" className="block text-[13px] font-medium">
+          Product description
+        </label>
+        <div className="mt-1 flex flex-wrap gap-2">
+          <input
+            id="q"
+            name="q"
+            defaultValue={q}
+            required
+            minLength={3}
+            autoComplete="off"
+            aria-describedby="q-hint"
+            placeholder="men's knitted cotton t-shirt, 100% cotton, short sleeve"
+            className={`min-w-0 flex-1 ${inputClass}`}
+          />
+          <button
+            type="submit"
+            className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-on-accent"
+          >
+            Classify
+          </button>
+        </div>
+        <p id="q-hint" className="mt-1 text-[12px] text-muted">
+          At least 3 characters. Include what it is made of and what it does.
+        </p>
       </form>
+
+      {tooShort ? (
+        <Note role="alert">
+          Describe the product in at least 3 characters so there is something
+          to match.
+        </Note>
+      ) : null}
+
+      {wait !== null ? (
+        <Note role="alert">
+          Too many searches from this connection. Try again in {wait} seconds.
+        </Note>
+      ) : null}
+
+      {outcome && !outcome.ok ? (
+        <FailureNotice
+          failure={outcome}
+          retryHref={retryHref}
+          subject="classification"
+        />
+      ) : null}
+
+      {result && result.candidates.length > 0 ? (
+        <p role="status" className="text-[13px] text-muted">
+          {result.candidates.length} candidate
+          {result.candidates.length === 1 ? "" : "s"} for &ldquo;{q}&rdquo;,
+          ranked by ruling precedent. A candidate is a starting point for your
+          broker, not a filing-ready code.
+        </p>
+      ) : null}
 
       {result?.notes?.map((n) => (
         <Note key={n}>{n}</Note>
       ))}
 
       {result && result.candidates.length === 0 ? (
-        <p className="text-muted">
+        <p role="status" className="text-muted">
           No candidates matched. Add the material and the function of the goods.
         </p>
       ) : null}
