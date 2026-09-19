@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveCatalogueAction } from "@/lib/actions";
+import { AUDIT_COLUMNS, toCsv } from "@/lib/csv";
 
 type Line = {
   sku: string;
@@ -90,34 +91,23 @@ function parseCsv(text: string): Record<string, string>[] {
 }
 
 function downloadCsv(lines: Line[]) {
-  const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const cols: [string, (l: Line) => unknown][] = [
-    ["SKU", (l) => l.sku],
-    ["Description", (l) => l.description],
-    ["Country of origin", (l) => l.country],
-    ["HTS code", (l) => l.hts],
-    ["Confidence", (l) => l.confidence],
-    ["Entered value (USD)", (l) => l.entered_value?.toFixed(2)],
-    ["Duty and fees (USD)", (l) => l.duty?.toFixed(2)],
-    ["Effective rate (%)", (l) => l.effective_rate_pct?.toFixed(2)],
-    ["Potentially refundable (USD)", (l) => l.refundable?.toFixed(2)],
-    [
-      "Flags",
-      (l) =>
-        l.error
-          ? l.error
-          : l.scope_unverified?.length
-            ? "scope unverified"
-            : "",
-    ],
-  ];
-  const csv =
-    "\ufeff" +
-    [
-      cols.map(([h]) => cell(h)).join(","),
-      ...lines.map((l) => cols.map(([, get]) => cell(get(l))).join(",")),
-    ].join("\r\n") +
-    "\r\n";
+  // Shares the formula-neutralizing emitter with the saved-catalogue export
+  // (lib/csv.ts): product descriptions and SKUs here are attacker-controlled,
+  // and a bare quote-only emitter does not stop a leading `=` from being read
+  // as a formula when the file is opened in a spreadsheet.
+  const rows = lines.map((l) => ({
+    sku: l.sku,
+    description: l.description,
+    country: l.country ?? "",
+    hts: l.hts,
+    confidence: l.confidence ?? "",
+    entered_value: l.entered_value?.toFixed(2) ?? "",
+    duty: l.duty?.toFixed(2) ?? "",
+    effective_rate_pct: l.effective_rate_pct?.toFixed(2) ?? "",
+    refundable: l.refundable?.toFixed(2) ?? "",
+    flags: l.error ? l.error : l.scope_unverified?.length ? "scope unverified" : "",
+  }));
+  const csv = toCsv(rows, AUDIT_COLUMNS);
   const url = URL.createObjectURL(
     new Blob([csv], { type: "text/csv;charset=utf-8" }),
   );
