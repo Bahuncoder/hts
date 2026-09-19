@@ -18,8 +18,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.ch99 import Ch99Rule, Effect
+from core.countries import UnknownCountry, country_code, require_country
 from core.duty import (HMF_RATE, MPF_MAX, MPF_MIN, MPF_RATE, applicable_ch99,
-                       compute, parse_base_rate)
+                       compute, entry_mpf, parse_base_rate, parse_rate,
+                       parse_special, select_preference)
 
 _results: list[tuple[str, str, str]] = []
 
@@ -267,6 +269,176 @@ def _():
                   base_rate_cell="7.3%")
     for c in res.components:
         assert c.amount == c.amount.quantize(Decimal("0.01")), c
+
+
+# ------------------------------------------- typed rate grammar (audit #5)
+
+@check("rate: '$1/kg + 5%' keeps the specific part instead of dropping it")
+def _():
+    r = parse_rate("$1/kg + 5%")
+    assert r.pct == Decimal("5") and r.specific == ("$1/kg",) and not r.unparsed, r
+
+
+@check("rate: cents-per-unit forms are all recognised as specific")
+def _():
+    for cell in ("0.5¢/kg", "12 cents/kg", "$1.20/doz.", "3.4¢/liter", "1.9¢/kg + 5%"):
+        assert parse_rate(cell).specific, cell
+
+
+@check("rate: mixed fractions such as '2 1/2%' are read as 2.5")
+def _():
+    assert parse_rate("2 1/2%").pct == Decimal("2.5")
+
+
+@check("rate: prose is unparsed, never silently zero")
+def _():
+    r = parse_rate("The rate applicable to the natural juice in heading 2009")
+    assert r.unparsed, r
+
+
+@check("compute: a quantity-based duty makes the total explicitly incomplete")
+def _():
+    res = compute(hts="0402.10.10.00", country="Vietnam", entered_value=1000,
+                  base_rate_cell="$1/kg + 5%")
+    assert "specific_duty_omitted" in res.incomplete, res.incomplete
+    assert res.as_dict()["complete"] is False
+    assert any("NOT included" in w for w in res.warnings), res.warnings
+
+
+@check("compute: a blank rate cell is flagged, not silently Free")
+def _():
+    res = compute(hts="0000.00.00.00", country="Vietnam", entered_value=1000,
+                  base_rate_cell="")
+    assert "rate_missing" in res.incomplete, res.incomplete
+
+
+@check("compute: refuses non-positive and non-finite values")
+def _():
+    for bad in (0, -1, float("nan"), float("inf")):
+        try:
+            compute(hts="x", country="Vietnam", entered_value=bad, base_rate_cell="Free")
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted {bad!r}")
+
+
+# ---------------------------------------- preference selection (audit #5)
+
+@check("special: programs and their rates are separated")
+def _():
+    alts = parse_special("Free (A,AU,KR) 5% (MX)")
+    assert alts and alts[0].programs == ("A", "AU", "KR") and alts[1].rate.pct == Decimal("5"), alts
+
+
+@check("special: a preference is matched to the origin, not to a bare flag")
+def _():
+    cell = "Free (A,AU,KR) 5% (MX)"
+    rate, prog, _n = select_preference(cell, "MX", None)
+    assert rate is not None and rate.pct == Decimal("5") and prog == "MX", (rate, prog)
+    rate, prog, _n = select_preference(cell, "KR", None)
+    assert rate is not None and rate.pct == Decimal("0") and prog == "KR", (rate, prog)
+
+
+@check("special: an origin no listed program covers falls back to MFN with a reason")
+def _():
+    rate, _p, notes = select_preference("Free (AU,KR)", "VN", None)
+    assert rate is None and notes, (rate, notes)
+
+
+@check("special: a named program the origin is not party to is refused")
+def _():
+    rate, _p, notes = select_preference("Free (AU,KR)", "VN", "KR")
+    assert rate is None and any("does not cover" in n for n in notes), notes
+
+
+@check("special: a caller-asserted GSP-style program is applied but flagged unchecked")
+def _():
+    rate, prog, notes = select_preference("Free (A,AU)", "VN", "A")
+    assert rate is not None and prog == "A" and any("not checked" in n for n in notes), notes
+
+
+@check("compute: claiming a preference the line does not offer keeps MFN and says so")
+def _():
+    res = compute(hts="6109.10.00.12", country="Vietnam", entered_value=10_000,
+                  base_rate_cell="16.5%", special_rate_cell="Free (AU,KR)",
+                  fta_claimed=True)
+    assert component(res, "MFN").rate_pct == Decimal("16.5")
+    assert res.warnings, "the fall-back must be explained"
+
+
+@check("compute: USMCA program S applies to Mexico and not to Vietnam")
+def _():
+    kw = dict(hts="6109.10.00.12", entered_value=10_000, base_rate_cell="16.5%",
+              special_rate_cell="Free (S,AU)", preference_program="S")
+    assert component(compute(country="Mexico", **kw), "FTA").rate_pct == Decimal("0")
+    assert component(compute(country="Vietnam", **kw), "MFN").rate_pct == Decimal("16.5")
+
+
+# --------------------------------------------- origin canonicalisation (#4)
+
+@check("country: every common spelling of China resolves to one key")
+def _():
+    for name in ("China", "CN", "cn", "PRC", "People's Republic of China", "chn"):
+        assert country_code(name) == "CN", name
+
+
+@check("country: an unrecognised origin raises rather than resolving to nothing")
+def _():
+    for bad in ("Chnia", "", "  ", "Atlantis"):
+        try:
+            require_country(bad)
+        except UnknownCountry:
+            continue
+        raise AssertionError(f"accepted {bad!r}")
+
+
+@check("origin: the same country under different spellings prices identically")
+def _():
+    rules = [rule("9903.88.03", rate=25, countries=["China"], refs=["6109.10"])]
+    totals = set()
+    for name in ("China", "CN", "PRC", "china"):
+        res = compute(hts="6109.10.00.12", country=name, entered_value=10_000,
+                      base_rate_cell="16.5%", ch99_rules=rules)
+        totals.add(res.total_duty)
+    assert len(totals) == 1, f"one origin priced {len(totals)} ways: {totals}"
+    assert component(res, "Trade remedy") is not None
+
+
+@check("origin: Chapter 99's truncated country names still match ('Bosnia', 'Trinidad')")
+def _():
+    assert country_code("Bosnia") == country_code("Bosnia and Herzegovina") == "BA"
+    assert country_code("Trinidad") == "TT"
+    rules = [rule("9903.99.01", rate=10, countries=["Bosnia"], refs=["6109"])]
+    res = compute(hts="6109.10.00.12", country="BA", entered_value=1000,
+                  base_rate_cell="Free", ch99_rules=rules)
+    assert component(res, "Trade remedy") is not None
+
+
+# --------------------------------------------- catalogue fee model (#6)
+
+@check("fees: MPF minimum is charged once per entry, not once per line")
+def _():
+    assert entry_mpf(1000, entries=1).amount == MPF_MIN
+    assert entry_mpf(1000, entries=10).amount == MPF_MIN * 10
+    per_line = sum(
+        next(c.amount for c in compute(
+            hts="6109.10.00.12", country="Vietnam", entered_value=100,
+            base_rate_cell="Free").components if "Processing" in c.label)
+        for _ in range(10))
+    assert per_line == MPF_MIN * 10 and entry_mpf(1000).amount == MPF_MIN
+
+
+@check("fees: MPF cap applies per entry")
+def _():
+    assert entry_mpf(10_000_000, entries=1).amount == MPF_MAX
+    assert entry_mpf(10_000_000, entries=4).amount == MPF_MAX * 4
+
+
+@check("fees: an informal entry line carries no MPF")
+def _():
+    res = compute(hts="6109.10.00.12", country="Vietnam", entered_value=100,
+                  base_rate_cell="Free", is_formal_entry=False)
+    assert component(res, "Processing") is None
 
 
 def main() -> int:

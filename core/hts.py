@@ -12,6 +12,14 @@ from dataclasses import dataclass, field
 from functools import cached_property
 
 
+class InvalidHts(ValueError):
+    """The code is not a line in the loaded schedule."""
+
+
+class NotStatisticalLine(InvalidHts):
+    """The code exists but is a heading, not a 10-digit statistical line."""
+
+
 @dataclass
 class HtsLine:
     hts: str
@@ -77,6 +85,28 @@ class HtsTree:
 
     def get(self, code: str) -> HtsLine | None:
         return self._lines.get(code)
+
+    def canonical_leaf(self, code: str) -> HtsLine:
+        """Resolve user-supplied text to a statistical line, or refuse.
+
+        Accepts the dotted form or bare digits. A missing code must never reach
+        the rate lookup: an empty rate cell reads as "Free", which turned an
+        arbitrary string into a successful, plausible quote.
+        """
+        text = (code or "").strip()
+        line = self._lines.get(text)
+        if line is None:
+            digits = text.replace(".", "")
+            if digits.isdigit() and len(digits) == 10:
+                line = self._lines.get(
+                    f"{digits[:4]}.{digits[4:6]}.{digits[6:8]}.{digits[8:]}")
+        if line is None:
+            shown = text[:30] or "(blank)"
+            raise InvalidHts(f"{shown!r} is not an HTS code in the loaded schedule.")
+        if not line.is_leaf:
+            raise NotStatisticalLine(
+                f"{line.hts} is a heading, not a 10-digit statistical line.")
+        return line
 
     @cached_property
     def leaves(self) -> list[HtsLine]:

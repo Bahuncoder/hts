@@ -115,15 +115,18 @@ def _():
     assert s == 422, s
 
 
-@check("audit: a key raises the ceiling and truncation is disclosed")
+@check("audit: a key raises the ceiling; every row comes back, truncation disclosed")
 def _():
     s, d = call("/api/audit", method="POST", body=items(400), key=KEY)
     assert s == 200, s
     su = d["summary"]
     assert su["submitted"] == 400
+    # Unprocessed rows are returned and labelled, never silently dropped.
+    assert su["items"] == su["submitted"] == len(d["lines"]), su
     if su["truncated"]:
-        assert su["items"] < su["submitted"], su
-        assert su["items"] > 0
+        assert su["processed"] < su["submitted"], su
+        assert su["by_status"]["not_processed"] == su["submitted"] - su["processed"], su
+        assert su["totals_complete"] is False, "a partial total must say it is partial"
 
 
 @check("audit: an invalid key is treated as anonymous")
@@ -246,6 +249,121 @@ def _():
             limited = True
             break
     assert limited, "sitemap accepts unlimited anonymous calls"
+
+
+# ---------------------------------------------- calculation integrity (audit)
+
+def _audit(rows, **kw):
+    s, d = call("/api/audit", method="POST", body={"items": rows, **kw}, key=KEY)
+    assert s == 200, (s, d)
+    return d
+
+
+@check("audit: an invalid HTS code is an error line, not a priced one")
+def _():
+    d = _audit([{"sku": "X", "description": "junk", "country": "Vietnam",
+                 "value": 10000, "hts": "NOT-A-CODE"}])
+    ln = d["lines"][0]
+    assert ln["status"] == "error" and ln["error_code"] == "invalid_code", ln
+    assert "duty" not in ln, "an unresolvable code must not carry a duty figure"
+    assert d["summary"]["priced"] == 0 and d["summary"]["duty"] == 0, d["summary"]
+
+
+@check("audit: origin spelling cannot change the duty")
+def _():
+    rows = [{"sku": n, "description": "tee", "country": c, "value": 10000,
+             "hts": "6109.10.00.12"} for n, c in
+            (("a", "China"), ("b", "CN"), ("c", "PRC"), ("d", "china"))]
+    duties = {ln["duty"] for ln in _audit(rows)["lines"]}
+    assert len(duties) == 1, f"the same origin priced {len(duties)} ways: {duties}"
+
+
+@check("audit: an unrecognised origin is refused, not priced as ordinary")
+def _():
+    ln = _audit([{"sku": "t", "description": "tee", "country": "Chnia",
+                  "value": 10000, "hts": "6109.10.00.12"}])["lines"][0]
+    assert ln["status"] == "error" and ln["error_code"] == "invalid_country", ln
+
+
+@check("audit: one bad row cannot reject or hide its neighbours")
+def _():
+    rows = [
+        {"row": 7, "sku": "ok", "description": "tee", "country": "Vietnam",
+         "value": 100, "hts": "6109.10.00.12"},
+        {"row": 9, "sku": "bad", "description": "tee", "country": "Vietnam",
+         "value": 0, "hts": "6109.10.00.12"},
+    ]
+    d = _audit(rows)
+    assert [ln["row"] for ln in d["lines"]] == [7, 9], "row numbers must round-trip"
+    assert d["lines"][1]["status"] == "error", d["lines"][1]
+    su = d["summary"]
+    assert su["submitted"] == su["items"] == 2 and su["priced"] == 1, su
+    assert su["unresolved"] >= 1 and su["totals_complete"] is False, su
+
+
+@check("audit: MPF is charged per entry, not per line")
+def _():
+    rows = [{"sku": str(i), "description": "tee", "country": "Vietnam",
+             "value": 100, "hts": "6109.10.00.12"} for i in range(10)]
+    su = _audit(rows)["summary"]
+    assert su["mpf"] == 33.58, f"ten $100 lines on one entry pay one minimum, got {su['mpf']}"
+    su5 = _audit(rows, entries=5)["summary"]
+    assert su5["mpf"] == round(5 * 33.58, 2), su5["mpf"]
+    assert any("entr" in a for a in su["assumptions"]), "the entry assumption must be stated"
+
+
+@check("audit: every summary carries the dataset revision")
+def _():
+    su = _audit([{"sku": "1", "description": "tee", "country": "Vietnam",
+                  "value": 100, "hts": "6109.10.00.12"}])["summary"]
+    assert "dataset_revision" in su, su
+
+
+@check("quote: junk code, junk origin and digits-only codes")
+def _():
+    s, _b = call("/api/quote", method="POST",
+                 body={"hts": "NOT-A-CODE", "country": "China", "value": 100}, key=KEY)
+    assert s in (400, 404), s
+    s, _b = call("/api/quote", method="POST",
+                 body={"hts": "6109.10.00.12", "country": "Zzz", "value": 100}, key=KEY)
+    assert s == 400, s
+    s, a = call("/api/quote", method="POST",
+                body={"hts": "6109100012", "country": "CN", "value": 10000}, key=KEY)
+    s2, b = call("/api/quote", method="POST",
+                 body={"hts": "6109.10.00.12", "country": "China", "value": 10000}, key=KEY)
+    assert s == s2 == 200 and a["total_duty"] == b["total_duty"], (a, b)
+
+
+@check("hts page: an unrecognised origin is a 400, not a 500")
+def _():
+    s, _b = call("/api/hts/6109.10.00.12?country=Zzz", key=KEY)
+    assert s == 400, s
+
+
+@check("health: a keyed caller sees index coverage and engine/reference agreement")
+def _():
+    s, d = call("/api/health", key=KEY)
+    assert s == 200
+    for k in ("dataset_revision", "engine_current", "index", "index_complete"):
+        assert k in d, f"health is missing {k}"
+    assert d["index"]["rulings_indexed"] == d["index"]["rulings"], d["index"]
+
+
+@check("changes: cursor paging returns every document once")
+def _():
+    s, big = call("/api/changes?since=2026-01-01&limit=2000", key=KEY)
+    seen, cur = [], None
+    for _ in range(2000):
+        path = "/api/changes?limit=7" + (f"&cursor={cur}" if cur else "&since=2026-01-01")
+        s, d = call(path, key=KEY)
+        assert s == 200
+        seen += [x["document_number"] for x in d["changes"]]
+        if not d["has_more"]:
+            break
+        cur = d["next_cursor"]
+    assert seen == [x["document_number"] for x in big["changes"]], "paging skipped or repeated documents"
+    assert call("/api/changes?cursor=nope", key=KEY)[0] == 400
+    assert call("/api/changes?since=nope", key=KEY)[0] == 400
 
 
 def main() -> int:

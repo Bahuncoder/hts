@@ -9,12 +9,14 @@ import re
 
 from core.ch99 import Ch99Rule, parse_countries, parse_rule
 from core.duty import DutyResult, compute
-from core.hts import HtsTree
+from core.hts import HtsTree, InvalidHts, NotStatisticalLine  # noqa: F401
 from ingest.notes import load as load_scopes
 
 
 class TariffEngine:
-    def __init__(self, hts_path: str, notes_path: str | None = None):
+    def __init__(self, hts_path: str, notes_path: str | None = None,
+                 revision: str = ""):
+        self.revision = revision
         self.tree = HtsTree.load(hts_path)
         self.scopes = load_scopes(notes_path) if notes_path else {}
         with open(hts_path) as fh:
@@ -58,14 +60,32 @@ class TariffEngine:
 
     def quote(
         self, *, hts: str, country: str, value: Decimal | float | str,
-        fta_claimed: bool = False, by_vessel: bool = True,
+        fta_claimed: bool = False, preference_program: str | None = None,
+        by_vessel: bool = True, is_formal_entry: bool = True,
     ) -> DutyResult:
-        general, _ = self.tree.effective_rate_cell(hts, "general")
-        special, _ = self.tree.effective_rate_cell(hts, "special")
-        other, _ = self.tree.effective_rate_cell(hts, "other")
-        return compute(
-            hts=hts, country=country, entered_value=value,
+        """Price one statistical line.
+
+        Raises InvalidHts / NotStatisticalLine for a code that is not a
+        10-digit line in this schedule, countries.UnknownCountry for an origin
+        that cannot be resolved, and ValueError for a non-positive value. None
+        of these degrade to a normal-looking number.
+        """
+        line = self.tree.canonical_leaf(hts)
+        code = line.hts
+        general, _ = self.tree.effective_rate_cell(code, "general")
+        special, _ = self.tree.effective_rate_cell(code, "special")
+        other, _ = self.tree.effective_rate_cell(code, "other")
+        res = compute(
+            hts=code, country=country, entered_value=value,
             base_rate_cell=general, special_rate_cell=special,
             column2_rate_cell=other, ch99_rules=self.ch99, scopes=self.scopes,
-            fta_claimed=fta_claimed, by_vessel=by_vessel,
+            fta_claimed=fta_claimed, preference_program=preference_program,
+            by_vessel=by_vessel, is_formal_entry=is_formal_entry,
         )
+        res.dataset_revision = self.revision
+        return res
+
+    def leaves_under(self, prefix8: str) -> list:
+        """Statistical lines beneath an 8-digit subheading, in schedule order."""
+        d = prefix8.replace(".", "")[:8]
+        return [ln for ln in self.tree.leaves if ln.digits.startswith(d)]

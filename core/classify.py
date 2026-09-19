@@ -159,6 +159,12 @@ def _search_rulings(conn: sqlite3.Connection, query: str, limit: int) -> list[sq
 _LEAF_CACHE: dict[str, dict | None] = {}
 
 
+def reset_caches() -> None:
+    """Forget resolved leaves. Called when the reference data changes, so a
+    code removed in a new edition cannot keep being suggested from memory."""
+    _LEAF_CACHE.clear()
+
+
 def _leaf_for(conn: sqlite3.Connection, code: str) -> dict | None:
     """Resolve a ruling's tariff reference to a 10-digit leaf line.
 
@@ -177,7 +183,8 @@ def _leaf_for(conn: sqlite3.Connection, code: str) -> dict | None:
     return _LEAF_CACHE[key]
 
 
-def retrieve(conn: sqlite3.Connection, query: str, *, limit: int = 8) -> list[Candidate]:
+def retrieve(conn: sqlite3.Connection, query: str, *, limit: int = 8,
+             exclude_rulings: frozenset[str] = frozenset()) -> list[Candidate]:
     """Rank candidate codes from CBP ruling precedent, refined by heading text.
 
     The correct heading appears somewhere in the ruling votes for ~99% of
@@ -203,6 +210,11 @@ def retrieve(conn: sqlite3.Connection, query: str, *, limit: int = 8) -> list[Ca
     seen_rulings: dict[str, set[str]] = {}
 
     for row in _search_rulings(conn, query, limit=120):
+        # Excluded rulings never vote. Evaluation depends on this: filtering the
+        # answer out of the results afterwards leaves its influence on the
+        # scores, which is how a held-out measurement gets contaminated.
+        if row["ruling_number"] in exclude_rulings:
+            continue
         # Score against the opening of the ruling as well as its subject. The
         # subject names the goods; the opening paragraphs describe them, which
         # is where material and construction — the facts classification turns
@@ -351,15 +363,18 @@ def _reason(query: str, cands: list[Candidate], api_key: str) -> tuple[list[Cand
 
 
 def classify(conn: sqlite3.Connection, query: str, *, limit: int = 8,
-             api_key: str | None = None) -> Classification:
-    cands = retrieve(conn, query, limit=limit)
+             api_key: str | None = None, use_reasoning: bool = True,
+             exclude_rulings: frozenset[str] = frozenset()) -> Classification:
+    """Rank candidate codes. `use_reasoning=False` guarantees the paid model is
+    never called, even when ANTHROPIC_API_KEY is set in the environment."""
+    cands = retrieve(conn, query, limit=limit, exclude_rulings=exclude_rulings)
     result = Classification(query=query, candidates=cands)
     if not cands:
         result.notes.append("No candidate headings matched. Describe the material, "
                             "function and form of the goods.")
         return result
 
-    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    key = (api_key or os.environ.get("ANTHROPIC_API_KEY")) if use_reasoning else None
     if not key:
         result.notes.append(
             "Ranked by CBP ruling precedent and heading text. Set ANTHROPIC_API_KEY "

@@ -13,12 +13,15 @@ fiscal year, so they are declared here as dated constants rather than inlined.
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from functools import lru_cache
 
 from core.ch99 import Ch99Rule, Effect
+from core.countries import country_code, require_country
 
 # --- FY2026 user fees (effective 2025-10-01) ---------------------------------
 MPF_RATE = Decimal("0.003464")
@@ -37,8 +40,9 @@ FEE_CONSTANTS_EFFECTIVE_THROUGH = date(2026, 9, 30)
 def fee_constants_stale(today: date | None = None) -> bool:
     return (today or date.today()) > FEE_CONSTANTS_EFFECTIVE_THROUGH
 
-# Column 2 ("other") applies to a small set of non-normal-trade-relations countries.
-COLUMN_2_COUNTRIES = {"cuba", "north korea", "russia", "belarus"}
+# Column 2 ("other") applies to a small set of non-normal-trade-relations
+# countries, held as ISO codes so every spelling of an origin reaches it.
+COLUMN_2_COUNTRIES = frozenset({"CU", "KP", "RU", "BY"})
 
 # Subchapter I of chapter 99 carries the tariffs imposed under IEEPA. The
 # Supreme Court held on 2026-02-20 that IEEPA confers no such authority, so
@@ -48,8 +52,18 @@ COLUMN_2_COUNTRIES = {"cuba", "north korea", "russia", "belarus"}
 IEEPA_PREFIX = "9903.01"
 IEEPA_STRUCK_DOWN = "2026-02-20"
 
-_AD_VALOREM = re.compile(r"([\d.]+)\s*%")
-_SPECIFIC = re.compile(r"([\d.]+)\s*(?:cents|¢)/\s*(\w+)", re.I)
+# Preference programs whose eligibility is a fixed set of origins (General
+# Note 3(c)(i)). A program absent from this table is one whose beneficiary
+# list is long or changes (GSP, AGOA, CBERA...): it is applied only when the
+# caller names it, and the result says eligibility was not checked.
+_PROGRAM_ORIGINS: dict[str, frozenset[str]] = {
+    **{c: frozenset({c}) for c in
+       ("AU", "BH", "CA", "CL", "CO", "IL", "JO", "JP", "KR", "MA", "MX",
+        "OM", "PA", "PE", "SG")},
+    "S": frozenset({"CA", "MX"}), "S+": frozenset({"CA", "MX"}),
+    "P": frozenset({"CR", "DO", "SV", "GT", "HN", "NI"}),
+    "P+": frozenset({"CR", "DO", "SV", "GT", "HN", "NI"}),
+}
 
 
 @dataclass
@@ -79,6 +93,12 @@ class DutyResult:
     warnings: list[str] = field(default_factory=list)
     scope_unverified: list[str] = field(default_factory=list)
     refundable: list[DutyComponent] = field(default_factory=list)
+    # Reasons the total omits something it should include. Empty means the
+    # figure is complete for the inputs given; it is never inferred from the
+    # absence of warnings, which are prose.
+    incomplete: list[str] = field(default_factory=list)
+    country_code: str = ""
+    dataset_revision: str = ""
 
     @property
     def refundable_amount(self) -> Decimal:
@@ -111,21 +131,145 @@ class DutyResult:
             "refundable_amount": float(self.refundable_amount),
             "warnings": self.warnings,
             "scope_unverified": self.scope_unverified,
+            "incomplete": self.incomplete,
+            "complete": not self.incomplete and not self.scope_unverified,
+            "country_code": self.country_code,
+            "dataset_revision": self.dataset_revision,
         }
 
 
-def parse_base_rate(cell: str) -> tuple[Decimal | None, str | None]:
-    """Parse an HTS rate cell. Returns (ad_valorem_pct, unhandled_specific_text)."""
+@dataclass(frozen=True)
+class ParsedRate:
+    """A rate cell taken apart, so nothing in it can be dropped unnoticed."""
+    pct: Decimal                       # ad valorem part; 0 when free
+    specific: tuple[str, ...] = ()     # quantity-based parts (need a quantity)
+    unparsed: bool = False             # some part was not understood
+    raw: str = ""
+
+
+@dataclass(frozen=True)
+class SpecialAlt:
+    rate: ParsedRate
+    programs: tuple[str, ...]          # empty: applies to any claimed program
+
+
+_PCT_PART = re.compile(r"^(\d+(?:\.\d+)?)(?:\s+(\d+)/(\d+))?\s*%$")
+_SPECIFIC_PART = re.compile(r"(?:\$\s*\d|\d[\d.]*\s*(?:¢|cents?))", re.I)
+_PLUS = re.compile(r"\s*\+\s*")
+_SPECIAL_ALT = re.compile(r"\s*([^()]+?)\s*\(([^()]*)\)\s*")
+
+
+def parse_rate(cell: str) -> ParsedRate:
+    """Parse one rate expression: 'Free', '5%', '$1/kg + 5%', '2 1/2%'.
+
+    Anything that is not plainly an ad valorem percentage is recorded, never
+    discarded: a quantity-based component lands in `specific`, and text the
+    grammar does not cover sets `unparsed`. The caller decides how to report
+    it; this function does not guess.
+    """
     s = (cell or "").strip()
     if not s or s.lower() == "free":
-        return Decimal("0"), None
-    m = _AD_VALOREM.search(s)
-    pct = Decimal(m.group(1)) if m else None
-    # Compound/specific duties (e.g. "5.5% + 12 cents/kg") need quantity data.
-    specific = s if _SPECIFIC.search(s) else None
-    if pct is None and specific is None:
-        return None, s
-    return (pct if pct is not None else Decimal("0")), specific
+        return ParsedRate(Decimal("0"), raw=s)
+    pct, specific, unparsed = Decimal("0"), [], False
+    for part in _PLUS.split(s):
+        m = _PCT_PART.match(part)
+        if m:
+            value = Decimal(m.group(1))
+            if m.group(2):
+                value += Decimal(m.group(2)) / Decimal(m.group(3))
+            pct += value
+        elif _SPECIFIC_PART.search(part):
+            specific.append(part)
+        else:
+            unparsed = True
+    return ParsedRate(pct, tuple(specific), unparsed, s)
+
+
+def parse_special(cell: str) -> list[SpecialAlt] | None:
+    """Parse a Column 1 Special cell into rate/program alternatives.
+
+    'Free (A,AU,KR)' is one alternative; '4% (KR) 5% (MX)' is two. A cell with
+    no parenthesised programs applies to whichever preference is claimed.
+    Returns None when the cell does not follow this shape.
+    """
+    s = (cell or "").strip()
+    if not s:
+        return []
+    if "(" not in s:
+        return [SpecialAlt(parse_rate(s), ())]
+    alts, pos = [], 0
+    for m in _SPECIAL_ALT.finditer(s):
+        if m.start() != pos:
+            return None
+        programs = tuple(p.strip() for p in m.group(2).split(",") if p.strip())
+        alts.append(SpecialAlt(parse_rate(m.group(1)), programs))
+        pos = m.end()
+    return alts if pos == len(s) and alts else None
+
+
+def parse_base_rate(cell: str) -> tuple[Decimal | None, str | None]:
+    """Compatibility view of parse_rate: (ad_valorem_pct, unhandled_text)."""
+    r = parse_rate(cell)
+    if r.unparsed and not r.specific and r.pct == 0:
+        return None, (cell or "").strip()
+    unhandled = " + ".join(r.specific) or ((cell or "").strip() if r.unparsed else None)
+    return r.pct, unhandled
+
+
+def select_preference(
+    special_cell: str, origin: str, program: str | None,
+) -> tuple[ParsedRate | None, str | None, list[str]]:
+    """Choose the Column 1 Special rate for a claimed preference.
+
+    Returns (rate, program_used, notes). A None rate means the preference could
+    not be applied and the caller must fall back to the general rate; the notes
+    explain why. Nothing is selected on a bare boolean: the cell is matched to
+    a named program, or to the one program that covers the origin.
+    """
+    alts = parse_special(special_cell)
+    if alts is None:
+        return None, None, [f"The special rate {special_cell!r} could not be "
+                            "interpreted, so the general rate was used."]
+    if not alts:
+        return None, None, ["This line has no special (preference) rate; "
+                            "the general rate was used."]
+
+    if program:
+        matches = [a for a in alts if not a.programs or program in a.programs]
+        if not matches:
+            return None, None, [f"Program {program} is not listed for this "
+                                "line; the general rate was used."]
+        eligible = _PROGRAM_ORIGINS.get(program)
+        if eligible is not None and origin not in eligible:
+            return None, None, [f"Program {program} does not cover this origin; "
+                                "the general rate was used."]
+        notes = []
+        if eligible is None:
+            notes.append(f"Eligibility of this origin under program {program} "
+                         "was asserted, not checked.")
+        return matches[0].rate, program, notes
+
+    generic = [a for a in alts if not a.programs]
+    if generic:
+        return generic[0].rate, None, []
+    hits = [(a, p) for a in alts for p in a.programs
+            if origin in _PROGRAM_ORIGINS.get(p, ())]
+    if not hits:
+        return None, None, ["No preference program listed for this line covers "
+                            "this origin; the general rate was used. Name a "
+                            "program if one applies."]
+    if len({(a.rate.pct, a.rate.specific) for a, _ in hits}) > 1:
+        return None, None, ["More than one preference program could apply with "
+                            "different rates; name the program. The general "
+                            "rate was used."]
+    return hits[0][0].rate, hits[0][1], []
+
+
+@lru_cache(maxsize=None)
+def _origin_key(name: str) -> str:
+    """ISO code for a country name; the lowercased text if it has none, so an
+    unrecognised name still compares literally rather than matching nothing."""
+    return country_code(name) or name.strip().lower()
 
 
 def applicable_ch99(
@@ -142,7 +286,7 @@ def applicable_ch99(
     is *never* applied silently — it is returned separately for verification.
     Applying them blindly is what produces four-figure effective duty rates.
     """
-    c = (country or "").strip().lower()
+    c = _origin_key(country or "")
     digits = hts.replace(".", "")
     prefixes = {digits[:8], digits[:6], digits[:4]}
 
@@ -152,7 +296,7 @@ def applicable_ch99(
     for r in rules:
         if r.suspended:
             continue
-        if r.countries and not any(x.lower() == c for x in r.countries):
+        if r.countries and not any(_origin_key(x) == c for x in r.countries):
             continue
         if r.base_refs:
             # Containment is directional: a reference covers this code only when
@@ -164,7 +308,7 @@ def applicable_ch99(
         elif scopes and r.hts in scopes:
             # Scope resolved from the Chapter 99 U.S. Notes.
             sc = scopes[r.hts]
-            if sc.countries and not any(x.lower() == c for x in sc.countries):
+            if sc.countries and not any(_origin_key(x) == c for x in sc.countries):
                 continue
             if sc.covers(hts):
                 applied.append(r)
@@ -181,6 +325,16 @@ def applicable_ch99(
     return applied, unscoped
 
 
+def _positive_value(entered_value: Decimal | float | str) -> Decimal:
+    try:
+        value = Decimal(str(entered_value))
+    except Exception as exc:
+        raise ValueError("entered value must be a number") from exc
+    if not value.is_finite() or value <= 0:
+        raise ValueError("entered value must be a positive amount")
+    return value
+
+
 def compute(
     *,
     hts: str,
@@ -192,30 +346,55 @@ def compute(
     ch99_rules: list[Ch99Rule] | None = None,
     scopes: dict | None = None,
     fta_claimed: bool = False,
+    preference_program: str | None = None,
     by_vessel: bool = True,
     is_formal_entry: bool = True,
 ) -> DutyResult:
-    value = Decimal(str(entered_value))
-    res = DutyResult(hts=hts, country=country, entered_value=value)
+    value = _positive_value(entered_value)
+    origin = require_country(country)
+    res = DutyResult(hts=hts, country=country, entered_value=value,
+                     country_code=origin)
+    program = (preference_program or "").strip().upper() or None
 
     # --- 1. base rate --------------------------------------------------------
-    if (country or "").strip().lower() in COLUMN_2_COUNTRIES:
+    parsed: ParsedRate | None = None
+    if origin in COLUMN_2_COUNTRIES:
         cell, label, authority = column2_rate_cell, "Column 2 duty", "HTSUS Column 2"
-    elif fta_claimed and special_rate_cell:
-        cell, label, authority = special_rate_cell, "FTA preferential duty", "HTSUS Column 1 Special"
+        if fta_claimed or program:
+            res.warnings.append(
+                "This origin is subject to Column 2 rates; a trade preference "
+                "cannot be applied.")
     else:
         cell, label, authority = base_rate_cell, "MFN duty", "HTSUS Column 1 General"
+        if fta_claimed or program:
+            chosen, used, notes = select_preference(special_rate_cell, origin, program)
+            res.warnings.extend(notes)
+            if chosen is not None:
+                parsed, cell = chosen, chosen.raw
+                label = "FTA preferential duty"
+                authority = ("HTSUS Column 1 Special"
+                             + (f" (program {used})" if used else ""))
+    if parsed is None:
+        parsed = parse_rate(cell)
 
-    pct, specific = parse_base_rate(cell)
-    if specific:
+    if not (cell or "").strip():
         res.warnings.append(
-            f"Base rate {cell!r} includes a specific or compound duty; "
-            "quantity data is required for an exact figure."
-        )
-    if pct is None:
-        res.warnings.append(f"Could not parse base rate {cell!r}.")
-        pct = Decimal("0")
+            "No rate of duty was found for this line, so no base duty is "
+            "included in the total.")
+        res.incomplete.append("rate_missing")
+    if parsed.specific:
+        res.warnings.append(
+            f"Base rate {cell!r} includes a quantity-based duty "
+            f"({'; '.join(parsed.specific)}) that needs quantity data. It is "
+            "NOT included in this total, which is therefore understated.")
+        res.incomplete.append("specific_duty_omitted")
+    if parsed.unparsed:
+        res.warnings.append(
+            f"Part of base rate {cell!r} could not be interpreted and is NOT "
+            "included in this total.")
+        res.incomplete.append("rate_unparsed")
 
+    pct = parsed.pct
     base_amount = (value * pct / 100).quantize(Decimal("0.01"))
     res.components.append(DutyComponent(label, pct, base_amount, cell or "Free", authority))
 
@@ -300,3 +479,23 @@ def compute(
         ))
 
     return res
+
+
+def entry_mpf(total_value: Decimal | float | str, *, entries: int = 1) -> DutyComponent:
+    """Merchandise Processing Fee for a catalogue, applied per entry.
+
+    The MPF floor and cap belong to an entry, not a product line: ten $100 lines
+    on one formal entry pay one minimum, not ten. A catalogue does not say how
+    its lines are grouped, so the caller states how many formal entries the
+    value is spread over (evenly), and the result says so.
+    """
+    total = Decimal(str(total_value))
+    if entries < 1:
+        raise ValueError("entries must be at least 1")
+    per_entry = total / entries
+    each = min(max((per_entry * MPF_RATE).quantize(Decimal("0.01")), MPF_MIN), MPF_MAX)
+    return DutyComponent(
+        "Merchandise Processing Fee" + (f" ({entries} formal entries)" if entries > 1 else ""),
+        MPF_RATE * 100, (each * entries).quantize(Decimal("0.01")),
+        f"0.3464% per entry (min ${MPF_MIN}, max ${MPF_MAX})", "19 CFR 24.23",
+    )

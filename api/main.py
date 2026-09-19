@@ -9,7 +9,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+import math
 import sys
+import threading
 import time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -24,9 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from api.security import (ANON_AUDIT_ITEMS, KEYED_AUDIT_ITEMS, MAX_TEXT,
                           clean_text, guard)
 from core.classify import classify as run_classify
-from core.duty import FEE_CONSTANTS_EFFECTIVE_THROUGH, fee_constants_stale
+from core.classify import reset_caches as reset_classify_caches
+from core.duty import (FEE_CONSTANTS_EFFECTIVE_THROUGH, entry_mpf,
+                       fee_constants_stale)
+from core.countries import UnknownCountry
 from core.engine import TariffEngine
-from store.db import connect, get_meta
+from core.hts import InvalidHts, NotStatisticalLine
+from store.db import connect, get_meta, index_coverage
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -77,14 +84,38 @@ async def unhandled(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal error"})
 
 _engine: TariffEngine | None = None
+_engine_lock = threading.Lock()
 
 
-def engine() -> TariffEngine:
+def _release_paths(release_dir: str) -> tuple[str, str]:
+    if release_dir:
+        base = Path(release_dir)
+        base = base if base.is_absolute() else ROOT / base
+        return str(base / "hts.json"), str(base / "chapter99.txt")
+    return (str(ROOT / "data" / "hts_2026.json"),
+            str(ROOT / "data" / "chapter99.txt"))
+
+
+def engine(conn) -> TariffEngine:
+    """The engine for the dataset the database currently serves.
+
+    The engine reads the schedule and Chapter 99 notes from files, the lookup
+    endpoints read the database, and a refresh replaces both. Comparing the
+    dataset revision on every call is what keeps them from disagreeing: the
+    first request after a refresh reloads the engine and clears the classifier's
+    caches, so no endpoint keeps answering from the previous edition.
+    """
     global _engine
-    if _engine is None:
-        _engine = TariffEngine(str(ROOT / "data" / "hts_2026.json"),
-                               str(ROOT / "data" / "chapter99.txt"))
-    return _engine
+    revision = get_meta(conn, "dataset_revision") or ""
+    current = _engine
+    if current is not None and current.revision == revision:
+        return current
+    with _engine_lock:
+        if _engine is None or _engine.revision != revision:
+            hts_path, notes_path = _release_paths(get_meta(conn, "release_dir") or "")
+            _engine = TariffEngine(hts_path, notes_path, revision=revision)
+            reset_classify_caches()
+        return _engine
 
 
 def db():
@@ -104,45 +135,80 @@ class QuoteRequest(BaseModel):
     # float was surfacing decimal.InvalidOperation to the caller.
     value: float = Field(..., gt=0, le=1e12, description="Entered value in USD")
     fta_claimed: bool = False
+    preference_program: str | None = Field(
+        None, max_length=8,
+        description="Special-rate program indicator (e.g. KR, S, AU) when a "
+                    "preference is claimed")
     by_vessel: bool = True
+    formal_entry: bool = True
 
 
 class CatalogItem(BaseModel):
+    # Structure is validated here; content (value, origin, code) is validated
+    # per line so one bad row is reported, not allowed to reject the request
+    # and silently drop its neighbours.
+    row: int | None = Field(None, ge=1, le=10_000_000,
+                            description="Caller's own row number, echoed back")
     sku: str = Field("", max_length=64)
-    description: str = Field(..., max_length=MAX_TEXT)
-    country: str = Field(..., max_length=MAX_TEXT)
-    value: float = Field(..., gt=0, le=1e12)
-    hts: str | None = Field(None, max_length=20)
+    description: str = Field("", max_length=2000)
+    country: str = Field("", max_length=2000)
+    value: float = 0.0
+    hts: str | None = Field(None, max_length=200)
 
 
 class AuditRequest(BaseModel):
     items: list[CatalogItem] = Field(..., min_length=1, max_length=KEYED_AUDIT_ITEMS)
+    entries: int = Field(
+        1, ge=1, le=100_000,
+        description="Formal entries the catalogue value is spread over; the "
+                    "MPF minimum and maximum apply to each entry")
+    by_vessel: bool = True
+    formal_entry: bool = True
+
+
+def _bad_request(exc: Exception) -> HTTPException:
+    return HTTPException(400, str(exc))
 
 
 # --------------------------------------------------------------------------- routes
 
 @app.get("/api/health")
 def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
-    """Liveness.
+    """Liveness, plus whether the data it serves is coherent.
 
-    Row counts, build timestamps and whether the reasoning layer is enabled are
-    operational detail: they tell an unauthenticated caller how complete the
-    data is and which code path a request will take. A keyed caller gets them;
-    everyone else gets liveness, which is all a health check needs.
+    Row counts, build timestamps, revisions and whether the reasoning layer is
+    enabled are operational detail: they tell an unauthenticated caller how
+    complete the data is and which code path a request will take. A keyed
+    caller gets them; everyone else gets liveness, which is all a health check
+    needs. Both report "degraded" if the precedent index is empty, since a
+    populated ruling table with an empty index looks healthy and is not.
     """
+    has_precedent = conn.execute("SELECT 1 FROM ruling_fts LIMIT 1").fetchone()
     if not keyed:
-        return {"status": "ok"}
+        return {"status": "ok" if has_precedent else "degraded"}
 
     counts = {
         t: conn.execute(f"SELECT count(*) c FROM {t}").fetchone()["c"]
         for t in ("hts", "ch99_rule", "ch99_scope", "ruling", "fr_document")
     }
+    coverage = index_coverage(conn)
+    index_complete = (coverage["rulings_indexed"] == coverage["rulings"]
+                      and coverage["hts_indexed"] == coverage["leaves"])
+    db_revision = get_meta(conn, "dataset_revision") or ""
+    loaded = _engine.revision if _engine is not None else None
     return {
-        "status": "ok",
+        "status": "ok" if index_complete else "degraded",
         "hts_edition": get_meta(conn, "hts_edition"),
         "built_at": get_meta(conn, "built_at"),
         "cross_ingested_at": get_meta(conn, "cross_ingested_at"),
+        "dataset_revision": db_revision,
+        "engine_revision": loaded,
+        # None until the first quote loads the engine; False means requests are
+        # about to reload it, or a reload failed.
+        "engine_current": None if loaded is None else loaded == db_revision,
         "counts": counts,
+        "index": coverage,
+        "index_complete": index_complete,
         "reasoning_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "fee_constants_stale": fee_constants_stale(),
         "fee_constants_effective_through": FEE_CONSTANTS_EFFECTIVE_THROUGH.isoformat(),
@@ -162,7 +228,10 @@ def hts_detail(code: str,
 
     quote = None
     if row["is_leaf"]:
-        quote = engine().quote(hts=code, country=country, value=value).as_dict()
+        try:
+            quote = engine(conn).quote(hts=code, country=country, value=value).as_dict()
+        except (InvalidOperation, ValueError) as exc:
+            raise _bad_request(exc) from exc
 
     rulings = conn.execute(
         """SELECT r.ruling_number, r.subject, r.ruling_date, r.revoked, r.url
@@ -225,22 +294,133 @@ def classify_endpoint(q: str = Query(..., min_length=3, max_length=MAX_TEXT),
 
 @app.post("/api/quote")
 def quote(req: QuoteRequest, conn=Depends(db), _=Depends(guard("cheap"))):
-    row = conn.execute("SELECT is_leaf FROM hts WHERE hts = ?", (req.hts,)).fetchone()
-    if not row:
-        raise HTTPException(404, f"HTS code {req.hts} not found")
-    if not row["is_leaf"]:
-        raise HTTPException(400, f"{req.hts} is not a 10-digit statistical line")
     try:
-        result = engine().quote(hts=req.hts, country=req.country, value=req.value,
-                                fta_claimed=req.fta_claimed, by_vessel=req.by_vessel)
-    except (InvalidOperation, ValueError) as exc:
+        result = engine(conn).quote(
+            hts=req.hts, country=req.country, value=req.value,
+            fta_claimed=req.fta_claimed,
+            preference_program=req.preference_program,
+            by_vessel=req.by_vessel, is_formal_entry=req.formal_entry)
+    except NotStatisticalLine as exc:
         raise HTTPException(400, str(exc)) from exc
+    except InvalidHts as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (InvalidOperation, ValueError) as exc:
+        raise _bad_request(exc) from exc
     return result.as_dict()
+
+
+# Primary status of an audited line, most serious first. `ready` is the only
+# state that means "priced, complete, and nothing to confirm".
+LINE_STATUSES = ("error", "unclassified", "not_processed", "incomplete",
+                 "scope_review", "suffix_review", "low_confidence", "ready")
+_PRICED = {"incomplete", "scope_review", "suffix_review", "low_confidence", "ready"}
+
+
+def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
+                req: AuditRequest) -> dict:
+    def refuse(status: str, code: str, message: str) -> dict:
+        return {**base, "status": status, "error_code": code, "error": message,
+                "review_reasons": [message], "warnings": [], "incomplete": [],
+                "scope_unverified": [], "suggested": [], "alternatives": []}
+
+    if not math.isfinite(item.value) or not (0 < item.value <= 1e12):
+        return refuse("error", "invalid_value", "Entered value must be a positive amount.")
+    if not item.country.strip():
+        return refuse("error", "invalid_country", "Country of origin is missing.")
+    if len(item.description) > MAX_TEXT:
+        return refuse("error", "description_too_long",
+                      f"Description is longer than {MAX_TEXT} characters.")
+
+    given = (item.hts or "").strip()
+    confidence, suggested, top = "given", [], None
+    if given:
+        hts = given
+    else:
+        if not item.description.strip():
+            return refuse("unclassified", "no_description",
+                          "No HTS code and no description to classify from.")
+        cls = run_classify(conn, item.description, limit=3)
+        if not cls.candidates:
+            return refuse("unclassified", "no_candidate",
+                          "Could not classify this product from its description.")
+        top = cls.candidates[0]
+        hts, confidence = top.hts, top.confidence
+        suggested = [c.as_dict() for c in cls.candidates]
+    base["hts"] = hts
+
+    try:
+        q = eng.quote(hts=hts, country=item.country, value=item.value,
+                      by_vessel=req.by_vessel, is_formal_entry=False)
+    except InvalidHts as exc:
+        return refuse("error", "invalid_code", str(exc))
+    except UnknownCountry as exc:
+        return refuse("error", "invalid_country", str(exc))
+    except (InvalidOperation, ValueError) as exc:
+        return refuse("error", "invalid_input", str(exc))
+    except Exception:
+        logging.exception("audit pricing failed for %r", hts)
+        return refuse("error", "pricing_failed", "Could not price this line.")
+
+    # A classified code is a subheading precedent points at plus whichever
+    # statistical suffix comes first in the schedule; the suffix was never
+    # decided. If sibling lines carry different rates, the price depends on a
+    # choice nobody made, so it is surfaced instead of presented as the answer.
+    alternatives: list[dict] = []
+    if top is not None:
+        siblings = eng.leaves_under(q.hts)
+        rates = {ln.hts: tuple(eng.tree.effective_rate_cell(ln.hts, col)[0]
+                               for col in ("general", "special", "other"))
+                 for ln in siblings}
+        if len(set(rates.values())) > 1:
+            alternatives = [
+                {"hts": ln.hts, "description": ln.description,
+                 "general_rate": rates[ln.hts][0]}
+                for ln in siblings if ln.hts != q.hts][:6]
+
+    triggers: list[tuple[str, str]] = []
+    if q.incomplete:
+        triggers.append(("incomplete",
+                         "The duty is understated: " + "; ".join(q.incomplete)))
+    if q.scope_unverified:
+        triggers.append(("scope_review",
+                         f"{len(q.scope_unverified)} trade-remedy heading(s) cover this "
+                         "origin and need scope verification."))
+    if alternatives:
+        triggers.append(("suffix_review",
+                         "Sibling statistical lines carry different rates; the "
+                         "10-digit suffix was not determined."))
+    if confidence == "low":
+        triggers.append(("low_confidence", "Low-confidence classification."))
+
+    return {
+        **base,
+        "confidence": confidence,
+        "status": triggers[0][0] if triggers else "ready",
+        "review_reasons": [t[1] for t in triggers],
+        "warnings": q.warnings,
+        "incomplete": q.incomplete,
+        "entered_value": float(q.entered_value),
+        "duty": float(q.total_duty),
+        "effective_rate_pct": float(q.effective_rate_pct),
+        "refundable": float(q.refundable_amount),
+        "scope_unverified": q.scope_unverified,
+        "suggested": suggested,
+        "alternatives": alternatives,
+    }
 
 
 @app.post("/api/audit")
 def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audit"))):
     """Score a product catalogue: duty owed, refundable duty, and gaps.
+
+    Every submitted row comes back, with a status and the reasons for it. A row
+    that could not be priced, or whose price is incomplete or unconfirmed, is
+    reported as such and counted as unresolved; it is never dropped, and totals
+    say whether they are complete.
+
+    Line duty covers the duty stack and the Harbor Maintenance Fee. The
+    Merchandise Processing Fee belongs to an entry, not a line, so it is
+    computed once over the catalogue for the stated number of entries.
 
     Classification costs ~175 ms per item, so an unbounded catalogue is a
     denial-of-service rather than a feature: 5,000 items occupied a worker for
@@ -257,66 +437,74 @@ def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audi
                "Supply an API key in X-API-Key to raise the limit."),
         )
 
-    eng, lines = engine(), []
-    total_value = total_duty = total_refundable = Decimal("0")
-    unclassified = flagged = 0
+    eng = engine(conn)
+    lines: list[dict] = []
     started = time.monotonic()
     truncated = False
 
-    for item in req.items:
+    for idx, item in enumerate(req.items):
+        base = {"row": item.row if item.row is not None else idx + 1,
+                "sku": item.sku, "description": item.description,
+                "country": item.country, "hts": (item.hts or None)}
         if time.monotonic() - started > AUDIT_BUDGET_SECONDS:
             truncated = True
-            break
-
-        hts, confidence, suggested = item.hts, "given", []
-        if not hts:
-            cls = run_classify(conn, item.description, limit=3)
-            if cls.candidates:
-                hts = cls.candidates[0].hts
-                confidence = cls.candidates[0].confidence
-                suggested = [c.as_dict() for c in cls.candidates]
-            else:
-                unclassified += 1
-                lines.append({"sku": item.sku, "description": item.description,
-                              "hts": None, "error": "could not classify"})
-                continue
-
-        try:
-            q = eng.quote(hts=hts, country=item.country, value=item.value)
-        except Exception:
-            lines.append({"sku": item.sku, "hts": hts,
-                          "error": "could not price this line"})
+            msg = "Not processed: the time budget for one request was reached."
+            lines.append({**base, "status": "not_processed",
+                          "error_code": "not_processed", "error": msg,
+                          "review_reasons": [msg], "warnings": [],
+                          "incomplete": [], "scope_unverified": [],
+                          "suggested": [], "alternatives": []})
             continue
+        lines.append(_audit_line(conn, eng, item, base, req))
 
-        total_value += q.entered_value
-        total_duty += q.total_duty
-        total_refundable += q.refundable_amount
-        if q.scope_unverified:
-            flagged += 1
-        lines.append({
-            "sku": item.sku, "description": item.description, "hts": hts,
-            "confidence": confidence, "country": item.country,
-            "entered_value": float(q.entered_value),
-            "duty": float(q.total_duty),
-            "effective_rate_pct": float(q.effective_rate_pct),
-            "refundable": float(q.refundable_amount),
-            "scope_unverified": q.scope_unverified,
-            "suggested": suggested,
-        })
+    priced = [ln for ln in lines if ln["status"] in _PRICED]
+    total_value = sum((Decimal(str(ln["entered_value"])) for ln in priced), Decimal("0"))
+    duty_lines = sum((Decimal(str(ln["duty"])) for ln in priced), Decimal("0"))
+    refundable = sum((Decimal(str(ln["refundable"])) for ln in priced), Decimal("0"))
+    mpf = (entry_mpf(total_value, entries=req.entries)
+           if req.formal_entry and total_value > 0 else None)
+    duty_total = duty_lines + (mpf.amount if mpf else Decimal("0"))
+
+    by_status = {st: sum(1 for ln in lines if ln["status"] == st) for st in LINE_STATUSES}
+    unresolved = sum(n for st, n in by_status.items() if st != "ready")
+
+    assumptions = [
+        (f"The priced value is spread over {req.entries} formal "
+         f"entr{'y' if req.entries == 1 else 'ies'}; the Merchandise Processing "
+         "Fee minimum and maximum apply to each entry."
+         if req.formal_entry else "Informal entry assumed: no Merchandise Processing Fee."),
+        ("Vessel shipment assumed: Harbor Maintenance Fee applied."
+         if req.by_vessel else "Non-vessel shipment: no Harbor Maintenance Fee."),
+        "Preference programs and quantity-based duties are not modelled here; "
+        "lines that carry a quantity-based rate are flagged as incomplete.",
+    ]
+    if fee_constants_stale():
+        assumptions.append(
+            "User-fee constants are past their fiscal-year boundary and have "
+            "not been re-verified.")
 
     return {
         "summary": {
-            "items": len(lines),
             "submitted": len(req.items),
+            "items": len(lines),
+            "processed": len(lines) - by_status["not_processed"],
+            "priced": len(priced),
+            "unresolved": unresolved,
+            "by_status": by_status,
             "truncated": truncated,
+            "totals_complete": unresolved == 0 and not truncated,
             "entered_value": float(total_value),
-            "duty": float(total_duty),
+            "duty_and_hmf": float(duty_lines),
+            "mpf": float(mpf.amount) if mpf else 0.0,
+            "duty": float(duty_total),
             "effective_rate_pct": float(
-                (total_duty / total_value * 100).quantize(Decimal("0.01"))
+                (duty_total / total_value * 100).quantize(Decimal("0.01"))
                 if total_value else 0),
-            "potentially_refundable": float(total_refundable),
-            "unclassified": unclassified,
-            "needs_scope_review": flagged,
+            "potentially_refundable": float(refundable),
+            "unclassified": by_status["unclassified"],
+            "needs_scope_review": by_status["scope_review"],
+            "assumptions": assumptions,
+            "dataset_revision": eng.revision,
         },
         "lines": lines,
     }
@@ -336,11 +524,17 @@ def ruling(number: str, conn=Depends(db), _=Depends(guard("cheap"))):
     return d
 
 
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
 @app.get("/api/changes")
 def changes(days: int = Query(90, ge=1, le=3650),
             since: str | None = Query(None,
-                description="ISO date; overrides days and returns oldest-first, "
-                            "for a caller paging forward from a cursor"),
+                description="ISO date, inclusive; overrides days and returns "
+                            "oldest-first for a caller paging forward"),
+            cursor: str | None = Query(None,
+                description="Opaque position from a previous response's "
+                            "next_cursor; continues strictly after it"),
             limit: int = Query(50, ge=1, le=2000),
             all_documents: bool = Query(False,
                 description="Include documents that merely mention a tariff term"),
@@ -351,11 +545,29 @@ def changes(days: int = Query(90, ge=1, le=3650),
     notifications, agency meeting notices and, observed in practice, a
     mushroom council membership adjustment. Only scored tariff actions are
     returned by default.
+
+    Paging forward is by (publication_date, document_number), not date alone:
+    a page that ends part-way through a date would otherwise strand the rest of
+    that date's documents behind the cursor forever. `since` is inclusive so a
+    caller can re-read a lookback window for documents ingested late; the
+    consumer deduplicates by document number.
     """
-    if since:
-        where, params, order = "publication_date > ?", [since], "ASC"
+    order_cols = "publication_date, document_number"
+    if cursor or since:
+        order = "ASC"
+        if cursor:
+            date_part, _, num_part = cursor.partition("|")
+            if not _ISO_DATE.match(date_part) or not num_part:
+                raise HTTPException(400, "cursor is not valid")
+            where = "(publication_date, document_number) > (?, ?)"
+            params: list = [date_part, num_part]
+        else:
+            if not _ISO_DATE.match(since):
+                raise HTTPException(400, "since must be an ISO date (YYYY-MM-DD)")
+            where, params = "publication_date >= ?", [since]
     else:
-        where, params, order = "publication_date >= date('now', ?)", [f"-{days} days"], "DESC"
+        order = "DESC"
+        where, params = "publication_date >= date('now', ?)", [f"-{days} days"]
     if not all_documents:
         where += " AND tariff_action = 1"
 
@@ -368,7 +580,8 @@ def changes(days: int = Query(90, ge=1, le=3650),
                    abstract, hts_mentions, tariff_action
               FROM fr_document
              WHERE {where}
-             ORDER BY publication_date {order} LIMIT ?""",
+             ORDER BY {", ".join(f"{c} {order}" for c in order_cols.split(", "))}
+             LIMIT ?""",
         (*params, limit),
     ).fetchall()
 
@@ -378,7 +591,15 @@ def changes(days: int = Query(90, ge=1, le=3650),
         d["hts_mentions"] = json.loads(d.get("hts_mentions") or "[]")
         d["tariff_action"] = bool(d["tariff_action"])
         out.append(d)
-    return {"days": days, "count": len(out), "changes": out}
+    last = out[-1] if out else None
+    return {
+        "days": days,
+        "count": len(out),
+        "has_more": len(out) == limit,
+        "next_cursor": (f"{last['publication_date']}|{last['document_number']}"
+                        if last else None),
+        "changes": out,
+    }
 
 
 @app.get("/api/sitemap")
