@@ -29,10 +29,10 @@ let app = await startApp({
   env: { ...baseEnv, RESEND_API_KEY: "re_test", RESEND_API_URL: "http://127.0.0.1:3242/emails" },
 });
 let db = app.db();
-await seedAccount(db, { id: "paid", plan: "growth" });
-await seedAccount(db, { id: "paid2", plan: "starter" });
-await seedAccount(db, { id: "free", plan: "free" });
-await seedAccount(db, { id: "quiet", plan: "growth", alertEmails: 0 });
+await seedAccount(db, { id: "acct" });
+await seedAccount(db, { id: "acct2" });
+await seedAccount(db, { id: "acct3" });
+await seedAccount(db, { id: "quiet", alertEmails: 0 });
 
 async function addAlert(account, n, extra = {}) {
   const id = crypto.randomUUID();
@@ -58,7 +58,7 @@ const { check, finish } = suite();
 try {
   await check("a provider outage keeps the alerts queued and records the attempt", async () => {
     await reset();
-    await addAlert("paid", "a1"); await addAlert("paid", "a2");
+    await addAlert("acct", "a1"); await addAlert("acct", "a2");
     mail.mode = "fail";
     const r = await deliver();
     assert.equal(r.failed, 1);
@@ -87,9 +87,9 @@ try {
 
   await check("only the alerts in the digest are stamped, not one inserted mid-send", async () => {
     await reset();
-    await addAlert("paid", "b1");
+    await addAlert("acct", "b1");
     let late;
-    mail.onMessage = async () => { late = await addAlert("paid", "b2-late"); };
+    mail.onMessage = async () => { late = await addAlert("acct", "b2-late"); };
     const r = await deliver();
     assert.equal(r.sent, 1);
     assert.doesNotMatch(mail.sent[0].text, /b2-late/);
@@ -106,18 +106,18 @@ try {
 
   await check("concurrent runs send each account's batch once", async () => {
     await reset();
-    for (const acct of ["paid", "paid2"]) for (const n of ["c1", "c2", "c3"]) await addAlert(acct, `${acct}-${n}`);
+    for (const acct of ["acct", "acct2"]) for (const n of ["c1", "c2", "c3"]) await addAlert(acct, `${acct}-${n}`);
     mail.delayMs = 400;
     const [x, y] = await Promise.all([deliver(), deliver()]);
     assert.equal(mail.sent.length, 2, `one digest per account, got ${mail.sent.map((m) => m.to)}`);
-    assert.deepEqual(mail.sent.map((m) => m.to).sort(), ["paid2@example.test", "paid@example.test"]);
+    assert.deepEqual(mail.sent.map((m) => m.to).sort(), ["acct2@example.test", "acct@example.test"]);
     assert.equal(x.sent + y.sent, 2);
     assert.ok((await alerts()).every((a) => a.emailed_at && a.email_status === "sent"));
   });
 
   await check("a claim held by a live run is left alone; a stale one is taken over", async () => {
     await reset();
-    const id = await addAlert("paid", "s1");
+    const id = await addAlert("acct", "s1");
     await db.execute({
       sql: "UPDATE alert SET email_claim='other-run', email_claimed_at=? WHERE id=?",
       args: [new Date().toISOString(), id],
@@ -133,7 +133,7 @@ try {
 
   await check("delivery is abandoned after five failed attempts and says so", async () => {
     await reset();
-    await addAlert("paid", "f1");
+    await addAlert("acct", "f1");
     mail.mode = "fail";
     for (let i = 1; i <= 4; i++) {
       const r = await deliver();
@@ -151,17 +151,32 @@ try {
     assert.match(app.log(), /abandoned after 5 attempts/);
   });
 
-  await check("plan and opt-out skips are stamped and distinguishable from failures", async () => {
+  await check("every account is emailed; an opt-out is stamped and distinguishable from a failure", async () => {
     await reset();
-    await addAlert("free", "p1"); await addAlert("quiet", "q1");
+    await addAlert("acct3", "p1"); await addAlert("quiet", "q1");
     const r = await deliver();
-    assert.equal(r.skippedNoPlan, 1);
+    assert.equal(r.sent, 1, "an account is emailed with no plan of any kind");
     assert.equal(r.skippedOptedOut, 1);
     assert.equal(r.failed, 0);
+    assert.equal("skippedNoPlan" in r, false, "there is no plan skip any more");
     const by = Object.fromEntries((await alerts()).map((a) => [a.document_number, a]));
-    assert.equal(by.p1.email_status, "skipped_plan");
+    assert.equal(by.p1.email_status, "sent");
     assert.equal(by.q1.email_status, "skipped_opt_out");
     assert.ok(by.p1.emailed_at && by.q1.emailed_at);
+    assert.deepEqual(mail.sent.map((m) => m.to), ["acct3@example.test"]);
+  });
+
+  await check("a legacy skipped_plan alert stays as history and is not sent again", async () => {
+    await reset();
+    const id = await addAlert("acct3", "old1");
+    await db.execute({
+      sql: "UPDATE alert SET emailed_at = ?, email_status = 'skipped_plan' WHERE id = ?",
+      args: [new Date().toISOString(), id],
+    });
+    const r = await deliver();
+    assert.equal(r.accountsConsidered, 0);
+    const [a] = await alerts();
+    assert.equal(a.email_status, "skipped_plan", "history is not rewritten");
     assert.equal(mail.sent.length, 0);
   });
 
@@ -172,7 +187,7 @@ try {
 
   await check("with no provider configured alerts are stamped as skipped, not replayed later", async () => {
     await reset();
-    await addAlert("paid", "n1");
+    await addAlert("acct", "n1");
     const r = await deliver();
     assert.equal(r.provider, "none");
     assert.equal(r.skippedNoProvider, 1);

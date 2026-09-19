@@ -20,7 +20,6 @@ const NAV = [
   { href: "/calculator", label: "Duty calculator" },
   { href: "/changes", label: "Tariff changes" },
   { href: "/audit", label: "Catalogue audit" },
-  { href: "/pricing", label: "Pricing" },
 ];
 
 const SIGNED_IN_NAV = [
@@ -59,8 +58,8 @@ export default async function RootLayout({
         >
           Skip to main content
         </a>
-        <header className="border-b border-border">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
+        <header className="site-header">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 sm:px-8">
             <Link href="/" aria-label="HTSDesk home">
               <Lockup />
             </Link>
@@ -70,9 +69,6 @@ export default async function RootLayout({
             <div className="ml-auto flex items-center gap-4 text-[14px]">
               {viewer ? (
                 <>
-                  <span className="mono hidden text-[12px] sm:inline text-faint">
-                    {viewer.plan.name}
-                  </span>
                   <NavLink href="/account">Account</NavLink>
                 </>
               ) : (
@@ -80,7 +76,7 @@ export default async function RootLayout({
                   <NavLink href="/login">Sign in</NavLink>
                   <Link
                     href="/signup"
-                    className="px-3 py-1.5 font-medium bg-accent text-on-accent"
+                    className="btn btn-primary"
                   >
                     Start free
                   </Link>
@@ -90,12 +86,12 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-8">
+        <main id="main" tabIndex={-1} className="workspace-main mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
           {children}
         </main>
 
         <footer className="mt-16 px-4 py-8 text-[13px] border-t border-border text-faint">
-          <div className="mx-auto max-w-6xl space-y-2">
+          <div className="mx-auto max-w-7xl space-y-2">
             <p>
               Rates are derived from the USITC Harmonized Tariff Schedule, the
               Chapter 99 U.S. Notes and the Federal Register.

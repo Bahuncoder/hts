@@ -24,8 +24,7 @@ export type AuditEvent =
   | "catalogue_saved"
   | "catalogue_deleted"
   | "catalogue_exported"
-  | "alert_emails_changed"
-  | "plan_changed";
+  | "alert_emails_changed";
 
 export async function audit(
   event: AuditEvent,

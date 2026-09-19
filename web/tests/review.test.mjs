@@ -34,7 +34,7 @@ const app = await startApp({ port: 3311, env });
 const db = app.db();
 
 async function session(id) {
-  await seedAccount(db, { id, plan: "growth" });
+  await seedAccount(db, { id });
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
     args: [token, id, new Date(Date.now() + 3_600_000).toISOString()] });
@@ -83,6 +83,10 @@ async function finishRun(p, before) {
   await p.locator('[data-testid="reconciliation"]').waitFor({ timeout: 20000 });
 }
 async function runOn(p, text) {
+  // This suite runs far more audits than one account may in an hour (10), so
+  // each run starts from a clean budget. The budgets themselves are tested in
+  // audit.test.mjs.
+  await db.execute("DELETE FROM usage_event");
   const before = engine.calls.length;
   await p.fill("textarea", text);
   await p.getByRole("button", { name: "Run audit" }).click();
@@ -143,7 +147,7 @@ try {
     const marks = await page.getByText("Partial: 7 lines unresolved").count();
     assert.ok(marks >= 3, `expected the marker on entered value, duty and refundable; found ${marks}`);
     // Beside the amount: same block as the figure, not a footnote.
-    const card = page.locator("div.rounded-lg", { hasText: "Entered value" }).first();
+    const card = page.getByRole("group", { name: "Entered value", exact: true });
     assert.match(await card.innerText(), /\$\d[\d,.]*[\s\S]*Partial: 7 lines unresolved/);
     assert.match(await body(), /Reference data revision:\s*test-rev-1/i);
   });
@@ -205,7 +209,7 @@ try {
     assert.match(await body(), /Vessel shipment assumed/);
     await page.locator("details", { hasText: /^Assumptions: 1 formal entry/ }).locator("summary").click();
     await page.fill('input[type="number"]', "3");
-    await page.selectOption("select", "air");
+    await page.getByLabel("Transport", { exact: true }).selectOption("air");
     const n = engine.calls.length;
     await page.getByRole("button", { name: "Run audit" }).click();
     await finishRun(page, n);
@@ -227,7 +231,7 @@ try {
 
   await check("a changed catalogue is flagged against results from the earlier text", async () => {
     await page.fill("textarea", "sku,description,country,value\nS-2,another shirt,China,5");
-    assert.match(await body(), /You have changed the catalogue since this audit/);
+    assert.match(await body(), /You have changed the catalogue or shipping assumptions since this audit/);
   });
 
   await check("a failed re-run keeps the previous result and never leaves the button busy", async () => {
@@ -249,18 +253,17 @@ try {
     await page.unroute("**/api/audit");
   });
 
-  await check("a 1,000-line catalogue is paged, 100 at a time", async () => {
+  await check("a 200-line catalogue (the account ceiling) is paged, 100 at a time", async () => {
     const rows = ["sku,description,country,value"];
-    for (let i = 1; i <= 250; i++) rows.push(`P-${i},${i % 7 === 0 ? "scope " : ""}item ${i},China,${i}`);
+    for (let i = 1; i <= 200; i++) rows.push(`P-${i},${i % 7 === 0 ? "scope " : ""}item ${i},China,${i}`);
     await runAudit(rows.join("\n"));
     assert.equal(await rowsOf().count(), 100);
-    assert.match(await body(), /Lines 1–100 of 250/);
+    assert.match(await body(), /Lines 1–100 of 200/);
     await page.getByRole("button", { name: "Next" }).click();
-    assert.match(await body(), /Lines 101–200 of 250/);
-    await page.getByRole("button", { name: "Next" }).click();
-    assert.equal(await rowsOf().count(), 50);
+    assert.match(await body(), /Lines 101–200 of 200/);
+    assert.equal(await rowsOf().count(), 100);
     await page.getByRole("button", { name: /^Needs review \(/ }).click();
-    assert.match(await body(), /Lines 1–35 of 35|35 shown|of 35/, "the page resets when the filter changes");
+    assert.match(await body(), /Lines 1–28 of 28|28 shown|of 28/, "the page resets when the filter changes");
   });
 
   await check("upload is keyboard-operable with a visible focus ring", async () => {
@@ -279,7 +282,7 @@ try {
   });
 
   await check("the textarea is labelled", async () => {
-    assert.equal(await page.getByLabel("Your catalogue").count(), 1);
+    assert.equal(await page.getByRole("textbox", { name: "Your catalogue", exact: true }).count(), 1);
   });
 
   await check("the audit CSV has Row, Status and Review notes, keeps every line, and is formula-safe", async () => {
@@ -416,28 +419,63 @@ try {
     assert.equal(after, before, "nothing was saved");
   });
 
-  await check("a save that exceeds the plan ceiling counts submitted lines, failures included", async () => {
-    const tok = await session("freebie");
-    await db.execute({ sql: "UPDATE subscription SET plan='free' WHERE account_id='freebie'" });
+  await check("a save that exceeds the 200-product ceiling counts submitted lines, failures included", async () => {
+    const tok = await session("ceiling");
     const { ctx: c2, page: p2 } = await newPage(app.base, tok);
     try {
       await p2.goto(`${app.base}/audit`, { waitUntil: "networkidle" });
       const rows = ["sku,description,country,value"];
-      for (let i = 1; i <= 25; i++) rows.push(`F-${i},${i <= 20 ? "noclass" : "shirt"},China,${i}`);
+      for (let i = 1; i <= 200; i++) rows.push(`F-${i},${i <= 150 ? "noclass" : "shirt"},China,${i}`);
       await runOn(p2, rows.join("\n"));
-      await p2.fill('input[placeholder*="Autumn"]', "Free five");
+      await p2.fill('input[placeholder*="Autumn"]', "At the ceiling");
       await Promise.all([
         p2.waitForURL(/\/catalogues\/[0-9a-f-]{36}/, { timeout: 15000 }),
         p2.getByRole("button", { name: "Save and watch these codes" }).click(),
       ]);
       const id = p2.url().split("/").pop();
       const n = (await db.execute({ sql: "SELECT count(*) AS n FROM catalogue_item WHERE catalogue_id=?", args: [id] })).rows[0].n;
-      assert.equal(n, 25, "at the ceiling (25): unresolved lines count and are saved");
+      assert.equal(n, 200, "at the ceiling (200): unresolved lines count and are saved");
       await p2.goto(`${app.base}/audit`, { waitUntil: "networkidle" });
-      rows.push("F-26,shirt,China,26");
+      rows.push("F-201,shirt,China,201");
+      const before = engine.calls.length;
       await p2.fill("textarea", rows.join("\n"));
-      await p2.getByRole("button", { name: "Run audit" }).click();
-      await p2.getByRole("alert").filter({ hasText: /26 products exceeds the 25/ }).waitFor({ timeout: 15000 });
+      // One over the ceiling: the page says so and will not send it (the
+      // server refuses it too: audit.test.mjs).
+      await p2.getByText(/more than the 200 products one audit takes/).waitFor({ timeout: 15000 });
+      assert.equal(await p2.getByRole("button", { name: "Run audit" }).isDisabled(), true);
+      assert.equal(engine.calls.length, before, "nothing over the ceiling reaches the engine");
+    } finally { await c2.close(); }
+  });
+
+  await check("an account holds at most 20 saved catalogues, with a clear message", async () => {
+    const tok = await session("collector");
+    const now = new Date().toISOString();
+    for (let i = 0; i < 20; i++) {
+      await db.execute({ sql: "INSERT INTO catalogue(id, account_id, name, created_at, updated_at) VALUES(?,?,?,?,?)",
+        args: [`held-${i}`, "collector", `Held ${i}`, now, now] });
+    }
+    const { ctx: c2, page: p2 } = await newPage(app.base, tok);
+    const count = async (acct) => (await db.execute({ sql: "SELECT count(*) AS n FROM catalogue WHERE account_id=?", args: [acct] })).rows[0].n;
+    try {
+      await p2.goto(`${app.base}/audit`, { waitUntil: "networkidle" });
+      await runOn(p2, "sku,description,country,value\nC-1,shirt,China,100");
+      await p2.fill('input[placeholder*="Autumn"]', "Twenty-first");
+      await p2.getByRole("button", { name: "Save and watch these codes" }).click();
+      await p2.locator('p[role="alert"]').waitFor({ timeout: 10000 });
+      assert.equal(await p2.locator('p[role="alert"]').innerText(),
+        "You have 20 saved catalogues. Delete one to save another.");
+      assert.equal(await count("collector"), 20, "nothing was saved past the cap");
+      assert.equal((await db.execute("SELECT count(*) AS n FROM catalogue WHERE name='Twenty-first'")).rows[0].n, 0);
+
+      // Another account is unaffected, and deleting one frees a slot.
+      assert.equal(await count("reviewer") < 20, true);
+      await db.execute("DELETE FROM catalogue WHERE id='held-0'");
+      await Promise.all([
+        p2.waitForURL(/\/catalogues\/[0-9a-f-]{36}/, { timeout: 15000 }),
+        p2.getByRole("button", { name: "Save and watch these codes" }).click(),
+      ]);
+      assert.equal(await count("collector"), 20);
+      assert.equal((await db.execute("SELECT count(*) AS n FROM catalogue WHERE name='Twenty-first'")).rows[0].n, 1);
     } finally { await c2.close(); }
   });
 
@@ -519,7 +557,7 @@ const db2 = app2.db();
 const browser2 = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
 try {
   const tok = crypto.randomBytes(16).toString("hex");
-  await seedAccount(db2, { id: "nosign", plan: "growth" });
+  await seedAccount(db2, { id: "nosign" });
   await db2.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
     args: [tok, "nosign", new Date(Date.now() + 3_600_000).toISOString()] });
   const c = await browser2.newContext();

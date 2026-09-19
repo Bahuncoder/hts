@@ -2,7 +2,7 @@
  *  example, not a name — and helper text is tied to the control through
  *  `aria-describedby` (`${id}-hint`) by the caller. */
 export const inputClass =
-  "w-full rounded-md border px-3 py-2 text-[15px] border-border bg-paper text-ink";
+  "field-control";
 
 export function Field({
   id,

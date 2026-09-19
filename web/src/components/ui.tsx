@@ -9,7 +9,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-lg border p-5 ${className} border-border bg-surface`}
+      className={`panel p-5 sm:p-6 ${className}`}
     >
       {children}
     </div>
@@ -83,10 +83,10 @@ export function Stat({
           : "var(--ink)";
   return (
     <div>
-      <div className="text-[12px] uppercase tracking-wide text-muted">
+      <div className="lbl">
         {label}
       </div>
-      <div className="tabular mt-1 text-2xl font-semibold" style={{ color }}>
+      <div className="mono mt-2 text-2xl font-medium" style={{ color }}>
         {value}
       </div>
       {flag ? (

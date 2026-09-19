@@ -7,15 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:integration": "node tests/billing.test.mjs && node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs",
+    "test:integration": "node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/retired.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs",
     "test:review": "node tests/review.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
     "next": "16.3.5",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "stripe": "^22.5.0"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -3,7 +3,7 @@ export const metadata = {
   description: "What HTSDesk collects, why, and how long it is kept.",
 };
 
-const UPDATED = "26 August 2026";
+const UPDATED = "19 September 2026";
 
 export default function PrivacyPage() {
   return (
@@ -33,9 +33,8 @@ export default function PrivacyPage() {
           this as commercially sensitive — we do.
         </p>
         <p>
-          <strong>Billing.</strong> Handled by Stripe. Card details go to Stripe
-          and never reach our servers; we keep your Stripe customer id, your
-          plan and its status.
+          <strong>Payment.</strong> None. HTSDesk is free during its beta, so we
+          collect no card or payment details.
         </p>
         <p>
           <strong>Operational logs.</strong> Ordinary web server logs, including
@@ -58,8 +57,7 @@ export default function PrivacyPage() {
 
       <Section title="Who else sees it">
         <p>
-          Stripe, for payment processing. Our hosting and email providers, as
-          processors. Nobody else, unless we are legally compelled — in which
+          Our hosting and email providers, as processors. Nobody else, unless we are legally compelled — in which
           case we will tell you where we are permitted to.
         </p>
         <p>
@@ -72,8 +70,7 @@ export default function PrivacyPage() {
           Catalogues and watched codes stay until you delete them or close your
           account. Deleting a catalogue removes its items and the watches it
           created. Closing your account deletes the account, its catalogues,
-          watches and alerts; billing records are retained as long as tax law
-          requires.
+          watches and alerts.
         </p>
       </Section>
 

@@ -15,7 +15,7 @@ const app = await startApp({
   env: { HTSDESK_API: "http://127.0.0.1:3231", HTSDESK_API_KEY: "engine-key" },
 });
 const db = app.db();
-await seedAccount(db, { id: "watcher", plan: "growth" });
+await seedAccount(db, { id: "watcher" });
 await db.execute({
   sql: "INSERT INTO watched_code(account_id,digits,hts,catalogue_id,created_at) VALUES(?,?,?,NULL,?)",
   args: ["watcher", "2804610000", "2804.61.00.00", new Date().toISOString()],
@@ -39,7 +39,7 @@ const { check, finish } = suite();
 try {
   await check("a first run with no stored position starts recently, not at the beginning of time", async () => {
     // A new install, or one whose cursor was lost, must not alert every
-    // watcher about all of history (and email paid accounts a digest of it).
+    // watcher about all of history (and email them a digest of it).
     const recent = new Date(Date.now() - 5 * 864e5).toISOString().slice(0, 10);
     engine.state.docs = [doc("old1", "2025-01-01"), doc("new1", recent)];
     const r = await run();

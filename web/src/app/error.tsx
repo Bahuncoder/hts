@@ -15,8 +15,8 @@ export default function ErrorPage({
   retry: () => void;
 }) {
   return (
-    <div role="alert" className="max-w-xl space-y-4">
-      <h1 className="text-3xl font-semibold tracking-tight">
+    <div role="alert" className="panel mx-auto max-w-xl space-y-4 p-6 sm:p-9">
+      <h1 className="serif text-4xl tracking-tight">
         Something went wrong
       </h1>
       <p className="text-muted">
@@ -27,7 +27,7 @@ export default function ErrorPage({
         <button
           type="button"
           onClick={() => retry()}
-          className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-on-accent"
+          className="btn btn-primary"
         >
           Try again
         </button>

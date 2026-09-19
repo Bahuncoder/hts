@@ -3,7 +3,7 @@ export const metadata = {
   description: "The terms on which HTSDesk is provided.",
 };
 
-const UPDATED = "26 August 2026";
+const UPDATED = "19 September 2026";
 
 export default function TermsPage() {
   return (
@@ -68,29 +68,24 @@ export default function TermsPage() {
         <p>
           You are responsible for activity under your account and for keeping
           your password secure. Tell us promptly if you believe it has been
-          compromised. Do not share one account across people beyond the seats
-          your plan includes.
+          compromised. Do not share one account across people.
         </p>
       </Section>
 
-      <Section title="5. Plans, billing and cancellation">
+      <Section title="5. Free during beta, and limits">
         <p>
-          Paid plans bill monthly in advance through Stripe. Prices are in US
-          dollars and exclude any tax we are required to collect. You can cancel
-          at any time from the billing portal; your plan continues until the end
-          of the period you have paid for and is not refunded pro rata.
-        </p>
-        <p>
-          If a payment fails, your account falls back to the free plan&rsquo;s
-          limits rather than being locked; your saved catalogues stay where they
-          are.
+          HTSDesk is free to use during its beta. Usage limits apply, such as
+          the number of products in one audit, how many audits you can run in a
+          period and how many catalogues you can save. The limits are shown in
+          the app and may change. Paid plans may be introduced later; if they
+          are, we will give notice to account holders.
         </p>
       </Section>
 
       <Section title="6. Acceptable use">
         <p>
           Do not attempt to scrape the service in bulk, resell access,
-          circumvent plan limits or rate limits, or use HTSDesk to build a
+          circumvent usage limits or rate limits, or use HTSDesk to build a
           competing tariff database. We may suspend an account that does.
         </p>
       </Section>

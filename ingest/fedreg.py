@@ -1,7 +1,7 @@
 """Federal Register poller.
 
 Tariff rates change several times a week. That volatility is why a live engine
-beats static content, and it is the reason a subscription is worth paying for:
+beats static content, and it is the reason watching a catalogue is worth doing:
 a change touching a code in the customer's catalogue is money, and they will
 not otherwise see it.
 

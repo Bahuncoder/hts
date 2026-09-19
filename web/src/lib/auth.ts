@@ -1,10 +1,7 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import {
-  accountById, accountByEmail, createAccount, db, subscriptionFor,
-  type Account, type Subscription,
-} from "./store";
-import { PLANS, type Plan } from "./plans";
+import { accountById, accountByEmail, createAccount, db, type Account } from "./store";
+import { LIMITS, type Limits } from "./plans";
 
 const COOKIE = "htsdesk_session";
 const SESSION_DAYS = 30;
@@ -126,7 +123,8 @@ export async function endSession(): Promise<void> {
   jar.delete(COOKIE);
 }
 
-export type Viewer = { account: Account; subscription: Subscription; plan: Plan };
+/** A signed-in account and the limits that apply to it. */
+export type Viewer = { account: Account; limits: Limits };
 
 export async function currentViewer(): Promise<Viewer | null> {
   const token = (await cookies()).get(COOKIE)?.value;
@@ -144,10 +142,5 @@ export async function currentViewer(): Promise<Viewer | null> {
   }
   const account = await accountById(row.account_id);
   if (!account) return null;
-  const subscription = await subscriptionFor(account.id);
-  // An unpaid or cancelled subscription falls back to free rather than
-  // locking the account out — they keep what free buys.
-  const entitled = subscription.status === "active" || subscription.status === "trialing";
-  const plan = PLANS[entitled ? subscription.plan : "free"] ?? PLANS.free;
-  return { account, subscription, plan };
+  return { account, limits: LIMITS.account };
 }

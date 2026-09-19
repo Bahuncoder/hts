@@ -16,7 +16,7 @@ HTSDESK_API=http://127.0.0.1:8099 make web   # :3000
 The web app talks to the API server-side only. Browsers never call the API
 directly, so no CORS configuration is needed locally.
 
-To exercise the paid limits and the audit proxy:
+To exercise the usage limits and the audit proxy:
 
 ```bash
 HTSDESK_API_KEYS=devkey make api
@@ -31,7 +31,7 @@ make check
 
 Runs the web build, the duty, refresh and classifier-evaluation suites, the API
 contract and security regressions, the web integration suites (real routes over
-scratch databases with fake Stripe, engine and mail servers) and the browser
+scratch databases with fake engine and mail servers) and the browser
 suites. The API must be running for `test_api` (start it with
 `HTSDESK_API_KEYS=testkey123`); it says so if it is not. No test may touch
 `data/accounts.db`: the web tests create their own scratch database and refuse
@@ -92,7 +92,7 @@ proceed during writes.
 
 ## The change diff
 
-The diff is what makes a subscription worth renewing: it matches tariff actions
+The diff is what makes an account worth keeping: it matches tariff actions
 published in the Federal Register against the codes each customer watches, and
 records an alert when one lands.
 
@@ -143,11 +143,13 @@ SELECT status, count(*) FROM email_log GROUP BY status;
 
 Two rules worth knowing:
 
-- **Email is a paid feature; alerts are not.** A free account sees every alert
-  in the app and receives no mail. Losing the email does not lose the fact.
-- **Skips are stamped; failures are not.** An alert skipped by design (free
-  plan, opted out, no provider configured) is stamped with its reason, so it is
-  never replayed as a backlog when the account upgrades or a key is added. A
+- **Every account gets alert emails; each can opt out.** Alerts always appear
+  in the app, so an opt-out or a missing provider loses the email, not the fact.
+  Older rows stamped `skipped_plan` come from when email was a paid feature;
+  they are history and are left alone.
+- **Skips are stamped; failures are not.** An alert skipped by design (opted
+  out, no provider configured) is stamped with its reason, so it is never
+  replayed as a backlog when the account opts back in or a key is added. A
   *failed* send is different: the alert stays queued, the attempt and error are
   recorded (`email_attempts`, `email_last_error`), and the next run retries it.
   After 5 attempts it is stamped `failed_permanent` and logged. Delivery claims
@@ -203,7 +205,7 @@ make preflight
 ```
 
 Checks what's controllable from the API host: reference data loaded, secrets
-present and not trivially short, CORS closed. Stripe keys, the email secret
+present and not trivially short, CORS closed. The email secret
 and the accounts database live in the web app's Vercel environment now, so
 they are not checked here — verify those with `vercel env ls` before a web
 deploy. Failures exit non-zero; warnings are for capabilities that are simply

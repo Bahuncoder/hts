@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { API_BASE } from "@/lib/api";
 import { currentViewer } from "@/lib/auth";
 import { acquireLease, AUDIT_BUDGETS, chargeAudit, type Tier } from "@/lib/budget";
-import { PLANS } from "@/lib/plans";
+import { LIMITS, windowLabel } from "@/lib/plans";
 import { clientId } from "@/lib/throttle";
 import { signAudit, signedBodyFromEngine, signingSecret } from "@/lib/auditProof";
 
@@ -13,7 +13,7 @@ import { signAudit, signedBodyFromEngine, signingSecret } from "@/lib/auditProof
  *  keeps the API key server-side — a key shipped to the browser under
  *  NEXT_PUBLIC_ is a published key.
  *
- *  It is also where the plan ceiling is enforced, because the ceiling is a
+ *  It is also where the per-audit ceiling is enforced, because the ceiling is a
  *  real cost control: classification costs ~175 ms of CPU per item. The
  *  engine exempts this proxy's key from its own rate limit, so the per-caller
  *  budgets and the one-audit-at-a-time lease live here (lib/budget.ts).
@@ -81,9 +81,9 @@ function withProof(body: string): string {
 
 const bad = (detail: string) => NextResponse.json({ detail }, { status: 400 });
 
-function throttled(retryAfter: number, detail: string, upgrade?: string) {
+function throttled(retryAfter: number, detail: string) {
   return NextResponse.json(
-    { detail, ...(upgrade ? { upgrade } : {}) },
+    { detail },
     { status: 429, headers: { "retry-after": String(retryAfter) } },
   );
 }
@@ -113,27 +113,26 @@ export async function POST(request: Request) {
   if (!parsed.items.length) return bad("Add at least one product to audit.");
 
   const viewer = await currentViewer();
-  const plan = viewer?.plan ?? PLANS.free;
+  const tier: Tier = viewer ? "account" : "anonymous";
+  const limits = LIMITS[tier];
   const count = parsed.items.length;
 
-  if (count > plan.skus) {
+  if (count > limits.productsPerAudit) {
     return NextResponse.json(
       {
         detail: viewer
-          ? `${count} products exceeds the ${plan.skus.toLocaleString()} allowed on ${plan.name}. Upgrade, or split the catalogue.`
-          : `${count} products exceeds the ${plan.skus} allowed without an account. Create a free account, or split the catalogue.`,
-        upgrade: viewer ? "/pricing" : "/signup",
+          ? `${count} products exceeds the ${limits.productsPerAudit.toLocaleString()} allowed in one audit. Split the catalogue across several runs.`
+          : `${count} products exceeds the ${limits.productsPerAudit} allowed without an account. Create a free account for a larger allowance, or split the catalogue.`,
       },
       { status: 413 },
     );
   }
 
-  const tier: Tier = viewer ? viewer.plan.id : "anonymous";
   const subject = viewer ? `account:${viewer.account.id}` : `client:${await clientId()}`;
-  const upgrade = tier === "anonymous" ? "/signup" : tier === "growth" ? undefined : "/pricing";
-  const upgradeHint = tier === "anonymous" ? " Create a free account for a larger allowance."
-    : tier === "growth" ? " Contact us if you need more."
-    : " Upgrade your plan for a larger allowance.";
+  // Anonymous callers are pointed at the free account; a signed-in one has
+  // nothing larger to move to, so is told when the allowance frees up.
+  const hint = viewer ? " The allowance resets on a rolling basis."
+    : " Create a free account for a larger allowance.";
 
   const release = await acquireLease(subject);
   if (!release) {
@@ -145,11 +144,11 @@ export async function POST(request: Request) {
     if (!charge.ok) {
       const limit = AUDIT_BUDGETS[tier];
       const detail = charge.tooLarge
-        ? `This run is larger than the ${limit.items.max.toLocaleString()}-product daily allowance.${upgradeHint}`
+        ? `This run is larger than the ${limit.items.max.toLocaleString()}-product daily allowance.${hint}`
         : charge.over === "requests"
-          ? `You have reached the limit of ${limit.requests?.max} audits per ${limit.requests && limit.requests.windowMs >= 3_600_000 ? "hour" : "10 minutes"}. Try again in ${waitText(charge.retryAfter)}.${upgradeHint}`
-          : `This run would exceed your daily allowance of ${limit.items.max.toLocaleString()} products. More becomes available in ${waitText(charge.retryAfter)}.${upgradeHint}`;
-      return throttled(charge.retryAfter, detail, upgrade);
+          ? `You have reached the limit of ${limit.requests.max} audits per ${windowLabel(limit.requests.windowMs)}. Try again in ${waitText(charge.retryAfter)}.${hint}`
+          : `This run would exceed your daily allowance of ${limit.items.max.toLocaleString()} products. More becomes available in ${waitText(charge.retryAfter)}.${hint}`;
+      return throttled(charge.retryAfter, detail);
     }
 
     const headers: Record<string, string> = { "content-type": "application/json" };

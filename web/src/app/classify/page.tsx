@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { PageHeader } from "@/components/PageHeader";
 import { classify } from "@/lib/api";
 import { allow, CLASSIFY_LIMIT } from "@/lib/budget";
 import { clientId } from "@/lib/throttle";
@@ -35,18 +37,9 @@ export default async function ClassifyPage({
 
   return (
     <div className="space-y-8">
-      <div className="max-w-2xl space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Classify a product
-        </h1>
-        <p className="text-muted">
-          Describe the goods as you would to a broker: what it is, what it is
-          made of, and what it does. Material and function decide most
-          classifications.
-        </p>
-      </div>
+      <PageHeader eyebrow="Product classification" title="Find the right HTS code" description="Start with what your product is, what it is made of, and how it is used. Compare candidate codes and the rulings behind them." />
 
-      <form action="/classify" className="max-w-2xl" role="search">
+      <form action="/classify" className="panel p-5 sm:p-7" role="search">
         <label htmlFor="q" className="block text-[13px] font-medium">
           Product description
         </label>
@@ -64,7 +57,7 @@ export default async function ClassifyPage({
           />
           <button
             type="submit"
-            className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-on-accent"
+            className="btn btn-primary"
           >
             Classify
           </button>
@@ -145,7 +138,7 @@ export default async function ClassifyPage({
             </div>
 
             <p className="mt-3 font-medium">{c.description}</p>
-            <p className="clamp-2 mt-1 text-[13px] text-muted">{c.full_path}</p>
+            <details className="mt-2 text-[13px] text-muted"><summary className="cursor-pointer text-accent">View classification path</summary><p className="mt-2">{c.full_path}</p></details>
 
             {c.reasoning ? (
               <p className="mt-3 text-[14px]">{c.reasoning}</p>
@@ -157,7 +150,7 @@ export default async function ClassifyPage({
                   Precedent
                 </div>
                 {c.rulings.map((r) => (
-                  <div key={r.ruling} className="clamp-1 text-[13px]">
+                  <div key={r.ruling} className="text-[13px]">
                     <a
                       href={r.url}
                       target="_blank"
@@ -172,6 +165,9 @@ export default async function ClassifyPage({
                 ))}
               </div>
             ) : null}
+            <div className="mt-5 border-t border-border pt-4">
+              <Link href={`/calculator?hts=${encodeURIComponent(c.hts)}`} className="btn btn-secondary">Estimate duty for this code <span aria-hidden="true">→</span></Link>
+            </div>
           </Card>
         ))}
       </div>

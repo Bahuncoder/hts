@@ -16,7 +16,7 @@ help:
 	@echo "  make test       duty unit tests + API security regressions"
 	@echo "  make test-duty  duty engine only (no server needed)"
 	@echo "  make test-api   API contract + security (needs a running API)"
-	@echo "  make test-billing / test-diff / test-outbox / test-audit / test-migrate"
+	@echo "  make test-diff / test-outbox / test-audit / test-migrate / test-retired"
 	@echo "  make test-csvparse / test-proof / test-review"
 	@echo "                  catalogue reader, audit proofs, review workspace (test-review needs Chrome)"
 	@echo "                  integration tests against a scratch production server"
@@ -63,8 +63,8 @@ build:
 	cd web && rm -rf .next && npm run build
 
 # --- verify -----------------------------------------------------------------
-test: test-duty test-classify-eval test-refresh test-api test-billing test-email test-diff \
-      test-outbox test-audit test-migrate test-csvparse test-proof test-review
+test: test-duty test-classify-eval test-refresh test-api test-email test-diff \
+      test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review
 
 test-duty:
 	@python3 tests/test_duty.py
@@ -81,17 +81,14 @@ test-classify-eval:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-classify-eval test-refresh test-api test-billing test-email \
-       test-diff test-outbox test-audit test-migrate test-csvparse test-proof test-review test-journey test-security test-authflow eval
-
-test-billing:
-	@cd web && node tests/billing.test.mjs
+check: build test-duty test-classify-eval test-refresh test-api test-email \
+       test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review test-journey test-security test-authflow eval
 
 test-email:
 	@cd web && node tests/email.test.mjs
 
-# These start their own production server on a spare port (3200-3205) with a
-# scratch accounts database and fake Stripe/engine/mail servers, rebuilding
+# These start their own production server on a spare port (3200-3206) with a
+# scratch accounts database and fake engine/mail servers, rebuilding
 # first if the bundle is stale. They never touch data/accounts.db.
 test-diff:
 	@cd web && node tests/diff.test.mjs
@@ -104,6 +101,10 @@ test-audit:
 
 test-migrate:
 	@cd web && node tests/migrate.test.mjs
+
+# /pricing redirects home; the billing and webhook routes are gone.
+test-retired:
+	@cd web && node tests/retired.test.mjs
 
 # The catalogue reader and shared row model, straight from src/lib (no server).
 test-csvparse:

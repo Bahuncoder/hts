@@ -4,8 +4,8 @@ Two independent deployments: a Python API on a VPS that owns the reference
 data and runs the engine, and a Next.js app on Vercel that renders it. The
 reference data is a SQLite file built from public sources, so there is no
 database to provision for it — but Vercel's serverless functions have no
-persistent local disk, so the *account* data (signups, catalogues, alerts,
-Stripe state) lives in Turso, a managed libSQL database, rather than a file
+persistent local disk, so the *account* data (signups, catalogues, alerts)
+lives in Turso, a managed libSQL database, rather than a file
 on either host.
 
 ## What you need to buy
@@ -54,7 +54,7 @@ for you); use it on a fresh host instead of the manual steps if that's easier.
 ## Web (Vercel)
 
 The web app has no local disk of its own on Vercel, so account data (signups,
-catalogues, watched codes, alerts, Stripe state) is stored in Turso rather
+catalogues, watched codes, alerts) is stored in Turso rather
 than a file. Create a Turso database (`turso db create htsdesk`) and set the
 project root to `web/`, then set:
 
@@ -66,7 +66,7 @@ TURSO_AUTH_TOKEN=<turso db tokens create htsdesk>
 SITE_URL=https://yourdomain.com
 ```
 
-plus the Stripe, email-provider, `HTSDESK_EMAIL_SECRET` and
+plus the email-provider, `HTSDESK_EMAIL_SECRET` and
 `HTSDESK_SIGNING_SECRET` values from `.env.example`. The signing secret makes
 saved catalogues server-produced (the audit proxy signs each result and saving
 verifies it), so it must be **identical on every instance or Vercel

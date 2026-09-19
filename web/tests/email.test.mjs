@@ -29,11 +29,11 @@ engine.state.docs = [
 ];
 const app = await startApp({ port: 3204, env: { HTSDESK_API: "http://127.0.0.1:3234" } });
 
-const PAID = "email-paid";
-const FREE = "email-free";
+const ACCT_A = "email-a";
+const ACCT_B = "email-b";
 const db = app.db();
-for (const [id, plan] of [[PAID, "growth"], [FREE, "free"]]) {
-  await seedAccount(db, { id, plan });
+for (const id of [ACCT_A, ACCT_B]) {
+  await seedAccount(db, { id });
   for (const [dg, h] of [["2804610000", "2804.61.00.00"], ["1301900000", "1301.90.00.00"]]) {
     await db.execute({ sql: "INSERT INTO watched_code VALUES(?,?,?,NULL,?)",
       args: [id, dg, h, new Date().toISOString()] });
@@ -69,12 +69,12 @@ try {
   });
 
   await check("email preview refuses an unauthenticated caller", async () => {
-    const { status } = await get(`/api/admin/email-preview?account=${PAID}`);
+    const { status } = await get(`/api/admin/email-preview?account=${ACCT_A}`);
     assert.equal(status, 401);
   });
 
   await check("email preview renders a digest from real alerts", async () => {
-    const { status, body } = await get(`/api/admin/email-preview?account=${PAID}`, admin);
+    const { status, body } = await get(`/api/admin/email-preview?account=${ACCT_A}`, admin);
     assert.equal(status, 200);
     const d = JSON.parse(body);
     assert.ok(d.subject.length > 0, "digest must have a subject");
@@ -84,7 +84,7 @@ try {
   });
 
   await check("digest groups one action per entry, not one per code", async () => {
-    const { body } = await get(`/api/admin/email-preview?account=${PAID}`, admin);
+    const { body } = await get(`/api/admin/email-preview?account=${ACCT_A}`, admin);
     const d = JSON.parse(body);
     const titles = d.text.split("\n").filter((l) => l.startsWith("Silicon Metal"));
     assert.equal(titles.length, 2);
@@ -92,18 +92,18 @@ try {
   });
 
   await check("a valid unsubscribe link works without a session", async () => {
-    const { status, body } = await get(`/unsubscribe?a=${FREE}&t=${sign(FREE)}`);
+    const { status, body } = await get(`/unsubscribe?a=${ACCT_B}&t=${sign(ACCT_B)}`);
     assert.equal(status, 200);
     assert.match(body, /Alert emails are off/);
   });
 
   await check("a forged unsubscribe token is refused", async () => {
-    const { body } = await get(`/unsubscribe?a=${FREE}&t=not-a-real-token`);
+    const { body } = await get(`/unsubscribe?a=${ACCT_B}&t=not-a-real-token`);
     assert.match(body, /did not work/);
   });
 
   await check("an unsubscribe token cannot be reused for another account", async () => {
-    const { body } = await get(`/unsubscribe?a=${PAID}&t=${sign(FREE)}`);
+    const { body } = await get(`/unsubscribe?a=${ACCT_A}&t=${sign(ACCT_B)}`);
     assert.match(body, /did not work/, "one customer must not be able to unsubscribe another");
   });
 
@@ -112,11 +112,11 @@ try {
     const res = await app.admin("/api/admin/diff?since=2026-08-25");
     const d = await res.json();
     assert.equal(d.delivery.accountsConsidered, 0,
-      "an unstamped alert is reconsidered forever and arrives as a backlog on upgrade");
+      "an unstamped alert is reconsidered forever and arrives as a backlog when a key is added");
     const rows = (await db.execute("SELECT DISTINCT account_id, email_status FROM alert")).rows;
     const status = Object.fromEntries(rows.map((r) => [r.account_id, r.email_status]));
-    assert.equal(status[FREE], "skipped_plan");
-    assert.equal(status[PAID], "skipped_no_provider");
+    assert.equal(status[ACCT_A], "skipped_no_provider");
+    assert.equal(status[ACCT_B], "skipped_opt_out", "unsubscribed above; a plan is never the reason");
   });
 } finally {
   db.close();

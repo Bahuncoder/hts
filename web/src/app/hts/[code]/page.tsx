@@ -170,19 +170,19 @@ export default async function HtsPage({ params, searchParams }: Props) {
   const viewer = await currentViewer();
   const watched = viewer ? await isWatched(viewer.account.id, d.hts) : false;
 
-  // What watching actually delivers depends on the plan and on whether email
-  // is switched on; say only what is true for this visitor.
-  const emailsToYou =
-    Boolean(viewer?.plan.monitoring) &&
-    viewer?.account.alert_emails !== 0 &&
-    emailEnabled();
-  const watchCopy = watched
-    ? emailsToYou
-      ? "You are emailed when a tariff action names this code, and it also appears in Alerts."
-      : `A tariff action naming this code will appear in Alerts in the app.${viewer?.plan.monitoring ? "" : " Email alerts are part of Starter and above."}`
-    : viewer?.plan.monitoring
-      ? "Rates move several times a week. Watch this code to be alerted when a tariff action names it."
-      : "Rates move several times a week. Watching a code shows tariff actions that name it in Alerts in the app; email alerts are part of Starter and above.";
+  // What watching delivers depends on whether this account has alert emails
+  // on and whether email is switched on; say only what is true for this
+  // visitor. Alerts always appear in the app.
+  const emailsToYou = viewer?.account.alert_emails !== 0 && emailEnabled();
+  const watchCopy = !viewer
+    ? "Rates move several times a week. Create a free account to watch this code and be alerted when a tariff action names it."
+    : watched
+      ? emailsToYou
+        ? "You are emailed when a tariff action names this code, and it also appears in Alerts."
+        : "A tariff action naming this code will appear in Alerts in the app."
+      : emailsToYou
+        ? "Rates move several times a week. Watch this code and we email you when a tariff action names it; it also appears in Alerts."
+        : "Rates move several times a week. Watch this code to see tariff actions that name it in Alerts in the app.";
 
   return (
     <div className="space-y-8">

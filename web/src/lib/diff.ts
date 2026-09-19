@@ -5,7 +5,7 @@ import { API_BASE, engineHeaders } from "./api";
 
 /** Change diffing: which published tariff actions touch which customers.
  *
- *  This is the reason a subscription renews. The Federal Register publishes
+ *  This is why an account is worth keeping. The Federal Register publishes
  *  several tariff actions a week; almost none of them matter to any given
  *  importer, and the one that does is indistinguishable from the rest unless
  *  something matches it against the codes they actually import.
@@ -75,7 +75,7 @@ const MAX_PAGES = 200;
 const LOOKBACK_DAYS = 7;
 /** With no stored position (a new install, or one whose cursor was lost) the
  *  run starts this far back rather than at the beginning of time: alerting
- *  every watcher about all of history, and emailing paid accounts a digest of
+ *  every watcher about all of history, and emailing them a digest of
  *  it, is the wrong first impression. An explicit `since` still backfills. */
 const FIRST_RUN_DAYS = 30;
 
@@ -221,14 +221,12 @@ export async function diffStatus() {
 
 // --- delivery ---------------------------------------------------------------
 
-import { PLANS } from "./plans";
 import { renderAlertDigest } from "./emails/alertDigest";
 import { emailEnabled, send } from "./email";
 
 export type DeliveryResult = {
   accountsConsidered: number;
   sent: number;
-  skippedNoPlan: number;
   skippedOptedOut: number;
   skippedNoProvider: number;
   /** Accounts whose send failed this run; their alerts stay queued. */
@@ -253,20 +251,19 @@ const MAX_EMAIL_ATTEMPTS = 5;
  *  marked delivered. A failed send releases the claim and is retried on the
  *  next run, up to MAX_EMAIL_ATTEMPTS.
  *
- *  Outcomes that are deliberate — no monitoring on the plan, the customer
- *  opted out, no provider configured — still stamp `emailed_at`, because a
- *  run that could not send must not leave a backlog that floods the customer
- *  the day they upgrade or a key is added. `email_status` records which
- *  outcome it was, so those stay distinguishable from failures.
+ *  Every account gets alert emails. Outcomes that are deliberate — the
+ *  customer opted out, no provider configured — still stamp `emailed_at`,
+ *  because a run that could not send must not leave a backlog that floods the
+ *  customer the day they opt back in or a key is added. `email_status`
+ *  records which outcome it was, so those stay distinguishable from failures.
  */
 export async function sendAlertDigests(): Promise<DeliveryResult> {
   const c = await db();
   const staleBefore = () => new Date(Date.now() - CLAIM_STALE_MS).toISOString();
   const rowsRs = await c.execute({
-    sql: `SELECT a.account_id, ac.email, ac.alert_emails, s.plan, s.status
+    sql: `SELECT a.account_id, ac.email, ac.alert_emails
       FROM alert a
       JOIN account ac ON ac.id = a.account_id
-      LEFT JOIN subscription s ON s.account_id = a.account_id
      WHERE a.emailed_at IS NULL
        AND (a.email_claimed_at IS NULL OR a.email_claimed_at < ?)
      GROUP BY a.account_id`,
@@ -274,11 +271,10 @@ export async function sendAlertDigests(): Promise<DeliveryResult> {
   });
   const rows = rowsRs.rows as unknown as {
     account_id: string; email: string; alert_emails: number;
-    plan: string | null; status: string | null;
   }[];
 
   const result: DeliveryResult = {
-    accountsConsidered: rows.length, sent: 0, skippedNoPlan: 0, skippedOptedOut: 0,
+    accountsConsidered: rows.length, sent: 0, skippedOptedOut: 0,
     skippedNoProvider: 0, failed: 0, failedPermanent: 0,
     provider: emailEnabled() ? "configured" : "none",
   };
@@ -307,16 +303,6 @@ export async function sendAlertDigests(): Promise<DeliveryResult> {
       args: [new Date().toISOString(), status, ...ids],
     });
 
-    const entitled = row.status === "active" || row.status === "trialing";
-    const plan = PLANS[(entitled ? row.plan : "free") as keyof typeof PLANS] ?? PLANS.free;
-
-    // Email alerts are a paid feature; the alerts themselves stay visible in
-    // the app on every plan, so a free account loses the email, not the fact.
-    if (!plan.monitoring) {
-      result.skippedNoPlan += 1;
-      await finish("skipped_plan");
-      continue;
-    }
     if (row.alert_emails === 0) {
       result.skippedOptedOut += 1;
       await finish("skipped_opt_out");

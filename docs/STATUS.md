@@ -4,10 +4,16 @@ Last updated 2026-09-19, after the independent audit in `PROJECT-AUDIT.md`.
 This is the single place readiness is stated; if it disagrees with another
 document, this one has been updated more recently or the other is wrong.
 
-**Not ready to sell as a paid product yet.** The engine's calculation
-integrity, refresh pipeline and billing/notification recovery were repaired
-after the audit (below). What remains before launch is measurement, coverage
-and operations work listed under "Release gate".
+**Launching as a free product; nothing is sold.** The engine's calculation
+integrity, refresh pipeline and notification recovery were repaired after the
+audit (below). What remains before launch is measurement, coverage and
+operations work listed under "Release gate".
+
+On 2026-09-19 the paid model was removed on the owner's decision: no Stripe,
+checkout, billing portal, webhooks, subscriptions or pricing page. The durable
+webhook/ordering work built for it was deleted with it; it is still in git
+history (commit 8150908 and earlier). `subscription` and `webhook_event`
+tables in an existing accounts database are left dormant, not dropped.
 
 ## Built and tested
 
@@ -22,7 +28,7 @@ and operations work listed under "Release gate".
 | Preferences | matched to a named program or the one program covering the origin; fixed-membership FTAs eligibility-checked, others flagged as asserted |
 | Refresh pipeline | one validated transaction, versioned release directories, indexes rebuilt inside it, engine reloads on revision change |
 | Audit API | every row returned with a status, reasons and its own row number; summary reconciles and says whether totals are complete |
-| Billing | Stripe events have durable states, retry after failure, and reconcile against Stripe's current state (order-independent) |
+| Free model and limits | No payments. Anonymous: 25 products per audit, 3 audits per 10 minutes, 150 items per rolling 24 h. Signed-in account: 200 products per audit, 10 audits per hour, 2,000 items per rolling 24 h, 20 saved catalogues, alert emails on (opt-out). All numbers live in `web/src/lib/plans.ts` |
 | Alerts | outbox with exact-id claims, bounded retries, cursor paging with lookback, failures never advance the cursor |
 | Public cost controls | request/item budgets per client or account, one audit in flight per caller, streamed body cap |
 | Accounts store | libSQL (Turso in production, embedded file in development) |
@@ -35,8 +41,8 @@ and operations work listed under "Release gate".
 | `tests/test_api.py` | 32 | API contract, security regressions, audit row/status behaviour, cursor paging |
 | `tests/test_refresh.py` | 10 | index survival, stale-data removal, rollback, engine reload across editions |
 | `tests/test_classify_eval.py` | 3 | a held-out ruling cannot vote for itself; reasoning cannot run in evaluation |
-| `web` `npm run test:integration` | 88 | real routes over scratch databases with fake Stripe/engine/mail servers |
-| browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 64 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
+| `web` `npm run test:integration` | 85 | real routes over scratch databases with fake engine/mail servers |
+| browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 67 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
 evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
@@ -83,7 +89,7 @@ before claiming anything for it.
 - The classifier's exact-line accuracy is low (above).
 - Alerts replay 7 days behind the cursor; a document ingested more than a week
   after its publication date is still missed.
-- Re-pricing a saved catalogue is not built and is not sold.
+- Re-pricing a saved catalogue is not built.
 - Not built: entry-summary (CBP 7501) ingest, duty drawback, team seats, API
   access.
 - MPF/HMF constants are FY2026; `FEE_CONSTANTS_EFFECTIVE_THROUGH` warns from
@@ -91,13 +97,13 @@ before claiming anything for it.
 
 ## Release gate
 
-All must be true before taking money:
+All must be true before launch:
 
 - [x] A refreshed dataset produces consistent, versioned quotes; a removed code
       or changed rate is reflected by every endpoint (`test_refresh`).
 - [x] Unsupported inputs never look complete: invalid codes/origins are errors,
       omitted duty components are flagged.
-- [x] Failed billing and email work recovers; retries are not discarded.
+- [x] Failed email work recovers; retries are not discarded.
 - [x] Every imported row is accountable end to end: sent with its row number,
       returned with a status, saved, exported, and counted in the reconciliation
       (`web/tests/review.test.mjs`, browser).
@@ -106,5 +112,5 @@ All must be true before taking money:
 - [ ] AD/CVD at least flagged for affected origins.
 - [ ] FY2027 fee constants entered (due 2026-10-01).
 - [ ] Deployed to real Vercel/Turso/VPS with monitoring and offsite backups,
-      and a Stripe test-mode round trip and real email delivery exercised.
+      and real email delivery exercised.
 - [ ] Terms, privacy and disclaimers reviewed by a customs attorney.

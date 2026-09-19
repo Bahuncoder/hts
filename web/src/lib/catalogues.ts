@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "./store";
+import { LIMITS } from "./plans";
 import {
   PRICED_STATUSES, isPriced, totalsOf,
   type SavedLine, type SignedAudit, type Status,
@@ -47,6 +48,14 @@ export function isWatchable(l: Pick<SavedLine, "status" | "hts">): boolean {
 
 const PRICED_SQL = PRICED_STATUSES.map((s) => `'${s}'`).join(",");
 
+/** Thrown by saveCatalogue when the account already holds its allowance of
+ *  saved catalogues. The message is written for the customer. */
+export class CatalogueLimitError extends Error {
+  constructor(readonly max: number) {
+    super(`You have ${max} saved catalogues. Delete one to save another.`);
+  }
+}
+
 /** Saves a verified audit as a catalogue and watches every real code in it.
  *
  *  EVERY submitted line is stored, including the ones that could not be
@@ -70,6 +79,16 @@ export async function saveCatalogue(
   const tx = await c.transaction("write");
 
   try {
+    // Counted inside the write transaction that inserts, so two saves racing
+    // for the last slot cannot both get it.
+    const held = await tx.execute({
+      sql: "SELECT count(*) AS n FROM catalogue WHERE account_id = ?",
+      args: [accountId],
+    });
+    if ((held.rows[0] as unknown as { n: number }).n >= LIMITS.account.savedCatalogues) {
+      throw new CatalogueLimitError(LIMITS.account.savedCatalogues);
+    }
+
     await tx.execute({
       sql: `INSERT INTO catalogue(id, account_id, name, created_at, updated_at,
               dataset_revision, assumptions_json, totals_complete, calculated_at, mpf)

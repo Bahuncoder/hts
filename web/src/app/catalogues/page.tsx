@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentViewer } from "@/lib/auth";
@@ -27,25 +28,9 @@ export default async function CataloguesPage({
 
   return (
     <div className="space-y-7">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-1.5">
-          <h1 className="serif text-3xl tracking-tight">Catalogues</h1>
-          <p className="text-[15px] text-muted">
-            Every priced code in a saved catalogue is watched. When a tariff action
-            names one, it lands in{" "}
-            <Link href="/alerts" className="hover:underline text-accent">
-              your alerts
-            </Link>
-            .
-          </p>
-        </div>
-        <Link
-          href="/audit"
-          className="px-4 py-2 text-[14px] font-medium bg-accent text-on-accent"
-        >
-          Audit a catalogue
-        </Link>
-      </div>
+      <PageHeader eyebrow="Your saved workspace" title="Catalogues" description="Keep your reviewed estimates in one place. Priced codes are watched for tariff actions, with new matches available in your alerts.">
+        <Link href="/audit" className="btn btn-primary">Audit a catalogue <span aria-hidden="true">＋</span></Link>
+      </PageHeader>
 
       {doomed ? (
         <div
@@ -82,12 +67,12 @@ export default async function CataloguesPage({
       ) : null}
 
       {catalogues.length === 0 ? (
-        <Card>
-          <p className="text-[15px] text-muted">
-            Nothing saved yet. Run an audit and save the result — that is what
-            turns a one-off calculation into something we can watch for you.
-          </p>
-        </Card>
+        <div className="panel px-6 py-14 text-center">
+          <p className="eyebrow">Make room for your first catalogue</p>
+          <h2 className="serif mt-3 text-3xl tracking-tight">Your products. One clear view.</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted">Upload your product list, review the results, and save your catalogue here. Codes with a price will be watched for relevant tariff actions.</p>
+          <Link href="/audit" className="btn btn-primary mt-6">Start a catalogue audit <span aria-hidden="true">→</span></Link>
+        </div>
       ) : (
         <div className="space-y-3">
           {catalogues.map((c) => (

@@ -31,9 +31,10 @@ export function AuthForm({
   };
 
   return (
-    <div className="mx-auto max-w-[400px] space-y-6 py-8">
+    <div className="panel mx-auto my-5 max-w-[460px] space-y-6 p-6 sm:my-10 sm:p-9">
       <div className="space-y-2">
-        <h1 className="serif text-3xl tracking-tight">{heading}</h1>
+        <p className="eyebrow mb-4">Your HTSDesk workspace</p>
+        <h1 className="serif text-4xl tracking-tight">{heading}</h1>
         <p className="text-[15px] text-muted">{blurb}</p>
       </div>
 
@@ -49,7 +50,7 @@ export function AuthForm({
               type="email"
               required
               autoComplete="email"
-              className="w-full rounded-none border px-3 py-2.5 text-[15px]"
+              className="field-control"
               style={field}
             />
           </label>
@@ -65,7 +66,7 @@ export function AuthForm({
               required
               minLength={10}
               autoComplete={newPassword ? "new-password" : "current-password"}
-              className="w-full rounded-none border px-3 py-2.5 text-[15px]"
+              className="field-control"
               style={field}
             />
             {newPassword ? (
@@ -77,12 +78,12 @@ export function AuthForm({
         ) : null}
 
         {state.error ? (
-          <p className="border-l-2 py-2 pl-3 text-[13px] border-danger bg-caution-soft text-danger">
+          <p role="alert" className="border-l-2 py-2 pl-3 text-[13px] border-danger bg-caution-soft text-danger">
             {state.error}
           </p>
         ) : null}
         {state.notice ? (
-          <p className="border-l-2 py-2 pl-3 text-[13px] border-accent bg-accent-soft text-accent">
+          <p role="status" className="border-l-2 py-2 pl-3 text-[13px] border-accent bg-accent-soft text-accent">
             {state.notice}
           </p>
         ) : null}
@@ -90,7 +91,7 @@ export function AuthForm({
         <button
           type="submit"
           disabled={pending}
-          className="w-full py-2.5 text-[15px] font-medium disabled:opacity-60 bg-accent text-on-accent"
+          className="btn btn-primary w-full"
         >
           {pending ? "Working…" : submit}
         </button>

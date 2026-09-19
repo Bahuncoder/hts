@@ -40,5 +40,5 @@ jobs:
       - run: npx eslint src
       - run: npm audit --audit-level=high
       # Builds the production bundle, then drives the real routes against a
-      # scratch database and fake Stripe/engine/mail servers.
+      # scratch database and fake engine/mail servers.
       - run: npm run test:integration

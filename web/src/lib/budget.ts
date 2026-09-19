@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "./store";
+import { LIMITS, type Tier, type Window } from "./plans";
 
 /** Work budgets for the public proxies.
  *
@@ -10,19 +11,16 @@ import { db } from "./store";
  */
 
 const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
+const DAY = 24 * 60 * MINUTE;
 
-type Limit = { max: number; windowMs: number };
-export type Tier = "anonymous" | "free" | "starter" | "growth";
+type Limit = Window;
+export type { Tier };
 
 /** `requests` bounds how often a caller may start an audit, `items` how much
- *  work they may submit in total. Paid tiers are bounded by items alone. */
-export const AUDIT_BUDGETS: Record<Tier, { requests?: Limit; items: Limit }> = {
-  anonymous: { requests: { max: 3, windowMs: 10 * MINUTE }, items: { max: 150, windowMs: DAY } },
-  free: { requests: { max: 10, windowMs: HOUR }, items: { max: 500, windowMs: DAY } },
-  starter: { items: { max: 3000, windowMs: DAY } },
-  growth: { items: { max: 20000, windowMs: DAY } },
+ *  work they may submit in total. The numbers live in lib/plans.ts. */
+export const AUDIT_BUDGETS: Record<Tier, { requests: Limit; items: Limit }> = {
+  anonymous: { requests: LIMITS.anonymous.auditRequests, items: LIMITS.anonymous.itemsPerDay },
+  account: { requests: LIMITS.account.auditRequests, items: LIMITS.account.itemsPerDay },
 };
 
 export const AUDIT_LEASE_MS = 60_000;
@@ -71,7 +69,7 @@ export type Charge =
 export async function chargeAudit(subject: string, tier: Tier, items: number): Promise<Charge> {
   await sweep();
   const budget = AUDIT_BUDGETS[tier];
-  const requestWait = budget.requests ? await waitFor(REQUESTS, subject, budget.requests, 1) : 0;
+  const requestWait = await waitFor(REQUESTS, subject, budget.requests, 1);
   const itemWait = await waitFor(ITEMS, subject, budget.items, items);
   if (requestWait || itemWait) {
     const over = itemWait >= requestWait && itemWait ? "items" : "requests";

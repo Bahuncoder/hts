@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { saveCatalogueAction } from "@/lib/actions";
 import { AUDIT_COLUMNS, auditExportRow, toCsv } from "@/lib/csv";
 import { projectLine, type AuditLine } from "@/lib/auditModel";
+import { LIMITS } from "@/lib/plans";
 import { EXPECTED_FORMAT, SAMPLE_CSV, TEMPLATE_CSV, parseCatalogue } from "@/lib/csvParse";
 import AuditResults, { type AuditSummary } from "./AuditResults";
 
@@ -24,6 +25,8 @@ type Run = {
   /** The catalogue text this was run from. */
   text: string;
   sample: boolean;
+  entries: number;
+  transport: "vessel" | "air";
 };
 
 /** Files larger than the proxy accepts are refused here, with a reason,
@@ -59,7 +62,7 @@ export default function AuditClient({
   signedIn, maxRows,
 }: {
   signedIn: boolean;
-  /** Products per audit on the viewer's plan. The server enforces it. */
+  /** Products per audit for this visitor. The server enforces it. */
   maxRows: number;
 }) {
   const router = useRouter();
@@ -86,13 +89,13 @@ export default function AuditClient({
   const parsed = useMemo(() => (text.trim() ? parseCatalogue(text) : null), [text]);
   const isSample = text === SAMPLE_CSV;
   const entryCount = Math.max(1, Math.min(100_000, Math.floor(Number(entries)) || 1));
-  const overPlan = parsed?.ok && parsed.items.length > maxRows;
+  const overLimit = parsed?.ok && parsed.items.length > maxRows;
 
   async function runAudit() {
     setAttempted(true);
     if (busy) return;
     const p = parseCatalogue(text);
-    if (!p.ok) return; // the problems are already on screen, in an alert
+    if (!p.ok || p.items.length > maxRows) return; // the problems are already on screen, in an alert
 
     setBusy(true);
     setElapsed(0);
@@ -129,7 +132,7 @@ export default function AuditClient({
       }
       setRun({
         response: payload, inputs: p.items.map((i) => i.value),
-        ranAt: new Date(), text, sample: isSample,
+        ranAt: new Date(), text, sample: isSample, entries: entryCount, transport,
       });
       setSaveError(null);
     } catch (e) {
@@ -149,6 +152,10 @@ export default function AuditClient({
     e.target.value = ""; // so choosing the same file again still fires
     if (!f) return;
     try {
+      if (f.size > MAX_TEXT) {
+        setFileNote(`${f.name} is larger than the 2 MB limit. Split it into smaller files.`);
+        return;
+      }
       const body = await f.text();
       if (body.length > MAX_TEXT) {
         setFileNote(`${f.name} is larger than the 2 MB limit for one audit. Split it into smaller files.`);
@@ -196,13 +203,26 @@ export default function AuditClient({
   }
 
   const problems = parsed && !parsed.ok ? parsed.problems : [];
-  const stale = run !== null && run.text !== text;
+  const stale = run !== null && (run.text !== text || run.entries !== entryCount || run.transport !== transport);
   const templateHref = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`;
 
   const preflight = parsed?.ok ? parsed : null;
 
   return (
     <div className="space-y-6">
+      <ol className="workflow-steps" aria-label="Audit workflow">
+        {["Import your products", "Review the estimates", "Save and monitor"].map((label, index) => (
+          <li key={label} className="workflow-step" aria-current={(run ? 1 : 0) === index ? "step" : undefined}>
+            <span>{index + 1}</span><span>{label}</span>
+          </li>
+        ))}
+      </ol>
+      <section className="panel overflow-hidden" aria-labelledby="import-heading">
+        <div className="panel-heading">
+          <h2 id="import-heading" className="panel-title"><span className="step-number" aria-hidden="true">1</span>Import your catalogue</h2>
+          <span className="mono text-xs text-faint">Up to {maxRows.toLocaleString()} products per audit</span>
+        </div>
+        <div className="space-y-5 p-5 sm:p-6">
       <div className="space-y-2">
         <label htmlFor="catalogue-text" className="block text-[15px] font-medium">
           Your catalogue
@@ -218,10 +238,10 @@ export default function AuditClient({
           aria-describedby="catalogue-help catalogue-preflight"
           value={text}
           onChange={(e) => { setText(e.target.value); setAttempted(false); }}
-          rows={9}
+          rows={7}
           spellCheck={false}
           placeholder={"sku,description,country,value,hts\nTS-001,mens knitted cotton t-shirt,China,48000,"}
-          className={`mono w-full rounded-md border p-3 text-[13px] border-border bg-paper text-ink ${focusRing}`}
+          className={`mono w-full rounded-md border p-4 text-[13px] leading-relaxed border-rule bg-paper text-ink ${focusRing}`}
         />
       </div>
 
@@ -235,14 +255,14 @@ export default function AuditClient({
         />
         <label
           htmlFor="catalogue-file"
-          className="cursor-pointer rounded-md border px-3 py-2 text-[14px] border-rule peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+          className="btn btn-secondary cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
         >
           Upload CSV
         </label>
         <button
           type="button"
           onClick={() => { setText(SAMPLE_CSV); setAttempted(false); setFileNote(null); }}
-          className={`rounded-md border px-3 py-2 text-[14px] border-rule ${focusRing}`}
+          className={`btn btn-secondary ${focusRing}`}
         >
           Try a sample
         </button>
@@ -272,10 +292,13 @@ export default function AuditClient({
             {preflight.ignored.length ? ` Ignored columns: ${preflight.ignored.join(", ")}.` : ""}
           </p>
         ) : null}
-        {overPlan ? (
+        {overLimit ? (
           <p className="text-caution-ink">
-            That is more than the {maxRows.toLocaleString()} products your plan audits at once. The audit will
-            refuse it; split the file.
+            That is more than the {maxRows.toLocaleString()} products one audit takes
+            {signedIn ? "" : " without an account"}. The audit will refuse it;{" "}
+            {signedIn
+              ? "split the file."
+              : `split the file, or create a free account for up to ${LIMITS.account.productsPerAudit.toLocaleString()} at a time.`}
           </p>
         ) : null}
         {problems.length ? (
@@ -300,10 +323,12 @@ export default function AuditClient({
         </summary>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
-            <span className="lbl">Formal entries</span>
+            <span className="lbl" id="entry-count-label">Formal entries</span>
             <input
               type="number"
               inputMode="numeric"
+              aria-labelledby="entry-count-label"
+              aria-describedby="entry-count-help"
               min={1}
               max={100000}
               step={1}
@@ -311,14 +336,16 @@ export default function AuditClient({
               onChange={(e) => setEntries(e.target.value)}
               className={`mono w-32 border px-3 py-2 text-[14px] border-border bg-surface text-ink ${focusRing}`}
             />
-            <span className="text-[12px] text-muted">
+            <span id="entry-count-help" className="text-[12px] text-muted">
               How many customs entries this value is spread over. The Merchandise Processing Fee minimum
               and maximum apply to each.
             </span>
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="lbl">Transport</span>
+            <span className="lbl" id="transport-label">Transport</span>
             <select
+              aria-labelledby="transport-label"
+              aria-describedby="transport-help"
               value={transport}
               onChange={(e) => setTransport(e.target.value as "vessel" | "air")}
               className={`w-40 border px-3 py-2 text-[14px] border-border bg-surface text-ink ${focusRing}`}
@@ -326,7 +353,7 @@ export default function AuditClient({
               <option value="vessel">Vessel (ocean)</option>
               <option value="air">Air</option>
             </select>
-            <span className="text-[12px] text-muted">Vessel shipments carry the Harbor Maintenance Fee; air does not.</span>
+            <span id="transport-help" className="text-[12px] text-muted">Vessel shipments carry the Harbor Maintenance Fee; air does not.</span>
           </label>
         </div>
       </details>
@@ -335,8 +362,8 @@ export default function AuditClient({
         <button
           type="button"
           onClick={runAudit}
-          disabled={busy}
-          className={`rounded-md px-4 py-2 text-[15px] font-medium disabled:opacity-50 bg-accent text-on-accent ${focusRing}`}
+          disabled={busy || Boolean(overLimit)}
+          className={`btn btn-primary ${focusRing}`}
         >
           {busy ? "Auditing…" : "Run audit"}
         </button>
@@ -346,6 +373,9 @@ export default function AuditClient({
             : ""}
         </p>
       </div>
+
+        </div>
+      </section>
 
       {error ? (
         <div role="alert" className="rounded border-l-2 py-2 pl-3 text-[14px] border-danger bg-caution-soft text-danger">
@@ -367,7 +397,7 @@ export default function AuditClient({
           ) : null}
           {stale ? (
             <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
-              You have changed the catalogue since this audit ({timeOf(run.ranAt)}). Run the audit again to see
+              You have changed the catalogue or shipping assumptions since this audit ({timeOf(run.ranAt)}). Run the audit again to see
               results for what is above.
             </p>
           ) : null}
@@ -392,9 +422,9 @@ export default function AuditClient({
                 </label>
                 <button
                   type="button"
-                  disabled={saving || run.sample}
+                  disabled={saving || run.sample || stale}
                   onClick={save}
-                  className={`px-4 py-2 text-[14px] font-medium disabled:opacity-60 bg-accent text-on-accent ${focusRing}`}
+                  className={`btn btn-primary ${focusRing}`}
                 >
                   {saving ? "Saving…" : "Save and watch these codes"}
                 </button>
@@ -411,7 +441,7 @@ export default function AuditClient({
             <button
               type="button"
               onClick={() => downloadCsv(run.response.lines)}
-              className={`border px-4 py-2 text-[14px] font-medium border-rule ${focusRing}`}
+              className={`btn btn-secondary ${focusRing}`}
             >
               Export CSV
             </button>
@@ -424,7 +454,8 @@ export default function AuditClient({
           {signedIn ? (
             <p className="text-[12px] text-faint">
               Every line is saved, including the ones that could not be priced, so nothing drops off your
-              review list. Only priced lines with a real code are watched.
+              review list. Only priced lines with a real code are watched. You can keep up to{" "}
+              {LIMITS.account.savedCatalogues} saved catalogues.
             </p>
           ) : null}
 

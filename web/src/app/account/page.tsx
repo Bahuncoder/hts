@@ -2,12 +2,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { currentViewer } from "@/lib/auth";
 import { logoutAction, toggleAlertEmailsAction } from "@/lib/actions";
-import { billingEnabled } from "@/lib/stripe";
 import { emailEnabled } from "@/lib/email";
 import { listWatched } from "@/lib/catalogues";
 import { recentForAccount } from "@/lib/audit";
-import { PortalButton } from "@/components/BillingButtons";
-import { Card, Note } from "@/components/ui";
+import { Card } from "@/components/ui";
+import { windowLabel } from "@/lib/plans";
 
 export const metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
@@ -25,32 +24,15 @@ const EVENT_LABEL: Record<string, string> = {
   catalogue_deleted: "Catalogue deleted",
   catalogue_exported: "Catalogue exported",
   alert_emails_changed: "Alert emails changed",
-  plan_changed: "Plan changed",
 };
 
-export default async function AccountPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ checkout?: string }>;
-}) {
+export default async function AccountPage() {
   const viewer = await currentViewer();
   if (!viewer) redirect("/login");
-  const { checkout } = await searchParams;
-  const { account, subscription, plan } = viewer;
-  const paymentConfirmed =
-    plan.id !== "free" &&
-    (subscription.status === "active" || subscription.status === "trialing");
+  const { account, limits } = viewer;
   const alertEmailsOn = account.alert_emails !== 0;
   const watchedCount = (await listWatched(account.id)).length;
   const activity = await recentForAccount(account.id, 10);
-
-  const renews = subscription.current_period_end
-    ? new Date(subscription.current_period_end).toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      })
-    : null;
 
   return (
     <div className="space-y-8">
@@ -66,78 +48,44 @@ export default async function AccountPage({
         </form>
       </div>
 
-      {checkout === "done" ? (
-        // The query string only says the visitor came back from Stripe. A
-        // payment is confirmed when this account's subscription is active on
-        // a paid plan, which is set by Stripe's webhook, not by this URL.
-        paymentConfirmed ? (
-          <p
-            role="status"
-            className="border-l-2 py-2 pl-3 text-[14px] border-accent bg-accent-soft text-accent"
-          >
-            Payment confirmed. Your {plan.name} plan is active.
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-[15px] font-semibold">Your allowance</h2>
+          <p className="mt-1 text-[14px] text-muted">
+            HTSDesk is free while it is in beta. These limits keep it fast for
+            everyone, and they may change.
           </p>
-        ) : (
-          <p
-            role="status"
-            className="border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink"
-          >
-            Confirming your payment with Stripe — this can take a minute.
-            Reload this page to check. If the plan below still says Free after
-            a few minutes, write to hello@htsdesk.com.
-          </p>
-        )
-      ) : null}
-
-      <div className="grid gap-5 md:grid-cols-3">
-        <Card>
-          <div className="lbl">Plan</div>
-          <div className="mt-1 text-2xl font-semibold">{plan.name}</div>
-          <div className="mt-1 text-[13px] text-faint">
-            {plan.priceMonthly > 0
-              ? `$${plan.priceMonthly.toLocaleString()}/month`
-              : "no card"}
-          </div>
-        </Card>
-        <Card>
-          <div className="lbl">Catalogue ceiling</div>
-          <div className="mono mt-1 text-2xl font-semibold">
-            {plan.skus.toLocaleString()}
-          </div>
-          <div className="mt-1 text-[13px] text-faint">products per audit</div>
-        </Card>
-        <Card>
-          <div className="lbl">Status</div>
-          <div className="mt-1 text-2xl font-semibold">
-            {subscription.status === "active" && plan.id === "free"
-              ? "Free"
-              : subscription.status}
-          </div>
-          <div className="mt-1 text-[13px] text-faint">
-            {renews ? `renews ${renews}` : "no renewal scheduled"}
-          </div>
-        </Card>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-4">
+          <Card>
+            <div className="lbl">Products per audit</div>
+            <div className="mono mt-1 text-2xl font-semibold">
+              {limits.productsPerAudit.toLocaleString()}
+            </div>
+          </Card>
+          <Card>
+            <div className="lbl">Audits per {windowLabel(limits.auditRequests.windowMs)}</div>
+            <div className="mono mt-1 text-2xl font-semibold">
+              {limits.auditRequests.max.toLocaleString()}
+            </div>
+          </Card>
+          <Card>
+            <div className="lbl">Products per day</div>
+            <div className="mono mt-1 text-2xl font-semibold">
+              {limits.itemsPerDay.max.toLocaleString()}
+            </div>
+            <div className="mt-1 text-[13px] text-faint">rolling 24 hours</div>
+          </Card>
+          <Card>
+            <div className="lbl">Saved catalogues</div>
+            <div className="mono mt-1 text-2xl font-semibold">
+              {limits.savedCatalogues.toLocaleString()}
+            </div>
+          </Card>
+        </div>
       </div>
 
-      {subscription.status === "past_due" ||
-      subscription.status === "unpaid" ? (
-        <Note>
-          Your last payment did not go through, so the account is on free limits
-          for now. Update the card in the billing portal and the plan comes
-          straight back.
-        </Note>
-      ) : null}
-
       <div className="flex flex-wrap items-center gap-3">
-        {subscription.stripe_customer_id && billingEnabled() ? (
-          <PortalButton />
-        ) : null}
-        <Link
-          href="/pricing"
-          className="px-4 py-2 text-[14px] font-medium border border-rule"
-        >
-          {plan.id === "free" ? "See plans" : "Change plan"}
-        </Link>
         <Link
           href="/audit"
           className="px-4 py-2 text-[14px] font-medium bg-accent text-on-accent"
@@ -149,10 +97,10 @@ export default async function AccountPage({
       <div className="space-y-3 border-t pt-6 border-border">
         <h2 className="text-[15px] font-semibold">Alert emails</h2>
         <p className="text-[14px] text-muted">
-          {plan.monitoring
+          {alertEmailsOn
             ? `We email you when a tariff action names one of the ${watchedCount.toLocaleString()} codes you watch.`
-            : "Alerts appear in the app on every plan. Emailing them is part of Starter and above."}
-          {plan.monitoring && !emailEnabled()
+            : "Alert emails are off. Alerts still appear in the app."}
+          {alertEmailsOn && !emailEnabled()
             ? " Sending is not switched on yet, so alerts are in-app only for now."
             : ""}
         </p>
@@ -207,15 +155,6 @@ export default async function AccountPage({
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div className="space-y-2 border-t pt-6 border-border">
-        <h2 className="text-[15px] font-semibold">What your plan buys</h2>
-        <ul className="grid gap-1.5 text-[14px] sm:grid-cols-2 text-muted">
-          {plan.features.map((f) => (
-            <li key={f}>· {f}</li>
-          ))}
-        </ul>
       </div>
     </div>
   );

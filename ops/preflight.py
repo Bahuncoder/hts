@@ -5,7 +5,7 @@ Every item here corresponds to something that has actually gone wrong, or that
 fails silently in a way nobody notices until a customer does.
 
 Scoped to the API host only: the web app deploys separately to Vercel, with
-its own environment (Stripe keys, email secret, Turso credentials) set in the
+its own environment (email secret, Turso credentials) set in the
 Vercel dashboard rather than here, so those are not checkable from this
 script. Verify them with `vercel env ls` before a web deploy instead.
 """

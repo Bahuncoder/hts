@@ -40,9 +40,9 @@ async function post(body, { ip = newIp(), cookie, raw } = {}) {
   return { status: res.status, headers: res.headers, body: parsed, text };
 }
 
-async function signedIn(plan) {
-  const id = `acct-${plan}-${++ipSeq}`;
-  await seedAccount(db, { id, plan });
+async function signedIn() {
+  const id = `acct-${++ipSeq}`;
+  await seedAccount(db, { id });
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({
     sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
@@ -134,8 +134,7 @@ try {
     const wait = Number(r.headers.get("retry-after"));
     assert.ok(wait >= 1 && wait <= 600, `Retry-After ${wait}`);
     assert.match(r.body.detail, /3 audits per 10 minutes/);
-    assert.match(r.body.detail, /free account/i);
-    assert.equal(r.body.upgrade, "/signup");
+    assert.match(r.body.detail, /Create a free account for a larger allowance/);
     assert.equal(engine.state.auditCalls - calls, 3, "the refused call must not reach the engine");
     assert.equal(await used(`client:${ip}`, "audit_items"), 75, "charged by submitted item count");
     assert.equal(await used(`client:${ip}`, "audit_requests"), 3, "refusals are not charged");
@@ -159,43 +158,45 @@ try {
     assert.ok(Number(r.headers.get("retry-after")) > 3600);
   });
 
-  await check("a free account gets 10 audits an hour and 500 items a day", async () => {
-    const a = await signedIn("free");
+  await check("a signed-in account gets 10 audits an hour and 2,000 items a day", async () => {
+    const a = await signedIn();
     for (let i = 0; i < 10; i++) assert.equal((await post({ items: items(1) }, { cookie: a.cookie })).status, 200);
     const r = await post({ items: items(1) }, { cookie: a.cookie });
     assert.equal(r.status, 429);
     assert.match(r.body.detail, /10 audits per hour/);
-    assert.equal(r.body.upgrade, "/pricing");
+    assert.match(r.body.detail, /rolling basis/);
+    assert.match(r.body.detail, /Try again in \d+ (minutes|seconds)/);
+    const wait = Number(r.headers.get("retry-after"));
+    assert.ok(wait >= 1 && wait <= 3600, `Retry-After ${wait}`);
+    assert.doesNotMatch(r.text, /upgrade|pricing|plan|free account/i, "nothing larger to sell or move to");
+    assert.equal(r.body.upgrade, undefined);
 
-    const b = await signedIn("free");
-    await preload(b.subject, "audit_items", 490);
-    assert.equal((await post({ items: items(11) }, { cookie: b.cookie })).status, 429);
-    assert.equal((await post({ items: items(10) }, { cookie: b.cookie })).status, 200);
+    const b = await signedIn();
+    await preload(b.subject, "audit_items", 1801);
+    const over = await post({ items: items(200) }, { cookie: b.cookie });
+    assert.equal(over.status, 429);
+    assert.match(over.body.detail, /daily allowance of 2,000/);
+    assert.match(over.body.detail, /rolling basis/);
+    assert.doesNotMatch(over.text, /upgrade|pricing/i);
+    assert.equal((await post({ items: items(199) }, { cookie: b.cookie })).status, 200);
+    assert.equal(await used(b.subject, "audit_items"), 2000);
   });
 
   await check("the budget follows the account, not the address", async () => {
-    const a = await signedIn("free");
-    await preload(a.subject, "audit_items", 500);
+    const a = await signedIn();
+    await preload(a.subject, "audit_items", 2000);
     assert.equal((await post({ items: items(1) }, { cookie: a.cookie, ip: newIp() })).status, 429);
     assert.equal((await post({ items: items(1) }, { cookie: a.cookie, ip: newIp() })).status, 429);
     assert.equal((await post({ items: items(1) })).status, 200, "an anonymous caller is unaffected");
   });
 
-  await check("starter is limited to 3000 items a day, growth to 20000", async () => {
-    const s = await signedIn("starter");
-    await preload(s.subject, "audit_items", 2995);
-    assert.equal((await post({ items: items(6) }, { cookie: s.cookie })).status, 429);
-    assert.equal((await post({ items: items(5) }, { cookie: s.cookie })).status, 200);
-    const busy = await signedIn("starter");
-    for (let i = 0; i < 12; i++) assert.equal((await post({ items: items(1) }, { cookie: busy.cookie })).status, 200,
-      "paid plans have no per-request cap");
-
-    const g = await signedIn("growth");
-    await preload(g.subject, "audit_items", 19995);
-    const over = await post({ items: items(6) }, { cookie: g.cookie });
-    assert.equal(over.status, 429);
-    assert.equal(over.body.upgrade, undefined, "there is no higher plan to suggest");
-    assert.equal((await post({ items: items(5) }, { cookie: g.cookie })).status, 200);
+  await check("an account's usage is independent of another account on the same address", async () => {
+    const ip = newIp();
+    const a = await signedIn();
+    const b = await signedIn();
+    await preload(a.subject, "audit_items", 2000);
+    assert.equal((await post({ items: items(1) }, { cookie: a.cookie, ip })).status, 429);
+    assert.equal((await post({ items: items(1) }, { cookie: b.cookie, ip })).status, 200);
   });
 
   await check("only one audit runs at a time per caller", async () => {
@@ -239,10 +240,23 @@ try {
     assert.equal(await used(`client:${ip}`, "audit_requests"), 0);
   });
 
-  await check("the per-request product ceiling still applies", async () => {
-    const r = await post({ items: items(26) });
-    assert.equal(r.status, 413);
-    assert.equal(r.body.upgrade, "/signup");
+  await check("the per-request ceiling is 25 products anonymous, 200 signed in", async () => {
+    const calls = engine.state.auditCalls;
+    const anon = await post({ items: items(26) });
+    assert.equal(anon.status, 413);
+    assert.match(anon.body.detail, /26 products exceeds the 25 allowed without an account/);
+    assert.match(anon.body.detail, /Create a free account for a larger allowance/);
+    assert.doesNotMatch(anon.text, /upgrade|pricing/i);
+    assert.equal((await post({ items: items(25) })).status, 200);
+
+    const a = await signedIn();
+    const over = await post({ items: items(201) }, { cookie: a.cookie });
+    assert.equal(over.status, 413);
+    assert.match(over.body.detail, /201 products exceeds the 200 allowed in one audit/);
+    assert.doesNotMatch(over.text, /upgrade|pricing|free account/i);
+    assert.equal((await post({ items: items(200) }, { cookie: a.cookie })).status, 200);
+    assert.equal(engine.state.auditCalls - calls, 2, "over-ceiling requests never reach the engine");
+    assert.equal(await used(a.subject, "audit_items"), 200, "the refused 201 was not charged");
   });
 
   await check("the server-rendered classify path is limited to 30 searches a minute", async () => {

@@ -1,5 +1,8 @@
-/** An accounts database created before the webhook, outbox and diff-cursor
- *  columns existed must upgrade in place, keeping its rows and its meaning.
+/** An accounts database created before the outbox and diff-cursor columns
+ *  existed, and back when HTSDesk sold paid plans (so it still holds
+ *  `subscription` and `webhook_event` tables), must upgrade in place, keeping
+ *  its rows and its meaning. The dormant billing tables are left exactly as
+ *  they are, and a brand-new database does not create them.
  *
  *  Builds a legacy-schema database in a scratch directory, starts the
  *  production build on 3205 against it, and checks the result.
@@ -52,16 +55,37 @@ const { check, finish } = suite();
 try {
   await check("new columns are added and existing rows survive", async () => {
     const cols = async (t) => new Set((await db.execute(`PRAGMA table_info(${t})`)).rows.map((r) => r.name));
-    for (const c of ["status", "attempts", "updated_at", "last_error"]) assert.ok((await cols("webhook_event")).has(c), c);
     for (const c of ["email_status", "email_attempts", "email_last_error", "email_claim", "email_claimed_at"]) {
       assert.ok((await cols("alert")).has(c), c);
     }
     assert.ok((await cols("diff_state")).has("cursor"));
-    assert.ok((await cols("subscription")).has("stripe_subscription_created"));
-    const ev = (await db.execute("SELECT * FROM webhook_event WHERE id='evt_old'")).rows[0];
-    assert.equal(ev.status, "succeeded", "a pre-existing claim must not be replayed");
-    assert.equal(ev.attempts, 1);
-    assert.equal((await db.execute("SELECT plan FROM subscription WHERE account_id='old'")).rows[0].plan, "growth");
+    for (const c of ["alert_emails", "email_verified_at"]) assert.ok((await cols("account")).has(c), c);
+    assert.equal((await db.execute("SELECT count(*) AS n FROM alert WHERE id='a1'")).rows[0].n, 1);
+    assert.equal((await db.execute("SELECT email FROM account WHERE id='old'")).rows[0].email, "old@example.test");
+  });
+
+  await check("a legacy database keeps its dormant billing tables and rows untouched", async () => {
+    const cols = async (t) => [...(await db.execute(`PRAGMA table_info(${t})`)).rows.map((r) => r.name)];
+    assert.deepEqual(await cols("subscription"),
+      ["account_id", "stripe_customer_id", "stripe_subscription_id", "plan", "status",
+        "current_period_end", "updated_at"], "no column added to or dropped from subscription");
+    assert.deepEqual(await cols("webhook_event"), ["id", "type", "received_at"],
+      "no column added to or dropped from webhook_event");
+    const sub = (await db.execute("SELECT plan, status FROM subscription WHERE account_id='old'")).rows[0];
+    assert.equal(sub.plan, "growth", "the old subscription row is kept");
+    assert.equal(sub.status, "active");
+    assert.equal((await db.execute("SELECT type FROM webhook_event WHERE id='evt_old'")).rows[0].type,
+      "customer.subscription.updated");
+  });
+
+  await check("a legacy account that held a paid plan gets the account allowance, nothing more", async () => {
+    await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
+      args: ["legacy-token", "old", new Date(Date.now() + 3_600_000).toISOString()] });
+    const res = await fetch(`${app.base}/account`, { headers: { cookie: "htsdesk_session=legacy-token" } });
+    assert.equal(res.status, 200);
+    const html = await res.text();
+    assert.match(html, /Your allowance/);
+    assert.doesNotMatch(html, /growth|Growth|Stripe|billing portal|Change plan/);
   });
 
   await check("catalogue review columns are added in place and legacy rows are untouched", async () => {
@@ -85,8 +109,6 @@ try {
   });
 
   await check("a legacy catalogue is still readable and says what it is", async () => {
-    await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-      args: ["legacy-token", "old", new Date(Date.now() + 3_600_000).toISOString()] });
     const headers = { cookie: "htsdesk_session=legacy-token" };
     const page = await fetch(`${app.base}/catalogues/cat-old`, { headers });
     assert.equal(page.status, 200);
@@ -123,7 +145,22 @@ try {
     const again = await startApp({ port: 3205, dbFile: file, env: { HTSDESK_API: "http://127.0.0.1:3235" } });
     try {
       assert.equal((await again.admin("/api/admin/diff?send=0")).status, 200);
+      assert.equal((await db.execute("SELECT plan FROM subscription WHERE account_id='old'")).rows[0].plan,
+        "growth", "a second start leaves the dormant table alone");
     } finally { await again.stop(); }
+  });
+
+  await check("a brand-new database does not create the billing tables", async () => {
+    const fresh = await startApp({ port: 3205, dbFile: path.join(scratchDir(), "fresh.db"),
+                                   env: { HTSDESK_API: "http://127.0.0.1:3235" } });
+    const fdb = fresh.db();
+    try {
+      const tables = new Set((await fdb.execute("SELECT name FROM sqlite_master WHERE type='table'"))
+        .rows.map((r) => r.name));
+      for (const t of ["account", "catalogue", "alert", "usage_event"]) assert.ok(tables.has(t), t);
+      assert.ok(!tables.has("subscription"), "no subscription table");
+      assert.ok(!tables.has("webhook_event"), "no webhook_event table");
+    } finally { fdb.close(); await fresh.stop(); }
   });
 } finally {
   db.close();

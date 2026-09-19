@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader";
 import { getChanges } from "@/lib/api";
 import { Badge, Card } from "@/components/ui";
 import { Field, inputClass } from "@/components/Field";
@@ -38,20 +39,9 @@ export default async function ChangesPage({
 
   return (
     <div className="space-y-8">
-      <div className="max-w-2xl space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Tariff changes
-        </h1>
-        <p className="text-muted">
-          Rates move several times a week. These are the tariff actions
-          published in the Federal Register in the last {DAYS} days, with the
-          HTS codes each names — so you can tell in seconds whether one touches
-          your catalogue. Documents that merely mention a tariff term are
-          filtered out.
-        </p>
-      </div>
+      <PageHeader eyebrow="Tariff intelligence" title="See what is changing." description="Explore tariff actions published in the Federal Register over the last 90 days. Filter by HTS code to find the changes relevant to your goods." />
 
-      <form action="/changes" className="max-w-md" role="search">
+      <form action="/changes" className="panel max-w-2xl p-5" role="search">
         <Field
           id="code"
           label="Only actions naming codes starting with"

@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
 import { getQuote, money2, search, type Quote } from "@/lib/api";
 import { Card, Note, Stat } from "@/components/ui";
@@ -94,19 +95,9 @@ export default async function CalculatorPage({
 
   return (
     <div className="space-y-8">
-      <div className="max-w-2xl space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Import duty calculator
-        </h1>
-        <p className="text-muted">
-          The full stack, not just the MFN rate: trade remedies, merchandise
-          processing fee and harbor maintenance fee, each traced to its
-          authority. The result is a scenario estimate for one entry at the
-          value you enter.
-        </p>
-      </div>
+      <PageHeader eyebrow="Duty calculator" title="Know your duty exposure" description="Build an estimate for one customs entry. Choose the origin and shipping assumptions, then explore every duty and fee." />
 
-      <form action="/calculator" className="max-w-4xl space-y-5">
+      <form action="/calculator" className="panel space-y-6 p-5 sm:p-7">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field
             id="hts"
@@ -209,7 +200,7 @@ export default async function CalculatorPage({
 
         <button
           type="submit"
-          className="rounded-md px-4 py-2 text-[15px] font-medium bg-accent text-on-accent"
+          className="btn btn-primary"
         >
           Calculate
         </button>

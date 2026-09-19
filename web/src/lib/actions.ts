@@ -105,7 +105,9 @@ export async function logoutAction(): Promise<void> {
 
 import { revalidatePath } from "next/cache";
 import { currentViewer } from "./auth";
-import { deleteCatalogue, saveCatalogue, unwatchCode, watchCode } from "./catalogues";
+import {
+  CatalogueLimitError, deleteCatalogue, saveCatalogue, unwatchCode, watchCode,
+} from "./catalogues";
 import { projectLine, type SavedLine, type SignedAudit } from "./auditModel";
 import { PROOF_MAX_AGE_MS, signingSecret, verifyAudit } from "./auditProof";
 import { markAllRead } from "./diff";
@@ -144,10 +146,11 @@ export async function saveCatalogueAction(
   const p = payload as Partial<SavePayload> | null;
   if (!p || typeof p !== "object" || !Array.isArray(p.lines)) return { error: RERUN };
   if (!p.lines.length) return { error: "Nothing to save." };
-  // The ceiling is on what was submitted, priced or not: a plan sized for N
-  // products does not get 2N by having some of them fail.
-  if (p.lines.length > viewer.plan.skus) {
-    return { error: `${p.lines.length} products exceeds the ${viewer.plan.skus.toLocaleString()} allowed on ${viewer.plan.name}.` };
+  // The ceiling is on what was submitted, priced or not: an allowance sized
+  // for N products does not get 2N by having some of them fail.
+  const ceiling = viewer.limits.productsPerAudit;
+  if (p.lines.length > ceiling) {
+    return { error: `${p.lines.length} products exceeds the ${ceiling.toLocaleString()} allowed in one catalogue.` };
   }
   if (p.lines.length > MAX_SAVE_LINES) return { error: RERUN };
 
@@ -185,7 +188,14 @@ export async function saveCatalogueAction(
     : [];
 
   const clean = String(p.name ?? "").trim().slice(0, 120) || "Untitled catalogue";
-  const id = await saveCatalogue(viewer.account.id, clean, body, inputs);
+  let id: string;
+  try {
+    id = await saveCatalogue(viewer.account.id, clean, body, inputs);
+  } catch (err) {
+    // Raised inside the save's own transaction, so it holds under concurrency.
+    if (err instanceof CatalogueLimitError) return { error: err.message };
+    throw err;
+  }
   await audit("catalogue_saved", { accountId: viewer.account.id,
     email: viewer.account.email, detail: `${lines.length} products` });
   revalidatePath("/catalogues");

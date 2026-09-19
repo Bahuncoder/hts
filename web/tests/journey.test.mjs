@@ -46,7 +46,8 @@ page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 await step("landing page states the offer and offers a way in", async () => {
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   const body = await text();
-  assert.match(body, /code you don.t have|Know what your imports/i);
+  assert.match(body, /Know the code\.\s+Understand the cost/i);
+  assert.match(body, /Free while in beta/i, "the free beta must be stated, not implied");
   assert.ok(await page.locator('a[href="/signup"]').count() > 0, "no signup route in");
 });
 
@@ -86,7 +87,10 @@ await step("signup creates an account and lands on it", async () => {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const body = await text();
-  assert.match(body, /Free/, "a new account starts on the free plan");
+  assert.match(body, /Your allowance/, "a new account sees its allowance");
+  assert.match(body, /free while it is in beta/i);
+  assert.doesNotMatch(body, /Stripe|billing portal|Change plan|Upgrade|Starter|Growth/i,
+    "nothing on the account page refers to buying anything");
 });
 
 await step("signing up again while signed in does not create a second account", async () => {
@@ -253,13 +257,21 @@ await step("the page has no console errors during the journey", async () => {
   assert.deepEqual(real, [], `console errors: ${real.slice(0, 3).join(" | ")}`);
 });
 
+await step("the old /pricing URL lands on the home page", async () => {
+  const probe = await ctx.newPage();
+  await probe.goto(`${BASE}/pricing`, { waitUntil: "domcontentloaded" });
+  assert.equal(new URL(probe.url()).pathname, "/");
+  assert.equal(await probe.getByRole("link", { name: "Pricing" }).count(), 0, "no Pricing link in the navigation");
+  await probe.close();
+});
+
 // --- responsive -------------------------------------------------------------
 
 await step("the layout does not scroll sideways on a phone", async () => {
   const phone = await ctx.newPage();
   await phone.setViewportSize({ width: 390, height: 844 });
   const offenders = [];
-  for (const path of ["/", "/pricing", "/hts/6109.10.00.12", "/terms"]) {
+  for (const path of ["/", "/account", "/hts/6109.10.00.12", "/terms"]) {
     await phone.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
     const overflow = await phone.evaluate(() =>
       document.documentElement.scrollWidth - document.documentElement.clientWidth);

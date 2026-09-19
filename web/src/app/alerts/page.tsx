@@ -4,6 +4,7 @@ import { currentViewer } from "@/lib/auth";
 import { listAlerts, unreadCount, diffStatus } from "@/lib/diff";
 import { listWatched } from "@/lib/catalogues";
 import { markAlertsReadAction } from "@/lib/actions";
+import { emailEnabled } from "@/lib/email";
 import { Card } from "@/components/ui";
 
 export const metadata = { title: "Alerts" };
@@ -17,6 +18,7 @@ export default async function AlertsPage() {
   const unread = await unreadCount(viewer.account.id);
   const watched = await listWatched(viewer.account.id);
   const status = await diffStatus();
+  const emailed = viewer.account.alert_emails !== 0 && emailEnabled();
 
   return (
     <div className="space-y-7">
@@ -38,6 +40,15 @@ export default async function AlertsPage() {
                 </span>
               </>
             ) : null}
+          </p>
+          <p className="text-[13px] text-faint">
+            {emailed
+              ? "New alerts are also emailed to you."
+              : "New alerts appear here only; emails are off."}{" "}
+            <Link href="/account" className="hover:underline text-accent">
+              Change in Account
+            </Link>
+            .
           </p>
         </div>
         {unread > 0 ? (

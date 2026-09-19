@@ -42,7 +42,7 @@ function Metric({
   label: string; value: string; sub?: string; partial?: number; tone?: "recover";
 }) {
   return (
-    <div className="rounded-lg border p-4 border-border bg-surface">
+    <div role="group" aria-label={label} className="metric-card">
       <div className="text-[12px] uppercase tracking-wide text-muted">{label}</div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className={`mono text-2xl font-semibold ${tone === "recover" ? "text-recover" : ""}`}>
@@ -120,7 +120,7 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
             {suggested.map((c) => (
               <li key={c.hts} className="rounded border p-2 border-border">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                  <Link href={`/hts/${c.hts}`} className="mono font-medium hover:underline text-accent">{c.hts}</Link>
+                  <Link href={`/hts/${c.hts}?country=${encodeURIComponent(line.country || "")}`} className="mono font-medium hover:underline text-accent">{c.hts}</Link>
                   {c.hts === line.hts ? <Badge tone="good">Used for this price</Badge> : null}
                   <span className="text-muted">
                     {c.confidence ? `${c.confidence} confidence` : ""}
@@ -156,7 +156,7 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
           <ul className="space-y-1">
             {alternatives.map((a) => (
               <li key={a.hts} className="flex flex-wrap gap-x-3">
-                <Link href={`/hts/${a.hts}`} className="mono hover:underline text-accent">{a.hts}</Link>
+                <Link href={`/hts/${a.hts}?country=${encodeURIComponent(line.country || "")}`} className="mono hover:underline text-accent">{a.hts}</Link>
                 <span className="text-muted">{a.description}</span>
                 {a.general_rate ? <span className="mono text-faint">{a.general_rate}</span> : null}
               </li>
@@ -179,12 +179,20 @@ export default function AuditResults({
   const counts = useMemo(() => countLines(lines), [lines]);
   const [filter, setFilter] = useState<Filter>("all");
   const [page, setPage] = useState(0);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("original");
   const [open, setOpen] = useState<Set<number>>(new Set());
 
-  const shown = useMemo(
-    () => lines.map((line, i) => ({ line, i })).filter((x) => filter === "all" || bucketOf(x.line.status) === filter),
-    [lines, filter],
-  );
+  const shown = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    const rows = lines.map((line, i) => ({ line, i })).filter(({ line }) =>
+      (filter === "all" || bucketOf(line.status) === filter) &&
+      (!term || [line.sku, line.description, line.hts, line.country].some((value) => value?.toLowerCase().includes(term))),
+    );
+    if (sort === "duty") rows.sort((a, b) => (b.line.duty ?? -1) - (a.line.duty ?? -1));
+    if (sort === "value") rows.sort((a, b) => (b.line.entered_value ?? inputs[b.i] ?? -1) - (a.line.entered_value ?? inputs[a.i] ?? -1));
+    return rows;
+  }, [lines, filter, query, sort, inputs]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const at = Math.min(page, pages - 1);
   const slice = shown.slice(at * PAGE_SIZE, (at + 1) * PAGE_SIZE);
@@ -204,6 +212,10 @@ export default function AuditResults({
 
   return (
     <section className="space-y-5" aria-label="Audit results">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border pt-7">
+        <div><p className="eyebrow">Your audit workspace</p><h2 className="serif mt-2 text-3xl tracking-tight">Review the details.</h2></div>
+        <span className="text-xs text-muted">Open a row to inspect evidence and warnings</span>
+      </div>
       <p className="text-[15px] font-medium" data-testid="reconciliation">
         Submitted <span className="mono">{counts.submitted.toLocaleString()}</span>
         {" · "}Ready <span className="mono">{counts.ready.toLocaleString()}</span>
@@ -263,6 +275,11 @@ export default function AuditResults({
         <span className="mono">{summary.dataset_revision || "not reported"}</span>
       </p>
 
+      <div className="panel space-y-4 p-4 sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <label className="flex-1 space-y-1.5"><span className="text-xs font-medium">Find a product</span><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search SKU, description, code, or origin" className="field-control" /></label>
+        <label className="space-y-1.5 sm:w-52"><span className="text-xs font-medium">Sort results</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }} className="field-control"><option value="original">Original row order</option><option value="duty">Highest duty first</option><option value="value">Highest value first</option></select></label>
+      </div>
       <div role="group" aria-label="Filter lines" className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
@@ -279,11 +296,16 @@ export default function AuditResults({
         ))}
       </div>
 
+      <p role="status" className="text-xs text-muted">{shown.length.toLocaleString()} of {lines.length.toLocaleString()} products match</p>
+      </div>
+
       {!shown.length ? (
-        <p className="py-6 text-[14px] text-muted">No lines match this filter.</p>
+        <div className="panel px-5 py-10 text-center"><p className="font-medium">No products match this view</p><p className="mt-2 text-sm text-muted">Try a different search or show all review statuses.</p><button type="button" onClick={() => { setQuery(""); setFilter("all"); setPage(0); }} className="btn btn-secondary mt-5">Clear search and filters</button></div>
       ) : (
-        <div className="scroll-x relative">
-          <table className="w-full text-[14px] md:min-w-[860px]">
+        <div className="panel overflow-hidden">
+          <p className="border-b border-border px-4 py-2 text-xs text-muted md:hidden">Scroll across to see every column. Open Details to review a product.</p>
+          <div className="scroll-x relative" tabIndex={0} role="region" aria-label="Audited products">
+          <table className="data-table w-full min-w-[520px] text-[14px] md:min-w-[860px]">
             <caption className="sr-only">
               Audited lines, {shown.length} shown, page {at + 1} of {pages}
             </caption>
@@ -312,7 +334,7 @@ export default function AuditResults({
                           <span className="mono text-[13px] text-faint md:hidden">#{l.row}</span>
                           <span className="mono text-[13px] font-medium">{l.sku || "no SKU"}</span>
                         </div>
-                        <div className="clamp-2 text-muted">{l.description || "—"}</div>
+                        <div className="text-muted">{l.description || "—"}</div>
                         <div className="mono mt-0.5 text-[12px] text-faint md:hidden">
                           {l.hts ?? "no code"} · {l.country || "no origin"}
                           {value !== undefined ? ` · ${money(value)}` : ""}
@@ -320,7 +342,7 @@ export default function AuditResults({
                       </td>
                       <td className="mono hidden py-2 pr-3 text-[13px] md:table-cell">
                         {l.hts ? (
-                          <Link href={`/hts/${l.hts}`} className="hover:underline text-accent">{l.hts}</Link>
+                          <Link href={`/hts/${l.hts}?country=${encodeURIComponent(l.country || "")}`} className="hover:underline text-accent">{l.hts}</Link>
                         ) : "—"}
                       </td>
                       <td className="hidden py-2 pr-3 text-muted md:table-cell">{l.country || "—"}</td>
@@ -358,6 +380,7 @@ export default function AuditResults({
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -26,7 +26,7 @@ export default async function SignUpPage({
         submit="Create account"
         newPassword
         heading="Create an account"
-        blurb="Classify 25 products free. No card until you need more."
+        blurb="Free. Classify and price up to 200 products at a time."
         footer={
           <>
             Already have one?{" "}

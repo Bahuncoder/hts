@@ -11,7 +11,7 @@ function isActive(pathname: string | null, href: string): boolean {
 }
 
 /** A header link that says where you are. The current page is marked with
- *  aria-current and with weight and underline, so it never depends on colour
+ *  aria-current and with weight and a visible marker, so it never depends on colour
  *  alone. */
 export function NavLink({
   href,
@@ -27,18 +27,14 @@ export function NavLink({
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
-      className={`hover:underline ${
-        active
-          ? "font-medium text-ink underline underline-offset-4"
-          : "text-muted"
-      } ${className}`}
+      className={`nav-item ${className}`}
     >
       {children}
     </Link>
   );
 }
 
-/** Primary navigation. From 640px up it is an inline row. Below that it folds
+/** Primary navigation. At wide desktop sizes it is an inline row. Below that it folds
  *  into a <details> menu, which is keyboard-operable with no script. The menu
  *  is keyed by pathname so it closes itself when a link is followed. */
 export function SiteNav({ items }: { items: Item[] }) {
@@ -47,7 +43,7 @@ export function SiteNav({ items }: { items: Item[] }) {
     <>
       <nav
         aria-label="Main"
-        className="hidden flex-wrap gap-x-5 gap-y-1 text-[14px] sm:flex"
+        className="hidden gap-1 xl:flex"
       >
         {items.map((n) => (
           <NavLink key={n.href} href={n.href}>
@@ -58,10 +54,10 @@ export function SiteNav({ items }: { items: Item[] }) {
 
       <details
         key={pathname}
-        className="order-last basis-full text-[14px] sm:hidden"
+        className="order-last basis-full text-[14px] xl:hidden"
       >
         <summary className="cursor-pointer list-none rounded border px-3 py-1.5 font-medium border-border [&::-webkit-details-marker]:hidden">
-          Menu
+          Explore tools <span aria-hidden="true" className="float-right">＋</span>
         </summary>
         <nav aria-label="Main" className="mt-2">
           <ul className="flex flex-col">

@@ -2,7 +2,7 @@
  *
  *  Each test starts the PRODUCTION build (`next start`) on a spare port with
  *  its own accounts database, and talks to it over HTTP, with small fake
- *  servers standing in for Stripe, the engine API and the mail provider. So
+ *  servers standing in for the engine API and the mail provider. So
  *  what is exercised is the shipped route handlers and library code, not a
  *  copy of them.
  *
@@ -257,16 +257,9 @@ export async function fakeEngine(port) {
   return { state, close: server.close };
 }
 
-export async function seedAccount(db, { id, plan = "free", status = "active", alertEmails = 1,
-                                        customer = null, subscription = null }) {
-  const now = new Date().toISOString();
+export async function seedAccount(db, { id, alertEmails = 1 }) {
   await db.execute({
     sql: "INSERT INTO account(id,email,password_hash,created_at,alert_emails) VALUES(?,?,?,?,?)",
-    args: [id, `${id}@example.test`, "scrypt$0$0", now, alertEmails],
-  });
-  await db.execute({
-    sql: `INSERT INTO subscription(account_id,stripe_customer_id,stripe_subscription_id,plan,status,updated_at)
-          VALUES(?,?,?,?,?,?)`,
-    args: [id, customer, subscription, plan, status, now],
+    args: [id, `${id}@example.test`, "scrypt$0$0", new Date().toISOString(), alertEmails],
   });
 }
