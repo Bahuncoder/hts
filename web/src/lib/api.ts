@@ -47,6 +47,9 @@ export type Quote = {
   dataset_revision?: string;
   /** Units a per-unit duty is charged in, when it could not be priced without a quantity. */
   quantity_needed?: string[];
+  /** Facts about the goods (metal_weight_pct, vehicle_use) that would settle a
+   *  Section 232 question this quote could not. */
+  facts_needed?: string[];
 };
 
 export type Ruling = {
@@ -189,6 +192,12 @@ export type QuoteInput = {
   quantity?: number;
   /** Unit of `quantity`; the unit the duty is charged in when omitted. */
   quantityUnit?: string;
+  /** Share of the article's weight that is aluminum, steel or copper (0-100). */
+  metalWeightPct?: number;
+  /** "passenger", "heavy" or "none": whether the goods are vehicle parts. */
+  vehicleUse?: string;
+  /** "civil aircraft" or "pharmaceutical": an end use the goods are claimed for. */
+  endUse?: string;
 };
 
 export const getQuote = (q: QuoteInput) =>
@@ -204,6 +213,9 @@ export const getQuote = (q: QuoteInput) =>
       ...(q.preferenceProgram ? { preference_program: q.preferenceProgram } : {}),
       ...(q.quantity ? { quantity: q.quantity } : {}),
       ...(q.quantity && q.quantityUnit ? { quantity_unit: q.quantityUnit } : {}),
+      ...(q.metalWeightPct !== undefined ? { metal_weight_pct: q.metalWeightPct } : {}),
+      ...(q.vehicleUse ? { vehicle_use: q.vehicleUse } : {}),
+      ...(q.endUse ? { end_use: q.endUse } : {}),
     }),
     cache: "no-store",
   });

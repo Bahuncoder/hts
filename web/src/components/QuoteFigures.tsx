@@ -36,8 +36,17 @@ export function incompleteReasons(q: Quote): string[] {
       `${n === 1 ? "One trade-remedy heading" : `${n} trade-remedy headings`} (${q.scope_unverified.join(", ")}) may apply to this entry, but ${n === 1 ? "its" : "their"} product scope is defined only in the Chapter 99 U.S. Notes and could not be resolved. ${n === 1 ? "It is" : "They are"} excluded from this total until scope is verified.`,
     );
   }
+  const asks = (q.facts_needed ?? [])
+    .map((f) => FACT_ASKS[f])
+    .filter((t): t is string => Boolean(t));
+  if (asks.length) out.push(`To settle this, state ${asks.join(" and ")} under "About the goods".`);
   return out;
 }
+
+const FACT_ASKS: Record<string, string> = {
+  metal_weight_pct: "the share of the article's weight that is aluminum, steel or copper",
+  vehicle_use: "whether the goods are parts of a passenger vehicle, a heavy-duty vehicle, or neither",
+};
 
 /** Sits directly under a money figure. Renders nothing for a complete total. */
 export function IncompleteReasons({ quote }: { quote: Quote }) {

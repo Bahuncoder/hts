@@ -86,29 +86,36 @@ before claiming anything for it.
   entry-specific exemption: goods in transit, donations, informational
   materials, Chapter 98 claims). Products on the note's pure code-list exceptions
   are exempt; products on its use-conditional lists (civil-aircraft parts,
-  pharmaceutical articles) are flagged, because a code alone cannot prove the
-  end use. Still flagged, deliberately (fail closed):
-  Section 232 metals and derivatives, vehicles and auto parts, wood and
-  furniture, semiconductors and other product-specific regimes, and the two
-  end-use lists of note 52 (civil-aircraft parts, pharmaceutical articles).
-  Origins with a deal structure are now resolved: the UK, Malaysia, Taiwan and
-  others take only their own exception list; Canada and Mexico owe the note-52
-  duty unless USMCA free treatment is claimed (the `program` column / field,
-  `S`), and a claim is assumed to qualify; Guatemala and El Salvador likewise
-  for CAFTA-DR (`P`). Measured on a 1,500-line sample (metals excluded from
-  the sample, chapters 72/73/76): 70.7 % of quotes are complete for any of
-  China, Vietnam, India, Canada, Mexico, the UK, the EU, Korea, Taiwan and
-  Switzerland (Japan 68.8 %), up from 0 % for Germany and Japan at the previous
-  commit. With a quantity supplied for every per-unit
-  line the figure is 81.3 %. The remainder is Section 232 (about 15 % of lines
-  fall in a 232 product list, which the engine cannot price), vehicle parts,
-  the end-use lists, and per-unit forms it cannot price (sliding scales,
-  "on copper content").
+  pharmaceutical articles) are exempt only when the importer states that end
+  use. Still flagged, deliberately (fail closed): whole vehicles, pharmaceutical (232) and semiconductor articles, and every
+  deal origin's own structure for vehicle parts and upholstered furniture.
+  Section 232 metals (note 16), vehicle parts (notes 33, 38) and wood (note 37)
+  are resolved: metals need the metal weight only outside chapters 72-76;
+  vehicle parts need the importer to say whether the goods are parts of a
+  passenger vehicle, a heavy-duty vehicle, or neither; a stated use never
+  comes from the code. The note-52 civil-aircraft and pharmaceutical
+  exceptions apply only on a stated end use and are otherwise assumed
+  unclaimed (the quote says so). Whatever the quote could not settle names the
+  fact that would settle it (`facts_needed`).
+  Origins with a deal structure are resolved for ordinary goods: the UK,
+  Malaysia, Taiwan and others take only their own exception list; Canada and
+  Mexico owe the note-52 duty unless USMCA free treatment is claimed (`program`
+  `S`); Guatemala and El Salvador likewise for CAFTA-DR (`P`); a claim is
+  assumed to qualify. Measured on a 1,500-line sample (metals chapters 72, 73,
+  76 excluded) with no facts stated: 79.8 % of quotes are complete for China,
+  Canada and the UK (Germany 79.7 %, Japan 77.8 %); with a quantity for every
+  per-unit line, 90.4 % (Japan 88.1 %); with metal weight and vehicle use also
+  stated, 94.9 % (China). At the previous commit Germany and Japan were 0 %.
+  What is left is whole vehicles and heavy-duty vehicles, deal-origin (EU,
+  Japan, Korea, Taiwan, UK) vehicle parts, pharmaceutical 232 and
+  semiconductors, and per-unit forms it cannot price (sliding scales, "on
+  copper content").
   Found and fixed while building this: 121 rules named a Chapter 99 exception
   as their base subheading and never matched (all 9903.02 reciprocal duties
   among them); note 51's three Canada headings shared one merged 554-code list;
   the 9903.02 reciprocal duties are IEEPA and now feed the refund estimate
-  (flagged unscoped) instead of vanishing.
+  (flagged unscoped) instead of vanishing; U.S. note 31 (Section 301) had been
+  counted as a Section 232 note, flagging its 990 lines for every origin.
 - **Two editorial facts must be re-verified each refresh.** The engine reads
   expiry from the schedule's compiler's notes where they exist, but the
   Section 122 surcharge (9903.03.01–.11) is not yet marked expired there, so its
@@ -121,10 +128,13 @@ before claiming anything for it.
   one the line is flagged incomplete and says which unit to enter (about 13 %
   of lines carry such a duty). The customs value is the entered value; no
   proof-gallon, drained-weight or metal-content basis is modelled.
-- Section 232 is the largest remaining completeness gap (about 15 % of lines).
-  Its scope is a product list per regime with per-country deal rates and
-  content-value rules; it needs its own extraction and verification, not a
-  tweak to the note-52 logic.
+- Section 232 defaults are assumptions the quote states: the ordinary metals
+  rate (no 85 % U.S.-melted, 95 % U.K. or use-in-U.S.-manufacturing claim), no
+  manufacturer import-adjustment offset, and no importer certification for
+  automobile parts outside the enumerated list. These can only raise the
+  estimate. Not modelled: whole vehicles, the deal-origin vehicle-part and
+  furniture headings, pharmaceutical (note 40) and semiconductor (note 39)
+  articles.
 - AD/CVD orders are not integrated (separate CBP/ITA dataset). For many
   China/Vietnam/India goods this is the largest omitted charge and is **not
   flagged** yet.

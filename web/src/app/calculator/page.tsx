@@ -49,6 +49,9 @@ export default async function CalculatorPage({
   const program = (one(sp.program) ?? "").trim().toUpperCase().slice(0, 8);
   const rawQuantity = (one(sp.quantity) ?? "").trim();
   const quantityUnit = (one(sp.unit) ?? "").trim().slice(0, 32);
+  const rawMetal = (one(sp.metal) ?? "").trim();
+  const vehicleUse = ["passenger", "heavy", "none"].includes(one(sp.vehicle) ?? "") ? (one(sp.vehicle) as string) : "";
+  const endUse = ["civil aircraft", "pharmaceutical"].includes(one(sp.enduse) ?? "") ? (one(sp.enduse) as string) : "";
   const q = (one(sp.q) ?? "").trim();
 
   const scenario: Record<string, string> = {
@@ -60,6 +63,9 @@ export default async function CalculatorPage({
     program,
     quantity: rawQuantity,
     unit: quantityUnit,
+    metal: rawMetal,
+    vehicle: vehicleUse,
+    enduse: endUse,
   };
   const href = (over: Record<string, string> = {}) => {
     const p = new URLSearchParams();
@@ -72,6 +78,8 @@ export default async function CalculatorPage({
   // --- price the code --------------------------------------------------
   const value = parseValue(rawValue);
   const quantity = rawQuantity ? parseValue(rawQuantity) : null;
+  const metalWeight = rawMetal ? Number(rawMetal.replace(/[%\s]/g, "")) : null;
+  const metalBad = metalWeight !== null && !(Number.isFinite(metalWeight) && metalWeight >= 0 && metalWeight <= 100);
   let inputProblem: string | null = null;
   if (hts) {
     if (!country) {
@@ -80,6 +88,8 @@ export default async function CalculatorPage({
     } else if (value === null) {
       inputProblem =
         "Enter an entered value above $0, for example 10000 or 2499.50.";
+    } else if (metalBad) {
+      inputProblem = "Enter the metal weight as a percentage from 0 to 100, or leave it blank.";
     } else if (rawQuantity && quantity === null) {
       inputProblem =
         "Enter the quantity as a number above 0, for example 2500, or leave it blank.";
@@ -96,6 +106,9 @@ export default async function CalculatorPage({
           preferenceProgram: program || undefined,
           quantity: quantity ?? undefined,
           quantityUnit: quantityUnit || undefined,
+          metalWeightPct: metalWeight !== null && !metalBad ? metalWeight : undefined,
+          vehicleUse: vehicleUse || undefined,
+          endUse: endUse || undefined,
         })
       : null;
 
@@ -221,6 +234,35 @@ export default async function CalculatorPage({
             </div>
           </Field>
         </div>
+
+        <details className="rounded-md border border-border p-4" open={Boolean(rawMetal || vehicleUse || endUse)}>
+          <summary className="cursor-pointer text-[14px] font-medium">About the goods (optional)</summary>
+          <p className="mt-2 text-[13px] text-muted">
+            Some duties depend on what the goods are used for or made of. Leave these blank if you do not
+            know; the estimate will say when one of them would change the answer.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Field id="metal" label="Metal weight (%)" hint="Share of the article's weight that is aluminum, steel or copper.">
+              <input id="metal" name="metal" defaultValue={rawMetal} placeholder="e.g. 60" inputMode="decimal"
+                autoComplete="off" aria-describedby="metal-hint" className={`tabular ${inputClass}`} />
+            </Field>
+            <Field id="vehicle" label="Vehicle parts" hint="Are the goods parts of a passenger vehicle, a medium- or heavy-duty vehicle, or neither?">
+              <select id="vehicle" name="vehicle" defaultValue={vehicleUse} aria-describedby="vehicle-hint" className={inputClass}>
+                <option value="">Not stated</option>
+                <option value="passenger">Passenger vehicle or light truck</option>
+                <option value="heavy">Medium- or heavy-duty vehicle</option>
+                <option value="none">Not a vehicle part</option>
+              </select>
+            </Field>
+            <Field id="enduse" label="End use claimed" hint="Only if you certify it: it removes the country-wide duty on listed codes.">
+              <select id="enduse" name="enduse" defaultValue={endUse} aria-describedby="enduse-hint" className={inputClass}>
+                <option value="">None</option>
+                <option value="civil aircraft">Civil aircraft</option>
+                <option value="pharmaceutical">Pharmaceutical</option>
+              </select>
+            </Field>
+          </div>
+        </details>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <RadioGroup

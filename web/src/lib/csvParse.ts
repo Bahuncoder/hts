@@ -26,11 +26,18 @@ export type ParsedItem = {
   quantityUnit: string;
   /** A preference program the entry claims ("S" for USMCA, "KR"...); blank when none. */
   program: string;
+  /** Share of the article's weight that is aluminum, steel or copper; null when not given. */
+  metalWeightPct: number | null;
+  /** passenger | heavy | none: whether the goods are vehicle parts; blank when not given. */
+  vehicleUse: string;
+  /** civil aircraft | pharmaceutical; blank when no end use is claimed. */
+  endUse: string;
   /** Why this row looks incomplete before it is sent (informational only). */
   problems: string[];
 };
 
-export type Field = "sku" | "description" | "country" | "value" | "hts" | "quantity" | "unit" | "program";
+export type Field = "sku" | "description" | "country" | "value" | "hts" | "quantity" | "unit" | "program"
+  | "metalWeight" | "vehicleUse" | "endUse";
 
 export const REQUIRED: Field[] = ["description", "country", "value"];
 
@@ -45,6 +52,9 @@ export const ALIASES: Record<Field, string[]> = {
   quantity: ["quantity", "qty", "units", "number of units", "quantity to import"],
   unit: ["unit", "uom", "unit of measure", "quantity unit", "qty unit"],
   program: ["program", "preference program", "special program", "preference", "trade program", "fta"],
+  metalWeight: ["metal weight", "metal weight pct", "metal", "metal content", "metal share", "metal percent"],
+  vehicleUse: ["vehicle use", "vehicle part", "vehicle", "auto part"],
+  endUse: ["end use", "use", "claimed use"],
 };
 
 export const FIELD_LABEL: Record<Field, string> = {
@@ -56,17 +66,21 @@ export const FIELD_LABEL: Record<Field, string> = {
   quantity: "quantity",
   unit: "unit",
   program: "program",
+  metalWeight: "metal weight",
+  vehicleUse: "vehicle use",
+  endUse: "end use",
 };
 
 /** The engine's per-field limits. One over-long field makes it reject the
  *  entire request, so these are enforced before sending. */
-const MAX_LEN = { sku: 64, description: 2000, country: 2000, hts: 200, unit: 32, program: 8 };
+const MAX_LEN = { sku: 64, description: 2000, country: 2000, hts: 200, unit: 32, program: 8, vehicleUse: 32, endUse: 32 };
 
 export const TEMPLATE_CSV =
-  "sku,description,country,value,hts,quantity,unit,program\r\n" +
-  "TS-001,mens knitted cotton t-shirt short sleeve,China,48000,,,,\r\n" +
-  "MG-09,ceramic coffee mug,Germany,12000,6912.00.44.00,,,\r\n" +
-  "CH-31,processed cheese,Canada,20000,,2500,kg,S\r\n";
+  "sku,description,country,value,hts,quantity,unit,program,metal weight,vehicle use,end use\r\n" +
+  "TS-001,mens knitted cotton t-shirt short sleeve,China,48000,,,,,,,\r\n" +
+  "MG-09,ceramic coffee mug,Germany,12000,6912.00.44.00,,,,,,\r\n" +
+  "CH-31,processed cheese,Canada,20000,,2500,kg,S,,,\r\n" +
+  "HG-12,aluminum cabinet hinge,China,9000,8302.10.30.00,,,,60,none,\r\n";
 
 export const SAMPLE_CSV = `sku,description,country,value,hts
 TS-001,mens knitted cotton t-shirt short sleeve,China,48000,
@@ -78,7 +92,9 @@ MG-09,ceramic coffee mug,Germany,12000,`;
 export const EXPECTED_FORMAT =
   "One product per row. Columns: description, country (or origin) and value are required; " +
   "sku and hts are optional. Leave hts blank and it will be classified. Add quantity (and unit) " +
-  "for goods charged per kilogram or per piece, and program (for example S for USMCA) when you claim one.";
+  "for goods charged per kilogram or per piece, and program (for example S for USMCA) when you claim one. " +
+  "For goods with metal in them add metal weight (percent of the article's weight) and vehicle use " +
+  "(passenger, heavy or none); end use is civil aircraft or pharmaceutical, only if you claim it.";
 
 function normHeader(h: string): string {
   return h
@@ -220,6 +236,11 @@ export function parseCatalogue(text: string): ParseResult {
     const hts = limited("hts", MAX_LEN.hts);
     const sku = limited("sku", MAX_LEN.sku);
     const quantityUnit = limited("unit", MAX_LEN.unit);
+    const vehicleUse = limited("vehicleUse", MAX_LEN.vehicleUse);
+    const endUse = limited("endUse", MAX_LEN.endUse);
+    const rawMetal = cell(r, "metalWeight");
+    const metalAmount = rawMetal ? parseAmount(rawMetal.replace(/%/g, "")) : null;
+    if (rawMetal && (metalAmount === null || metalAmount > 100)) problemsHere.push("metal weight not readable");
     const program = limited("program", MAX_LEN.program).toUpperCase();
     const rawQuantity = cell(r, "quantity");
     const quantityAmount = rawQuantity ? parseAmount(rawQuantity) : null;
@@ -242,6 +263,9 @@ export function parseCatalogue(text: string): ParseResult {
       quantity: quantityAmount !== null && quantityAmount > 0 ? quantityAmount : null,
       quantityUnit,
       program,
+      metalWeightPct: metalAmount !== null && metalAmount <= 100 ? metalAmount : null,
+      vehicleUse,
+      endUse,
       problems: problemsHere,
     };
   });

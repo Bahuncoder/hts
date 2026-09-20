@@ -138,9 +138,24 @@ await check("quantity, unit and program columns are read; a bad quantity is flag
 
 await check("the template carries the optional columns and reads back with a quantity", () => {
   const r = ok(csv.TEMPLATE_CSV);
-  assert.deepEqual(r.items.map((i) => i.quantity), [null, null, 2500]);
+  assert.deepEqual(r.items.map((i) => i.quantity), [null, null, 2500, null]);
   assert.equal(r.items[2].program, "S");
   assert.deepEqual(r.ignored, []);
+});
+
+await check("metal weight, vehicle use and end use are read; a metal weight over 100 or unreadable is flagged", () => {
+  const r = ok("sku,description,country,value,metal weight (%),vehicle use,end use\n" +
+    "A,hinge,China,100,60%,none,\n" +
+    "B,hinge,China,100,140,passenger,\n" +
+    "C,valve,China,100,,,pharmaceutical\n" +
+    "D,hinge,China,100,abc,heavy,\n");
+  const [a, b, c, d] = r.items;
+  assert.deepEqual([a.metalWeightPct, a.vehicleUse, a.endUse], [60, "none", ""]);
+  assert.equal(b.metalWeightPct, null);
+  assert.match(b.problems.join(), /metal weight not readable/);
+  assert.match(d.problems.join(), /metal weight not readable/);
+  assert.deepEqual([c.metalWeightPct, c.vehicleUse, c.endUse], [null, "", "pharmaceutical"]);
+  assert.equal(r.items.length, 4, "no row is dropped");
 });
 
 // --- the shared model and export -------------------------------------------
