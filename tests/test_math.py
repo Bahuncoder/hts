@@ -180,6 +180,16 @@ def real(name):
     return wrap
 
 
+def other232(digits):
+    """True when a Section 232 regime other than the metals lists the code."""
+    s = E.regimes.s232
+    return bool(s.vehicles.pv_parts.covers(digits) or s.vehicles.heavy_parts.covers(digits)
+                or s.vehicles.vehicles.covers(digits) or s.wood.softwood.covers(digits)
+                or s.wood.upholstered.covers(digits) or s.wood.cabinets.covers(digits)
+                or s.unresolved.covers(digits))
+
+
+
 def general(code):
     return E.tree.effective_rate_cell(code, "general")[0]
 
@@ -372,6 +382,78 @@ def _():
                   ("Germany", "DE", "germany"), ("South Korea", "Korea, South", "KR")):
         totals = {E.quote(hts=code, country=n, value=3000, quantity=500).total_duty for n in names}
         assert len(totals) == 1, (names, totals)
+
+
+@real("property: the metals headings are mutually exclusive, never stack with note 52, and never reach a code outside note 16's lists")
+def _():
+    rng = random.Random(21)
+    seen = 0
+    for l in random.Random(3).sample([x for x in E.tree.leaves if not x.hts.startswith(("98", "99"))], 700):
+        origin = rng.choice(["China", "Vietnam", "India", "Germany", "Japan", "Mexico", "United Kingdom"])
+        r = E.quote(hts=l.hts, country=origin, value=10000, quantity=1, metal_weight_pct=50)
+        metals = [c for c in r.components if "9903.82" in c.label]
+        note52 = [c for c in r.components if "9903.05" in c.label]
+        assert len(metals) <= 1, (l.hts, origin, [c.label for c in metals])
+        assert not (metals and note52), (l.hts, origin, "232 metals stacked with note 52")
+        if not E.regimes.s232.metals.hits(l.digits):
+            assert not metals, (l.hts, "charged metals duty outside the lists")
+        seen += bool(metals)
+    assert seen >= 20, f"only {seen} lines exercised the metals headings"
+
+
+@real("property: a metal weight below 15% never yields a metals charge, and 15% or more always does (outside the metal chapters)")
+def _():
+    rng = random.Random(22)
+    checked = 0
+    for l in E.tree.leaves:
+        if not E.regimes.s232.metals.hits(l.digits) or l.digits[:2] in ("72", "73", "74", "76") \
+                or other232(l.digits):
+            continue
+        low = E.quote(hts=l.hts, country="Vietnam", value=5000, quantity=1, metal_weight_pct=rng.choice([0, 5, 14.9]))
+        high = E.quote(hts=l.hts, country="Vietnam", value=5000, quantity=1, metal_weight_pct=rng.choice([15, 40, 100]))
+        assert not any("9903.82" in c.label for c in low.components), (l.hts, "under 15% was charged")
+        assert any("9903.82" in c.label for c in high.components) or high.incomplete, (l.hts, "15%+ was not charged")
+        checked += 1
+    assert checked >= 100, checked
+
+
+@real("metal weight must be a percentage")
+def _():
+    for bad in (-1, 100.5, "abc", float("nan")):
+        try:
+            E.quote(hts="6109.10.00.12", country="China", value=1000, metal_weight_pct=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"metal weight {bad!r} was accepted")
+
+
+@real("property: with every fact stated, at most one Section 232 regime charges a code, and never alongside note 52")
+def _():
+    rng = random.Random(31)
+    fams = {"metals": "9903.82", "vehicle": ("9903.94", "9903.74"), "wood": "9903.76"}
+    charged = 0
+    for l in random.Random(4).sample([x for x in E.tree.leaves if not x.hts.startswith(("98", "99"))], 900):
+        origin = rng.choice(["China", "Vietnam", "India", "Mexico", "Canada", "Germany", "Japan"])
+        r = E.quote(hts=l.hts, country=origin, value=8000, quantity=1, metal_weight_pct=rng.choice([5, 30, 80]),
+                    vehicle_use=rng.choice(["passenger", "heavy", "none"]), end_use=rng.choice([None, "pharmaceutical"]),
+                    preference_program=rng.choice([None, "S"]))
+        regs = {k for k, pre in fams.items() if any(c.label.split("Trade remedy ")[-1].startswith(pre)
+                                                    for c in r.components if "Trade remedy" in c.label)}
+        assert len(regs) <= 1, (l.hts, origin, regs)
+        if regs:
+            charged += 1
+            assert not any("9903.05" in c.label for c in r.components), (l.hts, origin, "232 stacked with note 52")
+    assert charged >= 40, f"only {charged} lines exercised Section 232"
+
+
+@real("property: a stated 'not a vehicle part' can never produce a vehicle-parts duty")
+def _():
+    for l in E.tree.leaves:
+        v = E.regimes.s232.vehicles
+        if not (v.pv_parts.covers(l.digits) or v.heavy_parts.covers(l.digits)):
+            continue
+        r = E.quote(hts=l.hts, country="Vietnam", value=5000, quantity=1, metal_weight_pct=50, vehicle_use="none")
+        assert not any("9903.94" in c.label or "9903.74" in c.label for c in r.components), (l.hts, [c.label for c in r.components])
 
 
 @real("property: pricing is deterministic")

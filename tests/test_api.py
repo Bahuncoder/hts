@@ -375,8 +375,8 @@ def _():
         return {r["heading"]: r["applies_to_origin"] for r in d["trade_remedies"]}
     a, b = by_head(cn), by_head(ca)
     assert a and a == {h: a[h] for h in a}, a
-    assert a["9903.88.15"] is True and a["9903.03.12"] is False, a
-    assert b["9903.03.12"] is True and b["9903.88.15"] is False, b
+    assert a["9903.88.15"] is True and a["9903.03.14"] is False, a
+    assert b["9903.03.14"] is True and b["9903.88.15"] is False, b
 
 
 @check("audit: a China apparel line is complete and states the assumption its duty rests on")
@@ -433,6 +433,39 @@ def _():
     assert plain["duty"] > claimed["duty"], (plain["duty"], claimed["duty"])
     assert any("No USMCA claim" in a for a in plain["assumptions"]), plain["assumptions"]
     assert any("claimed free of duty under USMCA" in a for a in claimed["assumptions"])
+
+
+@check("quote: Section 232 facts (metal weight, vehicle use, end use) settle what would otherwise be flagged")
+def _():
+    body = {"hts": "4009.12.00.20", "country": "China", "value": 10000}
+    s, plain = call("/api/quote", method="POST", body=body, key=KEY)
+    assert plain["complete"] is False and plain["facts_needed"] == ["vehicle_use"], plain
+    s, car = call("/api/quote", method="POST", body={**body, "vehicle_use": "passenger"}, key=KEY)
+    assert car["complete"] is True and any("9903.94.05" in c["label"] for c in car["components"]), car
+    s, none = call("/api/quote", method="POST", body={**body, "vehicle_use": "none"}, key=KEY)
+    assert none["complete"] is True and not any("9903.94" in c["label"] for c in none["components"]), none
+    for bad in ({"vehicle_use": "boat"}, {"end_use": "farming"}):
+        s, d = call("/api/quote", method="POST", body={**body, **bad}, key=KEY)
+        assert s == 400, (bad, s, d)
+    s, _ = call("/api/quote", method="POST", body={**body, "metal_weight_pct": 140}, key=KEY)
+    assert s == 422, s
+    hinge = {"hts": "8302.10.30.00", "country": "China", "value": 10000, "vehicle_use": "none"}
+    s, nw = call("/api/quote", method="POST", body=hinge, key=KEY)
+    assert nw["facts_needed"] == ["metal_weight_pct"] and nw["complete"] is False, nw
+    s, heavy = call("/api/quote", method="POST", body={**hinge, "metal_weight_pct": 60}, key=KEY)
+    assert heavy["complete"] is True and any("9903.82" in c["label"] for c in heavy["components"]), heavy
+
+
+@check("audit: a line saying what is needed (metal weight, vehicle use) says so, and stating it prices the line")
+def _():
+    row = {"sku": "H", "description": "hinge", "country": "China", "value": 10000, "hts": "8302.10.30.00"}
+    d = _audit([row, {**row, "sku": "H2", "vehicle_use": "none", "metal_weight_pct": 5}])
+    a, b = d["lines"]
+    assert a["status"] == "scope_review" and "vehicle use" in " ".join(a["review_reasons"]), a
+    assert set(a["facts_needed"]) == {"metal_weight_pct", "vehicle_use"}
+    assert b["status"] == "ready", (b["status"], b["review_reasons"])
+    bad = _audit([{**row, "vehicle_use": "boat"}])["lines"][0]
+    assert bad["status"] == "error" and bad["error_code"] == "invalid_input", bad
 
 
 def main() -> int:

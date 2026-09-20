@@ -118,8 +118,11 @@ def extract(raw: str, binds: list | None = None) -> dict[str, NoteScope]:
     """
     scopes: dict[str, NoteScope] = {}
     current: NoteScope | None = None
+    parent_countries: list[str] = []
 
     for letter, body in _blocks(raw):
+        if not letter.isdigit():
+            parent_countries = _countries(body[:1500])
         heading = None
         for pat in (binds if binds is not None else BINDS):
             m = pat.search(body[:1500])
@@ -132,7 +135,10 @@ def extract(raw: str, binds: list | None = None) -> dict[str, NoteScope]:
             if sc is None:
                 sc = NoteScope(heading=heading, note=letter)
                 scopes[heading] = sc
-            for c in _countries(body[:1500]):
+            # A numbered item ("(3) Heading 9903.03.14 applies to ...") names its
+            # country once, in the lettered subdivision above it.
+            found = _countries(body[:1500]) or (parent_countries if letter.isdigit() else [])
+            for c in found:
                 if c not in sc.countries:
                     sc.countries.append(c)
             if not sc.effective_from:

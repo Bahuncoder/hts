@@ -27,8 +27,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 
 from core.ch99 import Ch99Rule, Effect
+from core.countries import country_code
+from core.metals import LOW as METALS_LOW, HIGH as METALS_HIGH, MetalsIndex, extract_lists
+from core.s232 import (Section232, VehicleIndex, WoodIndex, between, normalize_vehicle_use,  # noqa: F401
+                       table_codes)
 from ingest.notes import Note52Exception
 
 APPLY, SKIP, UNKNOWN = "apply", "skip", "unknown"
@@ -49,11 +54,40 @@ IEEPA_PREFIXES = ("9903.01", "9903.02")
 _CLAIM_PROGRAMS = {"USMCA": frozenset({"S", "S+"}), "CAFTA-DR": frozenset({"P", "P+"})}
 
 
+END_USES = {"civil_aircraft": "civil aircraft (general note 6)",
+            "pharmaceutical": "pharmaceutical applications"}
+
+
+def normalize_end_use(text: str | None) -> str | None:
+    """'civil aircraft' / 'aircraft' / 'pharma' -> a key of END_USES; None for
+    blank. Anything else is refused: an unrecognised use must not be read as
+    'none claimed', which would quietly raise the duty."""
+    t = re.sub(r"[\s_-]+", " ", (text or "").strip().lower())
+    if not t or t in ("none", "no", "n/a"):
+        return None
+    if "aircraft" in t:
+        return "civil_aircraft"
+    if "pharma" in t:
+        return "pharmaceutical"
+    raise ValueError(
+        f"Unrecognised end use {text!r}. Use 'civil aircraft' or 'pharmaceutical', or leave it blank.")
+
+
+# General note 3(b): the origins that are not offered normal trade relations.
+COLUMN_2_COUNTRIES = frozenset({"CU", "KP", "RU", "BY"})
+
+
 @dataclass(frozen=True)
-class Claim:
-    """The preference the entry actually takes, as far as the caller stated it."""
+class EntryFacts:
+    """What the importer states about the entry. A claim (a preference program,
+    an end use a note-52 exception is conditional on) is the importer's own
+    assertion; a fact about the goods (their metal weight) is theirs to supply.
+    Neither is ever inferred from the code."""
     program: str | None = None
     free: bool = False        # the preference rate applied is duty-free
+    end_use: str | None = None
+    metal_weight_pct: Decimal | None = None
+    vehicle_use: str | None = None      # passenger | heavy | none
 
 
 # Exceptions that depend on the entry itself, not on the product code. They
@@ -87,7 +121,11 @@ KNOWN_EXPIRED: tuple[tuple[str, str, date, str], ...] = (
 _METAL_CHAPTERS = ("72", "73", "74", "76")
 _FAMILY_232_PREFIXES = ("9903.74", "9903.76", "9903.78", "9903.79", "9903.81",
                         "9903.82", "9903.85", "9903.94")
-_FAMILY_232_NOTES = (16, 31, 33, 37, 38, 39, 40)
+_S232_RULE_RANGES = (("9903.82.01", "9903.82.26"), ("9903.94.01", "9903.94.69"),
+                     ("9903.74.01", "9903.74.11"), ("9903.76.01", "9903.76.24"))
+_FAMILY_232_NOTES = (16, 33, 37, 38, 39, 40)
+_OTHER_232_NOTES = (33, 37, 38, 39, 40)
+_OTHER_232_PREFIXES = ("9903.74", "9903.76", "9903.78", "9903.79", "9903.94")
 
 _PROVIDED_FOR = re.compile(r"provided\s+for\s+in\s+([^;)]*)", re.I)
 _NARROWING = re.compile(r"\b(?:except|other than|not|excluding)\b", re.I)
@@ -225,7 +263,10 @@ class RegimeIndex:
     """Everything the engine needs to give a verdict on an unscoped rule."""
     exceptions: dict[str, Note52Exception] = field(default_factory=dict)
     exception_kind: dict[str, str] = field(default_factory=dict)
+    exception_use: dict[str, str] = field(default_factory=dict)      # code_use -> END_USES key
     domain_232: Domain = field(default_factory=Domain)
+    other_232: Domain = field(default_factory=Domain)          # every 232 regime but the metals
+    s232: Section232 | None = None
     note_domain: dict[int, Domain] = field(default_factory=dict)
     desc_domain: dict[str, Domain] = field(default_factory=dict)   # heading -> goods it names
     expired: dict[str, str] = field(default_factory=dict)    # heading -> reason
@@ -246,14 +287,50 @@ class RegimeIndex:
         return reason
 
     # ---------------------------------------------------------- verdicts
-    def verdict(self, rule: Ch99Rule, digits: str, origin_of=None,
-                claim: Claim | None = None) -> tuple[str, str | None]:
+    def verdict(self, rule: Ch99Rule, digits: str, origin: str = "",
+                facts: EntryFacts | None = None) -> tuple[str, str | None]:
         """(verdict, assumption) for a rule whose scope is not a code list."""
+        facts = facts or EntryFacts()
         if _in_range(rule.hts, *NOTE52_RULES):
-            return self._note52(rule, digits, claim or Claim())
+            return self._note52(rule, digits, origin, facts)
+        if self.decides(rule):
+            return self._s232_rule(rule, digits, origin, facts)
         return self._product_specific(rule, digits)
 
-    def _note52(self, rule: Ch99Rule, digits: str, claim: Claim) -> tuple[str, str | None]:
+    def needs(self, digits: str, origin: str, facts: EntryFacts) -> list[str]:
+        """Facts the importer could state that would settle a Section 232 unknown."""
+        if not self.s232:
+            return []
+        return sorted(self.s232.resolve(digits, origin, facts).needs)
+
+    def decides(self, rule: Ch99Rule) -> bool:
+        """Whether the Section 232 resolver, not a generic scope lookup, decides
+        this heading (its scope depends on facts about the entry)."""
+        return bool(self.s232) and any(
+            _in_range(rule.hts, lo, hi) for lo, hi in _S232_RULE_RANGES)
+
+    def _s232_rule(self, rule: Ch99Rule, digits: str, origin: str,
+                   facts: EntryFacts) -> tuple[str, str | None]:
+        out = self.s232.resolve(digits, origin, facts)
+        if out.charges(rule.hts):
+            return APPLY, " ".join(out.assumptions)
+        if out.flags(rule.hts):
+            return UNKNOWN, None
+        return SKIP, (" ".join(out.assumptions) if out.status == "not_subject" and out.assumptions
+                      else None)
+
+    def s232_status(self, digits: str, origin: str, facts: EntryFacts) -> str:
+        """Whether Section 232 takes these goods out of the note-52 duty:
+        'subject' (they are charged under a 232 heading), 'not_subject', or
+        'unknown'."""
+        if not self.domain_232:
+            return "unknown"                       # nothing extracted: fail closed
+        if not self.s232:
+            return "unknown" if self.domain_232.covers(digits) else "not_subject"
+        return self.s232.resolve(digits, origin, facts).status
+
+    def _note52(self, rule: Ch99Rule, digits: str, origin: str,
+                facts: EntryFacts) -> tuple[str, str | None]:
         # Two shapes are resolved: the plain additive duty, and the deal headings
         # that turn on the entry's own column 1 rate (the caller applies the
         # threshold once the base duty is known). Anything else stays unknown.
@@ -277,18 +354,34 @@ class RegimeIndex:
                 elif domain.covers(digits):
                     return SKIP, None
             elif kind == "code_use":
-                if not domain or domain.covers(digits):
-                    unknown = True                 # exempt only for the stated end use
+                use = self.exception_use.get(h)
+                if not domain or use is None:
+                    unknown = True
+                elif domain.covers(digits):
+                    if facts.end_use == use:
+                        skipped.append(
+                            f"{rule.hts} does not apply because the goods are claimed for "
+                            f"{END_USES[use]} (exception {h}); the code is on that "
+                            "exception's list and the end use is assumed to be met.")
+                    else:
+                        unclaimed.append(
+                            f"no {END_USES[use]} end use is claimed, so exception {h} "
+                            "does not apply")
             elif kind == "family232":
-                if self.domain_232.covers(digits) or not self.domain_232:
+                status = self.s232_status(digits, origin, facts)
+                if status == "subject":
+                    skipped.append(
+                        f"{rule.hts} does not apply because these goods are charged under "
+                        f"Section 232 instead (exception {h}, U.S. note 52(f)).")
+                elif status == "unknown":
                     unknown = True
             elif kind == "claim":
                 programs = _CLAIM_PROGRAMS.get(ex.claim, frozenset())
                 if domain and not domain.covers(digits):
                     continue                       # this list does not name the code
-                if claim.program in programs:
+                if facts.program in programs:
                     if ex.claim == "USMCA":
-                        if claim.free:
+                        if facts.free:
                             skipped.append(
                                 f"{rule.hts} does not apply because the entry is claimed "
                                 f"free of duty under USMCA (exception {h}); the goods are "
@@ -356,6 +449,66 @@ def _in_range(heading: str, lo: str, hi: str) -> bool:
     return lo <= heading <= hi
 
 
+def _build_s232(rules: list[Ch99Rule], blocks: dict[int, str], idx: RegimeIndex,
+                scopes: dict) -> Section232 | None:
+    """Read the product lists of notes 16, 33, 37 and 38. A regime whose lists
+    cannot all be found is left out, so its codes fall back to 'unknown'."""
+    dom = Domain
+
+    metals = None
+    lists = extract_lists(blocks.get(16, ""))
+    if lists and all(lists.get(k) for k in ("i", "iii", "iv", "vii", "x")):
+        deal = frozenset(filter(None, (country_code(c) for r in rules
+                                       if r.hts == "9903.82.22" for c in r.countries)))
+        metals = MetalsIndex({k: dom(v) for k, v in lists.items()}, COLUMN_2_COUNTRIES, deal)
+
+    def deals(lo: str, hi: str) -> dict[str, frozenset[str]]:
+        out: dict[str, set[str]] = {}
+        for r in rules:
+            if _in_range(r.hts, lo, hi):
+                for c in r.countries:
+                    iso = country_code(c)
+                    if iso:
+                        out.setdefault(iso, set()).add(r.hts)
+        return {k: frozenset(v) for k, v in out.items()}
+
+    vehicles = None
+    n33, n38 = blocks.get(33, ""), blocks.get(38, "")
+    pv = table_codes(between(n33, r"\n\s*\(g\)\s+Subject to a manufacturer",
+                            r"\n\s*\(h\)\s+Heading 9903\.94\.06"))
+    heavy = table_codes(between(n38, r"\n\s*\(i\)\s+Subject to a manufacturer", r"\n\s*\(j\)\s"))
+    whole = (table_codes(between(n33, r"\n\s*\(b\)\s+The rates of duty set forth in headings 9903\.94\.01",
+                                 r"\n\s*\(c\)\s+Heading 9903\.94\.02"))
+             | table_codes(between(n38, r"\n\s*\(b\)\s+The rate of duty set forth in heading 9903\.74\.01",
+                                   r"\n\s*\(c\)\s+Heading 9903\.74\.02"))
+             | table_codes(between(n38, r"\n\s*\(c\)\s+Heading 9903\.74\.02",
+                                   r"\n\s*\(d\)\s+Heading 9903\.74\.03")))
+    if pv and heavy and whole:
+        vehicles = VehicleIndex(dom(pv), dom(heavy), dom(whole), deals("9903.94.31", "9903.94.69"))
+
+    wood = None
+    n37 = blocks.get(37, "")
+    soft = table_codes(between(n37, r"\n\s*\(b\)\s+The rates of duty set forth in heading 9903\.76\.01",
+                               r"\n\s*\(c\)\s+Heading"))
+    uph = table_codes(between(n37, r"\n\s*\(d\)\s+The rates of duty set forth in headings 9903\.76\.02",
+                              r"\n\s*\(e\)\s+Except"))
+    cab = table_codes(between(n37, r"\n\s*\(f\)\s+Except for as provided by heading 9903\.76\.04, the rates",
+                              r"\n\s*\(g\)\s+Heading"))
+    if soft and uph and cab:
+        wood = WoodIndex(dom(soft), dom(uph), dom(cab), deals("9903.76.20", "9903.76.24"))
+
+    if not (metals or vehicles or wood):
+        return None
+    unresolved: set[str] = set()
+    for n in (39, 40):
+        if n in idx.note_domain:
+            unresolved |= idx.note_domain[n].prefixes
+    for h, sc in scopes.items():
+        if h.startswith(("9903.78", "9903.79")):
+            unresolved |= {_digits(c) for c in sc.codes}
+    return Section232(metals, vehicles, wood, dom(frozenset(unresolved)))
+
+
 def build_index(rules: list[Ch99Rule], scopes: dict, raw_notes: str,
                 exceptions: dict[str, Note52Exception],
                 as_of: date | None = None) -> RegimeIndex:
@@ -379,6 +532,8 @@ def build_index(rules: list[Ch99Rule], scopes: dict, raw_notes: str,
             idx.exception_kind[h] = "family232"
         elif ex is not None and ex.codes and _USE_EXCEPTION.search(head):
             idx.exception_kind[h] = "code_use"
+            idx.exception_use[h] = ("civil_aircraft" if re.search("civil aircraft", head, re.I)
+                                    else "pharmaceutical")
         elif ex is not None and ex.codes:
             idx.exception_kind[h] = "code"
         else:
@@ -406,6 +561,17 @@ def build_index(rules: list[Ch99Rule], scopes: dict, raw_notes: str,
         if h.startswith(_FAMILY_232_PREFIXES):
             fam |= {_digits(c) for c in sc.codes}
     idx.domain_232 = Domain(frozenset(fam))
+
+    others: set[str] = set()
+    for n in _OTHER_232_NOTES:
+        if n in idx.note_domain:
+            others |= idx.note_domain[n].prefixes
+    for h, sc in scopes.items():
+        if h.startswith(_OTHER_232_PREFIXES):
+            others |= {_digits(c) for c in sc.codes}
+    idx.other_232 = Domain(frozenset(others))
+
+    idx.s232 = _build_s232(rules, blocks, idx, scopes)
 
     for r in rules:
         blob = r.description or ""

@@ -147,6 +147,19 @@ class QuoteRequest(BaseModel):
         None, max_length=32,
         description="Unit of `quantity` (kg, lb, liter, each, doz...). Defaults "
                     "to the unit the duty is charged in.")
+    end_use: str | None = Field(
+        None, max_length=32,
+        description="An end use the goods are claimed for ('civil aircraft' or "
+                    "'pharmaceutical'), which excuses the note-52 country duty on "
+                    "listed codes")
+    metal_weight_pct: float | None = Field(
+        None, ge=0, le=100,
+        description="Share of the article's weight that is aluminum, steel or "
+                    "copper; decides Section 232 metals duties outside chapters 72-76")
+    vehicle_use: str | None = Field(
+        None, max_length=32,
+        description="'passenger', 'heavy' or 'none': whether the goods are parts of "
+                    "a passenger/light vehicle, a medium/heavy-duty vehicle, or neither")
     by_vessel: bool = True
     formal_entry: bool = True
 
@@ -166,6 +179,9 @@ class CatalogItem(BaseModel):
     quantity_unit: str | None = Field(None, max_length=32)
     preference_program: str | None = Field(
         None, max_length=8, description="Program the entry claims (e.g. S for USMCA)")
+    end_use: str | None = Field(None, max_length=32)
+    metal_weight_pct: float | None = Field(None, description="Metal share of the article's weight, 0-100")
+    vehicle_use: str | None = Field(None, max_length=32)
 
 
 class AuditRequest(BaseModel):
@@ -332,7 +348,9 @@ def quote(req: QuoteRequest, conn=Depends(db), _=Depends(guard("cheap"))):
             fta_claimed=req.fta_claimed,
             preference_program=req.preference_program,
             by_vessel=req.by_vessel, is_formal_entry=req.formal_entry,
-            quantity=req.quantity, quantity_unit=req.quantity_unit)
+            quantity=req.quantity, quantity_unit=req.quantity_unit,
+            end_use=req.end_use, metal_weight_pct=req.metal_weight_pct,
+            vehicle_use=req.vehicle_use)
     except NotStatisticalLine as exc:
         raise HTTPException(400, str(exc)) from exc
     except InvalidHts as exc:
@@ -357,6 +375,10 @@ _INCOMPLETE_TEXT = {
     "rate_missing": "has no base rate in the schedule",
     "rate_unparsed": "has a base rate this calculator cannot read",
 }
+
+
+_FACT_TEXT = {"metal_weight_pct": "metal weight percentage",
+              "vehicle_use": "vehicle use (passenger, heavy or none)"}
 
 
 def _incomplete_message(q) -> str:
@@ -406,7 +428,9 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         q = eng.quote(hts=hts, country=item.country, value=item.value,
                       preference_program=program,
                       by_vessel=req.by_vessel, is_formal_entry=False,
-                      quantity=item.quantity, quantity_unit=item.quantity_unit)
+                      quantity=item.quantity, quantity_unit=item.quantity_unit,
+                      end_use=item.end_use, metal_weight_pct=item.metal_weight_pct,
+                      vehicle_use=item.vehicle_use)
     except InvalidHts as exc:
         return refuse("error", "invalid_code", str(exc))
     except UnknownCountry as exc:
@@ -437,9 +461,11 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
     if q.incomplete:
         triggers.append(("incomplete", _incomplete_message(q)))
     if q.scope_unverified:
+        need = "".join(f" State its {_FACT_TEXT[f]} to settle it." for f in q.facts_needed
+                       if f in _FACT_TEXT)
         triggers.append(("scope_review",
                          f"{len(q.scope_unverified)} trade-remedy heading(s) may apply to "
-                         "this entry and need scope verification."))
+                         "this entry and need scope verification." + need))
     if alternatives:
         triggers.append(("suffix_review",
                          "Sibling statistical lines carry different rates; the "
@@ -455,6 +481,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         "warnings": q.warnings,
         "incomplete": q.incomplete,
         "quantity_needed": q.quantity_needed,
+        "facts_needed": q.facts_needed,
         "assumptions": q.assumptions,
         "entered_value": float(q.entered_value),
         "duty": float(q.total_duty),

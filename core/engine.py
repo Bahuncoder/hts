@@ -78,6 +78,9 @@ class TariffEngine:
         by_vessel: bool = True, is_formal_entry: bool = True,
         quantity: Decimal | float | str | None = None,
         quantity_unit: str | None = None,
+        end_use: str | None = None,
+        metal_weight_pct: Decimal | float | str | None = None,
+        vehicle_use: str | None = None,
     ) -> DutyResult:
         """Price one statistical line.
 
@@ -98,7 +101,8 @@ class TariffEngine:
             regimes=self.regimes,
             fta_claimed=fta_claimed, preference_program=preference_program,
             by_vessel=by_vessel, is_formal_entry=is_formal_entry,
-            quantity=quantity, quantity_unit=quantity_unit,
+            quantity=quantity, quantity_unit=quantity_unit, end_use=end_use,
+            metal_weight_pct=metal_weight_pct, vehicle_use=vehicle_use,
         )
         res.dataset_revision = self.revision
         return res

@@ -22,7 +22,8 @@ from functools import lru_cache
 
 from core.ch99 import Ch99Rule, Effect
 from core.countries import country_code, require_country
-from core.regimes import IEEPA_PREFIXES, Claim
+from core.regimes import (COLUMN_2_COUNTRIES, IEEPA_PREFIXES, EntryFacts, normalize_end_use,
+                          normalize_vehicle_use)
 from core.units import parse_specific, unit_of
 
 # --- FY2026 user fees (effective 2025-10-01) ---------------------------------
@@ -44,7 +45,6 @@ def fee_constants_stale(today: date | None = None) -> bool:
 
 # Column 2 ("other") applies to a small set of non-normal-trade-relations
 # countries, held as ISO codes so every spelling of an origin reaches it.
-COLUMN_2_COUNTRIES = frozenset({"CU", "KP", "RU", "BY"})
 
 # Subchapters I and II of chapter 99 carry the tariffs imposed under IEEPA. The
 # Supreme Court held on 2026-02-20 that IEEPA confers no such authority, so
@@ -110,6 +110,9 @@ class DutyResult:
     # Units a quantity-based duty is charged in; asked of the caller when the
     # duty could not be priced without one.
     quantity_needed: list[str] = field(default_factory=list)
+    # Facts about the goods (metal_weight_pct, vehicle_use) that would settle a
+    # Section 232 question the quote could not.
+    facts_needed: list[str] = field(default_factory=list)
 
     @property
     def refundable_amount(self) -> Decimal:
@@ -149,6 +152,7 @@ class DutyResult:
             "country_code": self.country_code,
             "dataset_revision": self.dataset_revision,
             "quantity_needed": self.quantity_needed,
+            "facts_needed": self.facts_needed,
         }
 
 
@@ -372,7 +376,15 @@ def resolve_ch99(
             continue
         if r.countries and not any(_origin_key(x) == origin for x in r.countries):
             continue
-        if r.base_refs:
+        if regimes is not None and regimes.decides(r):
+            verdict, note = regimes.verdict(r, digits, origin, claim)
+            if verdict == APPLY:
+                out.applied.append(r)
+            elif verdict != SKIP:
+                out.unverified.append(r)
+            if note:
+                out.assumptions.append(note)
+        elif r.base_refs:
             if not any(digits.startswith(b.replace(".", "")) for b in r.base_refs):
                 continue
             out.applied.append(r)
@@ -386,7 +398,7 @@ def resolve_ch99(
             if r.countries:
                 out.unverified.append(r)
         else:
-            verdict, note = regimes.verdict(r, digits, _origin_key, claim)
+            verdict, note = regimes.verdict(r, digits, origin, claim)
             if verdict == APPLY:
                 out.applied.append(r)
                 if note:
@@ -417,6 +429,18 @@ def _positive_value(entered_value: Decimal | float | str) -> Decimal:
 
 def _pct(value: Decimal) -> str:
     return format(value.normalize(), "f")
+
+
+def _percentage(value: Decimal | float | str | None, what: str) -> Decimal | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        v = Decimal(str(value))
+    except Exception as exc:
+        raise ValueError(f"{what} must be a number") from exc
+    if not v.is_finite() or v < 0 or v > 100:
+        raise ValueError(f"{what} must be a percentage from 0 to 100")
+    return v
 
 
 def _positive_quantity(quantity: Decimal | float | str | None) -> Decimal | None:
@@ -495,7 +519,13 @@ def compute(
     is_formal_entry: bool = True,
     quantity: Decimal | float | str | None = None,
     quantity_unit: str | None = None,
+    end_use: str | None = None,
+    metal_weight_pct: Decimal | float | str | None = None,
+    vehicle_use: str | None = None,
 ) -> DutyResult:
+    use = normalize_end_use(end_use)
+    vehicle = normalize_vehicle_use(vehicle_use)
+    weight = _percentage(metal_weight_pct, "metal weight")
     value = _positive_value(entered_value)
     qty = _positive_quantity(quantity)
     origin = require_country(country)
@@ -556,14 +586,17 @@ def compute(
     if parsed.specific and specific_priced and qty is not None:
         basis += f" on {qty} {quantity_unit or res.quantity_needed[0]}"
     res.components.append(DutyComponent(label, shown_rate, base_amount, basis, authority))
-    claim = Claim(program=used,
+    claim = EntryFacts(program=used,
                   free=(label == "FTA preferential duty" and pct == 0
-                        and not parsed.specific and not parsed.unparsed))
+                        and not parsed.specific and not parsed.unparsed),
+                  end_use=use, metal_weight_pct=weight, vehicle_use=vehicle)
 
     # --- 2. Chapter 99 overlays ---------------------------------------------
     resolution = resolve_ch99(ch99_rules or [], hts, country, scopes, regimes, claim)
     applied, unscoped = resolution.applied, resolution.unverified
     res.assumptions.extend(resolution.assumptions)
+    if regimes is not None and resolution.unverified:
+        res.facts_needed = regimes.needs(hts.replace(".", ""), origin, claim)
     replacements: list[Ch99Rule] = []
     deals: list[Ch99Rule] = []
     for rule in applied:

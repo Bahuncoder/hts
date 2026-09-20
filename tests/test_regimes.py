@@ -86,6 +86,16 @@ def quote(code, origin, value=10000):
     return E.quote(hts=code, country=origin, value=value)
 
 
+def other232(digits):
+    """True when a Section 232 regime other than the metals lists the code."""
+    s = E.regimes.s232
+    return bool(s.vehicles.pv_parts.covers(digits) or s.vehicles.heavy_parts.covers(digits)
+                or s.vehicles.vehicles.covers(digits) or s.wood.softwood.covers(digits)
+                or s.wood.upholstered.covers(digits) or s.wood.cabinets.covers(digits)
+                or s.unresolved.covers(digits))
+
+
+
 def labels(res):
     return [c.label for c in res.components]
 
@@ -122,27 +132,93 @@ def _():
         assert got == [rate], (origin, got)
 
 
-@real("pure code-list exceptions exempt a product; use-based ones (aircraft parts, pharma) never do")
+@real("pure code-list exceptions exempt a product; use-based ones (aircraft parts, pharma) only on a stated end use")
 def _():
     exc = {h: e.codes for h, e in E.regimes.exceptions.items()}
     def first_code(h):
         return next(l.hts for l in E.tree.leaves
-                    if any(l.digits.startswith(p) for p in sorted(exc[h])[:300]))
+                    if any(l.digits.startswith(p) for p in exc[h])
+                    and not other232(l.digits)
+                    and not (E.regimes.s232.metals and E.regimes.s232.metals.hits(l.digits)))
     for h in ("9903.05.86", "9903.05.87"):                 # "classifiable in the following"
         code = first_code(h)
         r = quote(code, "Vietnam")
         assert not any("9903.05" in x for x in labels(r)), (h, code, labels(r))
-    for h in ("9903.05.88", "9903.05.89"):                 # ...that are for aircraft / pharmaceutical use
-        code = first_code(h)
-        r = quote(code, "Vietnam")
-        assert r.scope_unverified and not any("9903.05.84" in x for x in labels(r)), (
-            h, code, "a code on a use-based list was treated as exempt or as plainly charged")
+    def note52_state(r):
+        return ("charged" if any("9903.05.84" in x for x in labels(r))
+                else "flagged" if "9903.05.84" in r.scope_unverified else "excused")
+    for h, use, wrong in (("9903.05.88", "civil aircraft", "pharmaceutical"),
+                          ("9903.05.89", "pharmaceutical", "civil aircraft")):
+        # aircraft parts overlap other Section 232 lists, so they may be flagged
+        # rather than charged; what must hold is that only the right use excuses
+        code = next(l.hts for l in E.tree.leaves if any(l.digits.startswith(p) for p in exc[h]))
+        assert note52_state(E.quote(hts=code, country="Vietnam", value=10000, end_use=use)) == "excused", (h, code)
+        assert note52_state(E.quote(hts=code, country="Vietnam", value=10000, end_use=wrong)) != "excused", (h, code)
+        assert note52_state(E.quote(hts=code, country="Vietnam", value=10000)) != "excused", (h, code)
+    clean = next(l.hts for l in E.tree.leaves if any(l.digits.startswith(p) for p in exc["9903.05.89"])
+                 and not other232(l.digits) and not E.regimes.s232.metals.hits(l.digits))
+    plain = E.quote(hts=clean, country="Vietnam", value=10000)
+    assert any("9903.05.84" in x for x in labels(plain)) and any("end use is claimed" in a for a in plain.assumptions)
 
 
-@real("Section 232 metals and vehicles stay flagged: the engine cannot tell which regime takes them")
+@real("an unrecognised end use is refused, never read as none claimed")
 def _():
-    for code, origin in (("7318.15.20.00", "China"), ("8703.23.01.90", "Vietnam"),
-                         ("7601.10.30.00", "India")):
+    for bad in ("agriculture", "aricraft?"):
+        try:
+            E.quote(hts="6109.10.00.12", country="Vietnam", value=1000, end_use=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"end use {bad!r} was accepted")
+
+
+@real("Section 232: steel and aluminum mill products, and derivative goods in the metal chapters, are priced")
+def _():
+    steel = next(l.hts for l in E.tree.leaves if l.hts.startswith("7208.10"))
+    r = quote(steel, "Vietnam")
+    assert any("9903.82.02" in x for x in labels(r)) and not any("9903.05" in x for x in labels(r)), labels(r)
+    assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
+    assert any("ordinary rate is assumed" in a for a in r.assumptions), r.assumptions
+    kettle = next(l.hts for l in E.tree.leaves if l.hts.startswith("7323.93"))
+    r = quote(kettle, "China")
+    assert any("9903.82.09" in x for x in labels(r)) and not any("9903.05.31" in x for x in labels(r)), labels(r)
+    assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
+
+
+def _hinge():
+    """A derivative-metal code outside chapters 72-76 that no other 232 regime claims."""
+    return next(l.hts for l in E.tree.leaves
+                if E.regimes.s232.metals.hits(l.digits) and l.digits[:2] not in ("72", "73", "74", "76")
+                and not other232(l.digits)
+                and not E.regimes.exceptions["9903.05.86"].codes & {l.digits[:n] for n in (4, 6, 8, 10)}
+                and not E.regimes._exception_domains["9903.05.88"].covers(l.digits)
+                and not E.regimes._exception_domains["9903.05.89"].covers(l.digits))
+
+
+@real("Section 232: derivative goods outside the metal chapters wait for the metal weight, then price by it")
+def _():
+    hinge = _hinge()
+    no_weight = quote(hinge, "China")
+    assert no_weight.scope_unverified and no_weight.as_dict()["complete"] is False, no_weight.scope_unverified
+    light = E.quote(hts=hinge, country="China", value=10000, metal_weight_pct=10)
+    assert not any("9903.82" in x for x in labels(light)) and any("9903.05.31" in x for x in labels(light)), labels(light)
+    heavy = E.quote(hts=hinge, country="China", value=10000, metal_weight_pct=60)
+    assert any("9903.82" in x for x in labels(heavy)) and not any("9903.05.31" in x for x in labels(heavy)), labels(heavy)
+    at15 = E.quote(hts=hinge, country="China", value=10000, metal_weight_pct=15)
+    assert at15.total_duty == heavy.total_duty, "15% is 'at least 15 percent'"
+
+
+@real("Section 232: a code on both a metals list and a vehicle-parts list stays flagged (whether it is a vehicle part is a fact)")
+def _():
+    both = next(l.hts for l in E.tree.leaves
+                if E.regimes.s232.metals.hits(l.digits) and other232(l.digits)
+                and l.digits[:2] in ("73", "74", "76", "72"))
+    r = quote(both, "Vietnam")
+    assert r.scope_unverified and r.as_dict()["complete"] is False, (both, r.scope_unverified)
+
+
+@real("Section 232 vehicles and other regimes stay flagged: the engine cannot tell which regime takes them")
+def _():
+    for code, origin in (("8703.23.01.90", "Vietnam"), ("8704.21.01.10", "Vietnam")):
         code = next((l.hts for l in E.tree.leaves if l.hts.startswith(code[:7])), code)
         r = quote(code, origin)
         assert r.scope_unverified, (code, origin, "was quoted as complete")
@@ -213,12 +289,53 @@ def _():
     assert not any("9903.05.40" in x for x in labels(claimed)), labels(claimed)
 
 
-@real("silent omission is closed: Section 232 wood, furniture and cabinets are flagged, not dropped")
+@real("Section 232 wood: upholstered furniture and softwood lumber are priced; the EU, Japan and other deal origins stay flagged")
 def _():
-    code = next(l.hts for l in E.tree.leaves if l.hts.startswith("9401.61.40"))
-    r = quote(code, "Vietnam")
-    assert r.scope_unverified or any("9903.76" in x for x in labels(r)), (
-        "upholstered wooden furniture came back complete with no wood tariff", labels(r))
+    w = E.regimes.s232.wood
+    chair = next(l.hts for l in E.tree.leaves if w.upholstered.covers(l.digits))
+    r = quote(chair, "Vietnam")
+    assert any("9903.76.02" in x for x in labels(r)) and not any("9903.05.84" in x for x in labels(r)), labels(r)
+    assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
+    eu = quote(chair, "Germany")
+    assert eu.scope_unverified and eu.as_dict()["complete"] is False, "an EU origin was priced at the ordinary rate"
+    lumber = next(l.hts for l in E.tree.leaves if w.softwood.covers(l.digits))
+    r = quote(lumber, "Canada")
+    assert any("9903.76.01" in x for x in labels(r)), labels(r)
+    cab = next(l.hts for l in E.tree.leaves if w.cabinets.covers(l.digits))
+    r = quote(cab, "Vietnam")
+    assert any("9903.76.03" in x for x in labels(r)) and any("kitchen cabinets" in a for a in r.assumptions), (labels(r), r.assumptions)
+
+
+@real("Section 232 vehicle parts: the importer's stated use decides, and without it the quote is flagged")
+def _():
+    v = E.regimes.s232.vehicles
+    code = next(l.hts for l in E.tree.leaves
+                if v.pv_parts.covers(l.digits) and not v.heavy_parts.covers(l.digits)
+                and not v.vehicles.covers(l.digits) and not E.regimes.s232.metals.hits(l.digits)
+                and not E.regimes.s232.unresolved.covers(l.digits))
+    unstated = quote(code, "China")
+    assert "9903.94.05" in unstated.scope_unverified and unstated.as_dict()["complete"] is False
+    car = E.quote(hts=code, country="China", value=10000, vehicle_use="passenger")
+    assert any("9903.94.05" in x for x in labels(car)) and not any("9903.05.31" in x for x in labels(car)), labels(car)
+    assert car.as_dict()["complete"] is True, (car.scope_unverified, car.incomplete)
+    other = E.quote(hts=code, country="China", value=10000, vehicle_use="none")
+    assert any("9903.05.31" in x for x in labels(other)) and not any("9903.94" in x for x in labels(other)), labels(other)
+    heavy = E.quote(hts=code, country="China", value=10000, vehicle_use="heavy")
+    assert not any("9903.94" in x for x in labels(heavy)), "a code not on the heavy-duty list was charged as a heavy part"
+    deal = E.quote(hts=code, country="Japan", value=10000, vehicle_use="passenger")
+    assert deal.scope_unverified and not any("9903.94.05" in x for x in labels(deal)), "a deal origin was priced at the ordinary 25%"
+    mx = E.quote(hts=code, country="Mexico", value=10000, vehicle_use="passenger", preference_program="S")
+    assert not any("9903.94.05" in x for x in labels(mx)), labels(mx)
+
+
+@real("an unrecognised vehicle use is refused")
+def _():
+    for bad in ("boat", "spaceship"):
+        try:
+            E.quote(hts="6109.10.00.12", country="China", value=1000, vehicle_use=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"vehicle use {bad!r} was accepted")
 
 
 @real("provisions the schedule itself records as expired are not flagged on every quote")
