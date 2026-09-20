@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentViewer } from "@/lib/auth";
-import { listAlerts, unreadCount, diffStatus } from "@/lib/diff";
+import { listAlerts, unreadCount, diffStatus, failedEmailCount } from "@/lib/diff";
 import { listWatched } from "@/lib/catalogues";
 import { markAlertsReadAction } from "@/lib/actions";
 import { emailEnabled } from "@/lib/email";
-import { Card } from "@/components/ui";
+import { Card, Note } from "@/components/ui";
 
 export const metadata = { title: "Alerts" };
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ export default async function AlertsPage() {
   const unread = await unreadCount(viewer.account.id);
   const watched = await listWatched(viewer.account.id);
   const status = await diffStatus();
+  const undelivered = await failedEmailCount(viewer.account.id);
   const emailed = viewer.account.alert_emails !== 0 && emailEnabled();
 
   return (
@@ -28,18 +29,6 @@ export default async function AlertsPage() {
           <p className="text-[15px] text-muted">
             Tariff actions naming a code you watch.{" "}
             {watched.length.toLocaleString()} codes watched
-            {status?.last_run_at ? (
-              <>
-                {" "}
-                · last checked{" "}
-                <span className="nb">
-                  {new Date(status.last_run_at).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
-              </>
-            ) : null}
           </p>
           <p className="text-[13px] text-faint">
             {emailed
@@ -60,7 +49,27 @@ export default async function AlertsPage() {
         ) : null}
       </div>
 
-      {watched.length === 0 ? (
+      <section
+        aria-label="Monitoring status"
+        data-testid="monitoring-status"
+        className="space-y-2 text-[14px]"
+      >
+        <p className="text-muted">
+          {status?.last_run_at
+            ? `Last successful check: ${new Date(status.last_run_at).toLocaleString("en-US", {
+                month: "short", day: "numeric", year: "numeric",
+                hour: "numeric", minute: "2-digit", timeZone: "UTC", timeZoneName: "short",
+              })}.`
+            : "Monitoring has not run yet, so an empty list does not mean nothing has changed."}
+        </p>
+        {undelivered > 0 ? (
+          <Note role="status">
+            {`${undelivered.toLocaleString()} alert ${undelivered === 1 ? "email" : "emails"} could not be delivered after several attempts — ${undelivered === 1 ? "it is" : "they are"} still listed here.`}
+          </Note>
+        ) : null}
+      </section>
+
+      {watched.length === 0 && alerts.length === 0 ? (
         <Card>
           <p className="text-[15px] text-muted">
             You are not watching any codes yet. Save a catalogue from an{" "}

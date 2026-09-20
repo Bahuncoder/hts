@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveCatalogueAction } from "@/lib/actions";
 import { AUDIT_COLUMNS, auditExportRow, toCsv } from "@/lib/csv";
 import { projectLine, type AuditLine } from "@/lib/auditModel";
 import { LIMITS } from "@/lib/plans";
+import { DraftNotice, useSavedDraft } from "@/components/DraftNotice";
+import { clearDraft, countRows, writeDraft } from "@/lib/draft";
 import { EXPECTED_FORMAT, SAMPLE_CSV, TEMPLATE_CSV, parseCatalogue } from "@/lib/csvParse";
 import AuditResults, { type AuditSummary } from "./AuditResults";
 
@@ -78,6 +80,22 @@ export default function AuditClient({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [fileNote, setFileNote] = useState<string | null>(null);
+  // After a successful run the import panel folds into a one-line summary so
+  // the results start near the top. "Edit catalogue" opens it again.
+  const [editing, setEditing] = useState(true);
+  const barRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const focusAfter = useRef<"bar" | "text" | null>(null);
+  const draft = useSavedDraft();
+
+  // The panel that just held keyboard focus (the Run button, or Edit) is gone
+  // after the swap; put focus where the visitor's attention now is.
+  useEffect(() => {
+    const target = focusAfter.current;
+    focusAfter.current = null;
+    if (target === "bar") barRef.current?.focus();
+    if (target === "text") textRef.current?.focus();
+  }, [editing]);
 
   useEffect(() => {
     if (!busy) return;
@@ -90,6 +108,39 @@ export default function AuditClient({
   const isSample = text === SAMPLE_CSV;
   const entryCount = Math.max(1, Math.min(100_000, Math.floor(Number(entries)) || 1));
   const overLimit = parsed?.ok && parsed.items.length > maxRows;
+  const rowCount = parsed?.ok ? parsed.items.length : countRows(text);
+
+  // An anonymous visitor's only way to carry work across sign-up is the
+  // draft in their own browser (lib/draft.ts). It is written just before they
+  // follow any link to sign up or sign in, wherever on the page it is.
+  useEffect(() => {
+    if (signedIn || isSample || !text.trim()) return;
+    const onLink = (e: Event) => {
+      const a = (e.target as Element | null)?.closest?.("a");
+      if (!a) return;
+      let url: URL;
+      try { url = new URL(a.href, window.location.href); } catch { return; }
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname !== "/signup" && url.pathname !== "/login") return;
+      writeDraft({ text, entries: entryCount, transport, rows: rowCount });
+    };
+    const events = ["click", "auxclick", "contextmenu"] as const;
+    for (const ev of events) document.addEventListener(ev, onLink, true);
+    return () => { for (const ev of events) document.removeEventListener(ev, onLink, true); };
+  }, [signedIn, isSample, text, entryCount, transport, rowCount]);
+
+  function restoreDraft() {
+    if (!draft) return;
+    setText(draft.text);
+    setEntries(String(draft.entries));
+    setTransport(draft.transport);
+    setAttempted(false);
+    setFileNote("Restored your earlier catalogue. Check it, then run the audit when you are ready.");
+    setEditing(true);
+    focusAfter.current = "text";
+    textRef.current?.focus();
+    clearDraft();
+  }
 
   async function runAudit() {
     setAttempted(true);
@@ -135,6 +186,11 @@ export default function AuditClient({
         ranAt: new Date(), text, sample: isSample, entries: entryCount, transport,
       });
       setSaveError(null);
+      setEditing(false);
+      focusAfter.current = "bar";
+      if (!signedIn && !isSample) {
+        writeDraft({ text, entries: entryCount, transport, rows: p.items.length });
+      }
     } catch (e) {
       const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
       setError(
@@ -194,6 +250,7 @@ export default function AuditClient({
         setSaveError(res.error ?? "Could not save. Try again.");
         return;
       }
+      clearDraft(); // it has served its purpose; do not leave supplier data behind
       router.push(`/catalogues/${res.id}`);
     } catch {
       setSaveError("Could not save just now. Your results are still here; try again.");
@@ -217,10 +274,48 @@ export default function AuditClient({
           </li>
         ))}
       </ol>
+      {signedIn && draft ? (
+        <DraftNotice draft={draft} onRestore={restoreDraft} onDiscard={clearDraft} />
+      ) : null}
+      {run && !editing ? (
+        <section
+          ref={barRef}
+          tabIndex={-1}
+          aria-label="Catalogue summary"
+          data-testid="import-summary"
+          className="panel flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4 sm:px-6"
+        >
+          <p className="text-[14px] text-muted">
+            <span className="text-[15px] font-medium text-ink">
+              <span className="mono">{run.response.lines.length.toLocaleString()}</span>{" "}
+              {run.response.lines.length === 1 ? "product" : "products"}
+            </span>{" "}
+            · {run.entries} formal {run.entries === 1 ? "entry" : "entries"} · {run.transport === "vessel" ? "vessel" : "air"} shipment · audited {timeOf(run.ranAt)}
+          </p>
+          <button
+            type="button"
+            onClick={() => { focusAfter.current = "text"; setEditing(true); }}
+            className={`btn btn-secondary ${focusRing}`}
+          >
+            Edit catalogue
+          </button>
+        </section>
+      ) : (
       <section className="panel overflow-hidden" aria-labelledby="import-heading">
         <div className="panel-heading">
           <h2 id="import-heading" className="panel-title"><span className="step-number" aria-hidden="true">1</span>Import your catalogue</h2>
-          <span className="mono text-xs text-faint">Up to {maxRows.toLocaleString()} products per audit</span>
+          <span className="flex items-center gap-4">
+            <span className="mono text-xs text-faint">Up to {maxRows.toLocaleString()} products per audit</span>
+            {run ? (
+              <button
+                type="button"
+                onClick={() => { focusAfter.current = "bar"; setEditing(false); }}
+                className={`text-[14px] text-muted hover:underline ${focusRing}`}
+              >
+                Collapse
+              </button>
+            ) : null}
+          </span>
         </div>
         <div className="space-y-5 p-5 sm:p-6">
       <div className="space-y-2">
@@ -234,6 +329,7 @@ export default function AuditClient({
           </a>
         </p>
         <textarea
+          ref={textRef}
           id="catalogue-text"
           aria-describedby="catalogue-help catalogue-preflight"
           value={text}
@@ -279,7 +375,7 @@ export default function AuditClient({
 
       <div id="catalogue-preflight" role={attempted && problems.length ? "alert" : "status"} className="space-y-2 text-[14px]">
         {fileNote ? <p className="text-muted">{fileNote}</p> : null}
-        {isSample ? (
+        {isSample && !run?.sample ? (
           <p className="rounded border-l-2 py-2 pl-3 border-caution bg-caution-soft text-caution-ink">
             This is sample data, not yours. Replace it with your catalogue, or clear it.
           </p>
@@ -296,9 +392,15 @@ export default function AuditClient({
           <p className="text-caution-ink">
             That is more than the {maxRows.toLocaleString()} products one audit takes
             {signedIn ? "" : " without an account"}. The audit will refuse it;{" "}
-            {signedIn
-              ? "split the file."
-              : `split the file, or create a free account for up to ${LIMITS.account.productsPerAudit.toLocaleString()} at a time.`}
+            {signedIn ? (
+              "split the file."
+            ) : (
+              <>
+                split the file, or{" "}
+                <a href="/signup?next=/audit" className="font-medium underline">create a free account</a>{" "}
+                for up to {LIMITS.account.productsPerAudit.toLocaleString()} at a time.
+              </>
+            )}
           </p>
         ) : null}
         {problems.length ? (
@@ -376,6 +478,7 @@ export default function AuditClient({
 
         </div>
       </section>
+      )}
 
       {error ? (
         <div role="alert" className="rounded border-l-2 py-2 pl-3 text-[14px] border-danger bg-caution-soft text-danger">
@@ -430,13 +533,28 @@ export default function AuditClient({
                 </button>
               </>
             ) : (
-              <p className="text-[14px] text-muted">
-                <a href="/signup" className="font-medium hover:underline text-accent">
-                  Create a free account
-                </a>{" "}
-                to save this catalogue — every priced code in it is then watched, and you are told when a
-                tariff action names one.
-              </p>
+              <div className="max-w-2xl space-y-2 text-[14px] text-muted">
+                <p>
+                  <a href="/signup?next=/audit" className="font-medium hover:underline text-accent">
+                    Create a free account
+                  </a>{" "}
+                  or{" "}
+                  <a href="/login?next=/audit" className="font-medium hover:underline text-accent">
+                    sign in
+                  </a>{" "}
+                  to save this catalogue — every priced code in it is then watched, and you are told when a
+                  tariff action names one.
+                </p>
+                {draft ? (
+                  <p className="text-[13px]">
+                    So you do not have to start again, this catalogue is kept in this browser for 24 hours. It is
+                    not sent to us, and it is cleared when you sign out.{" "}
+                    <button type="button" onClick={clearDraft} className={`text-accent underline ${focusRing}`}>
+                      Forget it now
+                    </button>
+                  </p>
+                ) : null}
+              </div>
             )}
             <button
               type="button"

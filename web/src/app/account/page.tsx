@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { currentViewer } from "@/lib/auth";
-import { logoutAction, toggleAlertEmailsAction } from "@/lib/actions";
+import { toggleAlertEmailsAction } from "@/lib/actions";
+import { AccountDraftBanner, SignOutForm } from "@/components/DraftNotice";
 import { emailEnabled } from "@/lib/email";
 import { listWatched } from "@/lib/catalogues";
 import { recentForAccount } from "@/lib/audit";
@@ -41,12 +42,10 @@ export default async function AccountPage() {
           <h1 className="serif text-3xl tracking-tight">Account</h1>
           <p className="text-[14px] text-muted">{account.email}</p>
         </div>
-        <form action={logoutAction}>
-          <button className="px-3 py-2 text-[14px] border border-rule text-muted">
-            Sign out
-          </button>
-        </form>
+        <SignOutForm />
       </div>
+
+      <AccountDraftBanner />
 
       <div className="space-y-3">
         <div>

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { Lockup } from "@/components/Logo";
-import { NavLink, SiteNav } from "@/components/SiteNav";
+import { NavLink, SignedOutLinks, SiteNav } from "@/components/SiteNav";
 import { currentViewer } from "@/lib/auth";
 import "./globals.css";
 
@@ -14,6 +15,31 @@ export const metadata: Metadata = {
   description:
     "Describe your product in plain words and get its HTS classification, the CBP rulings behind it, and the full duty stack — Section 232, Section 301, MPF and HMF — with the authority for every line.",
 };
+
+// Fonts are downloaded at BUILD time and served from our own origin, so a page
+// view makes no request to Google and does not hand it the visitor's address.
+// Only the weights the design uses are shipped (400/500/600 for text and
+// figures; Newsreader is the one variable file, so headings keep their
+// optical-size cut). The variables feed the --sans/--mono/--serif tokens in
+// globals.css, which carry the fallbacks.
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-plex-sans",
+});
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-plex-mono",
+});
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  axes: ["opsz"],
+  display: "swap",
+  variable: "--font-newsreader",
+});
 
 const NAV = [
   { href: "/classify", label: "Classify" },
@@ -34,23 +60,10 @@ export default async function RootLayout({
 }) {
   const viewer = await currentViewer();
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin=""
-        />
-        {/* Root-layout <head> is the App Router place for site-wide font
-            links; the rule below is written for the Pages Router and flags
-            this as page-scoped, which it is not. */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap"
-        />
-      </head>
+    <html
+      lang="en"
+      className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable}`}
+    >
       <body>
         <a
           href="#main"
@@ -72,15 +85,7 @@ export default async function RootLayout({
                   <NavLink href="/account">Account</NavLink>
                 </>
               ) : (
-                <>
-                  <NavLink href="/login">Sign in</NavLink>
-                  <Link
-                    href="/signup"
-                    className="btn btn-primary"
-                  >
-                    Start free
-                  </Link>
-                </>
+                <SignedOutLinks />
               )}
             </div>
           </div>

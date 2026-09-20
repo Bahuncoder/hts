@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { nextQuery, safeNext } from "@/lib/next";
 
 type Item = { href: string; label: string };
 
@@ -71,6 +72,21 @@ export function SiteNav({ items }: { items: Item[] }) {
           </ul>
         </nav>
       </details>
+    </>
+  );
+}
+
+/** Sign in / Start free. Where the visitor is now travels with them when it is
+ *  a place they can be sent back to (lib/next.ts allowlist), so signing in
+ *  from the audit lands on the audit. */
+export function SignedOutLinks() {
+  const q = nextQuery(safeNext(usePathname()));
+  return (
+    <>
+      <NavLink href={`/login${q}`}>Sign in</NavLink>
+      <Link href={`/signup${q}`} className="btn btn-primary">
+        Start free
+      </Link>
     </>
   );
 }

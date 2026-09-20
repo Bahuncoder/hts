@@ -82,6 +82,9 @@ export type HtsDetail = {
     rate_pct: number | null;
     raw_rate: string;
     suspended: number;
+    /** Whether the remedy covers the origin the page was requested for. Absent
+     *  from an older engine, in which case it is treated as applying. */
+    applies_to_origin?: boolean;
   }[];
 };
 

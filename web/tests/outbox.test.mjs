@@ -151,6 +151,42 @@ try {
     assert.match(app.log(), /abandoned after 5 attempts/);
   });
 
+  await check("the alerts page tells an account its emails were abandoned, and only that account", async () => {
+    await reset();
+    const session = async (account) => {
+      const token = crypto.randomBytes(16).toString("hex");
+      await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
+        args: [token, account, new Date(Date.now() + 3_600_000).toISOString()] });
+      return token;
+    };
+    const page = async (account) => {
+      const res = await fetch(`${app.base}/alerts`, { headers: { cookie: `htsdesk_session=${await session(account)}` } });
+      assert.equal(res.status, 200);
+      return (await res.text()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+    };
+    const a1 = await addAlert("acct", "u1");
+    const a2 = await addAlert("acct", "u2");
+    await addAlert("acct2", "u3");
+    const stamp = (id, status) => db.execute({
+      sql: "UPDATE alert SET emailed_at = ?, email_status = ?, email_attempts = 5 WHERE id = ?",
+      args: [new Date().toISOString(), status, id] });
+    await stamp(a1, "failed_permanent");
+    await stamp(a2, "failed_permanent");
+    const acct2Alert = (await alerts()).find((a) => a.document_number === "u3");
+    await stamp(acct2Alert.id, "sent");
+
+    const mine = await page("acct");
+    assert.match(mine, /2 alert emails could not be delivered after several attempts — they are still listed here\./);
+    assert.match(mine, /Title u1/); assert.match(mine, /Title u2/); // still listed
+    assert.match(mine, /Last successful check: [A-Z][a-z]{2} \d{1,2}, \d{4}, .* UTC\./, "the last successful check is stated with its time");
+    const other = await page("acct2");
+    assert.doesNotMatch(other, /could not be delivered/, "another account's failures are not shown");
+    await stamp(a2, "sent");
+    assert.match(await page("acct"), /1 alert email could not be delivered after several attempts — it is still listed here\./);
+    await stamp(a1, "sent");
+    assert.doesNotMatch(await page("acct"), /could not be delivered/);
+  });
+
   await check("every account is emailed; an opt-out is stamped and distinguishable from a failure", async () => {
     await reset();
     await addAlert("acct3", "p1"); await addAlert("quiet", "q1");

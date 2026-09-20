@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getHts, money2 } from "@/lib/api";
+import { getHts, money2, type HtsDetail } from "@/lib/api";
+import { htsTitle, pathSegments } from "@/lib/htsTitle";
 import { ORIGINS, QUICK_ORIGINS } from "@/lib/origins";
 import { Badge, Card, Note, Stat } from "@/components/ui";
 import { Field, inputClass } from "@/components/Field";
@@ -42,13 +43,14 @@ export async function generateMetadata({
   if (!r.ok) return { title: `HTS ${code}`, robots: { index: false } };
   const d = r.data;
   const q = d.quote;
+  const { title } = htsTitle(d.description, d.full_path);
   const rate = q
     ? `${q.effective_rate_pct}%${isComplete(q) ? "" : " (incomplete estimate)"}`
     : d.rates.general;
   return {
-    title: `HTS ${d.hts} — ${d.description.slice(0, 60)} | duty rate from ${country}`,
+    title: `HTS ${d.hts} — ${title.slice(0, 60)} | duty rate from ${country}`,
     description:
-      `Import duty for HTS ${d.hts}: ${d.description.slice(0, 90)}. ` +
+      `Import duty for HTS ${d.hts}: ${title.slice(0, 90)}. ` +
       `Estimated rate from ${country} is ${rate}, including trade remedies, MPF and HMF, for a $10,000 entry.`,
     alternates: { canonical: `/hts/${d.hts}` },
   };
@@ -122,6 +124,67 @@ function scopeCountries(raw: string): string {
   }
 }
 
+type Remedy = HtsDetail["trade_remedies"][number];
+
+function RemedyCard({ r }: { r: Remedy }) {
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center gap-3 text-[14px]">
+        <span className="tabular font-medium">{r.heading}</span>
+        {r.suspended ? (
+          <Badge tone="bad">suspended</Badge>
+        ) : (
+          <Badge tone="warn">in force</Badge>
+        )}
+        <span className="text-muted">{scopeCountries(r.countries)}</span>
+        <span className="tabular ml-auto">{r.raw_rate}</span>
+      </div>
+      <p className="mt-1 text-[12px] text-muted">
+        Scope from Chapter 99 U.S. Note {r.note}
+        {r.effective_from ? ` · effective ${r.effective_from}` : ""}
+      </p>
+    </Card>
+  );
+}
+
+/** Remedies that reach the chosen origin come first. The rest also cover the
+ *  code, but only for other origins, so they sit behind a disclosure rather
+ *  than reading as if they applied to this quote. */
+function RemedyList({ remedies, country }: { remedies: Remedy[]; country: string }) {
+  const applying = remedies.filter((r) => r.applies_to_origin !== false);
+  const others = remedies.filter((r) => r.applies_to_origin === false);
+  return (
+    <section className="space-y-4">
+      <h2 className="text-xl font-semibold tracking-tight">
+        Trade remedies covering this code
+      </h2>
+      <div className="space-y-2">
+        <h3 className="text-[15px] font-semibold">Apply to {country}</h3>
+        {applying.length ? (
+          applying.map((r) => <RemedyCard key={r.heading} r={r} />)
+        ) : (
+          <p className="text-[14px] text-muted">
+            No trade-remedy heading names {country} for this code.
+          </p>
+        )}
+      </div>
+      {others.length ? (
+        <details className="group rounded-md border border-border p-4" data-testid="other-remedies">
+          <summary className="cursor-pointer text-[14px] font-medium">
+            Also cover this code for other origins ({others.length})
+          </summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-[13px] text-muted">
+              These headings name other countries, not {country}, so they are not in the quote above.
+            </p>
+            {others.map((r) => <RemedyCard key={r.heading} r={r} />)}
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
 export default async function HtsPage({ params, searchParams }: Props) {
   const { code } = await params;
   const country = originOf((await searchParams).country);
@@ -164,6 +227,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
 
   const d = res.data;
   const q = d.quote;
+  const heading = htsTitle(d.description, d.full_path);
   const complete = q ? isComplete(q) : true;
   const flag = complete ? undefined : "Estimate is incomplete";
   const tone = complete ? undefined : "warn";
@@ -197,8 +261,22 @@ export default async function HtsPage({ params, searchParams }: Props) {
             <Badge>heading</Badge>
           )}
         </div>
-        <p className="text-lg">{d.description}</p>
-        <p className="text-[13px] text-muted">{d.full_path}</p>
+        <p className="text-lg font-medium leading-snug" data-testid="hts-title">{heading.title}</p>
+        {heading.subtitle ? (
+          <p className="text-[14px] text-muted">
+            Tariff line: <span data-testid="hts-line-description">{heading.subtitle}</span>
+          </p>
+        ) : null}
+        <nav aria-label="Classification path" data-testid="hts-path">
+          <ol className="flex flex-wrap gap-x-1.5 gap-y-0.5 text-[13px] text-muted">
+            {pathSegments(d.full_path).map((segment, i, all) => (
+              <li key={`${i}-${segment}`} className="flex gap-1.5">
+                {i > 0 ? <span aria-hidden="true">›</span> : null}
+                <span aria-current={i === all.length - 1 ? "location" : undefined}>{segment}</span>
+              </li>
+            ))}
+          </ol>
+        </nav>
       </div>
 
       <OriginPicker code={d.hts} country={country} />
@@ -224,6 +302,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
               <Stat
                 label={`Effective rate from ${country}`}
                 value={`${q.effective_rate_pct}%`}
+                sub="total duty and fees as a share of entered value"
                 flag={flag}
                 tone={tone}
               />
@@ -235,9 +314,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
                 sub="including MPF and HMF"
                 flag={flag}
                 tone={tone}
-              >
-                <IncompleteReasons quote={q} />
-              </Stat>
+              />
             </Card>
             <Card>
               <Stat
@@ -245,13 +322,14 @@ export default async function HtsPage({ params, searchParams }: Props) {
                 value={money2(q.refundable_amount)}
                 sub={
                   q.refundable_amount > 0
-                    ? "if paid on an entry like this; not a claim amount"
-                    : "none identified for this scenario"
+                    ? "Scenario estimate for an entry like this, not a claim amount"
+                    : "None identified for this scenario"
                 }
                 tone={q.refundable_amount > 0 ? "recover" : undefined}
               />
             </Card>
           </div>
+          <IncompleteReasons quote={q} />
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold tracking-tight">Duty stack</h2>
@@ -326,33 +404,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
       )}
 
       {d.trade_remedies.length ? (
-        <section className="space-y-3">
-          <h2 className="text-xl font-semibold tracking-tight">
-            Trade remedies covering this code
-          </h2>
-          <div className="space-y-2">
-            {d.trade_remedies.map((r) => (
-              <Card key={r.heading}>
-                <div className="flex flex-wrap items-center gap-3 text-[14px]">
-                  <span className="tabular font-medium">{r.heading}</span>
-                  {r.suspended ? (
-                    <Badge tone="bad">suspended</Badge>
-                  ) : (
-                    <Badge tone="warn">in force</Badge>
-                  )}
-                  <span className="text-muted">
-                    {scopeCountries(r.countries)}
-                  </span>
-                  <span className="tabular ml-auto">{r.raw_rate}</span>
-                </div>
-                <p className="mt-1 text-[12px] text-muted">
-                  Scope from Chapter 99 U.S. Note {r.note}
-                  {r.effective_from ? ` · effective ${r.effective_from}` : ""}
-                </p>
-              </Card>
-            ))}
-          </div>
-        </section>
+        <RemedyList remedies={d.trade_remedies} country={country} />
       ) : null}
 
       <div className="flex flex-wrap items-center gap-4 border-t pt-5 border-border">

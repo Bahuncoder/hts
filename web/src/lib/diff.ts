@@ -214,6 +214,17 @@ export async function markAllRead(accountId: string): Promise<void> {
   });
 }
 
+/** Alerts of this account whose email was abandoned after repeated failed
+ *  sends. They are still in the account's alert list; only the email never
+ *  arrived. Scoped to one account: never a system-wide figure. */
+export async function failedEmailCount(accountId: string): Promise<number> {
+  const rs = await (await db()).execute({
+    sql: "SELECT count(*) AS n FROM alert WHERE account_id = ? AND email_status = 'failed_permanent'",
+    args: [accountId],
+  });
+  return (rs.rows[0] as unknown as { n: number }).n;
+}
+
 export async function diffStatus() {
   const rs = await (await db()).execute("SELECT last_seen_date, last_run_at FROM diff_state WHERE id = 1");
   return rs.rows[0] as unknown as { last_seen_date: string | null; last_run_at: string | null } | undefined;

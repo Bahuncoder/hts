@@ -41,8 +41,9 @@ tables in an existing accounts database are left dormant, not dropped.
 | `tests/test_api.py` | 32 | API contract, security regressions, audit row/status behaviour, cursor paging |
 | `tests/test_refresh.py` | 10 | index survival, stale-data removal, rollback, engine reload across editions |
 | `tests/test_classify_eval.py` | 3 | a held-out ruling cannot vote for itself; reasoning cannot run in evaluation |
-| `web` `npm run test:integration` | 85 | real routes over scratch databases with fake engine/mail servers |
+| `web` `npm run test:integration` | 86 | real routes over scratch databases with fake engine/mail servers |
 | browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 67 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
+| browser suites (`make test-ui`, `test-draft`, `test-contrast`) | 42 | workspace UI and self-hosted fonts (10), audit-survives-sign-up draft and `?next=` allowlist (21), measured WCAG contrast in light/dark (11) |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
 evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).

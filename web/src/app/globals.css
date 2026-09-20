@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 /* HTSDesk design system.
-   Green marks what the product asserts. Copper marks money the importer may
-   get back — the IEEPA duties struck down in February 2026. Nothing else on
-   a page is allowed to be copper. */
+   Green marks what the product asserts. Copper (--recover, hue ~21deg) marks
+   money the importer may get back — the IEEPA duties struck down in February
+   2026. Nothing else on a page is allowed to be copper. Caution (--caution,
+   hue ~48deg, an olive-amber) marks review and incomplete figures; it is a
+   different hue family on purpose, so a warning is never read as recovery.
+   Every text pair below is >= 4.5:1 on every surface it is used on
+   (tests/contrast.test.mjs measures the rendered pages). */
 
 :root {
   --paper: #faf9f6;
@@ -15,25 +19,25 @@
 
   --ink: #161c1a;
   --muted: #4d5b56;
-  --faint: #6b7a75;
+  --faint: #5d6b66;
 
   --accent: #0d5142;
   --accent-soft: #e7efeb;
   --on-accent: #ffffff;
 
   --recover: #a8501f;
-  --caution: #8a5a2b;
-  --caution-soft: #fbf6ec;
-  --caution-ink: #6b4a1e;
+  --caution: #786000;
+  --caution-soft: #fbf5d9;
+  --caution-ink: #5c4a00;
   --danger: #8f2f2a;
 
   --deep: #10201c;
   --deep-ink: #e8efec;
   --deep-muted: #7f9a92;
 
-  --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --serif: Newsreader, ui-serif, Georgia, "Times New Roman", serif;
+  --sans: var(--font-plex-sans), "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --serif: var(--font-newsreader), Newsreader, ui-serif, Georgia, "Times New Roman", serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,9 +58,9 @@
     --on-accent: #0a1a16;
 
     --recover: #e08a4e;
-    --caution: #e0b341;
-    --caution-soft: #241d0e;
-    --caution-ink: #e0b341;
+    --caution: #e3c84a;
+    --caution-soft: #2a2408;
+    --caution-ink: #e3c84a;
     --danger: #f28b82;
 
     --deep: #16302a;
@@ -79,9 +83,9 @@
   --accent-soft: #16302a;
   --on-accent: #0a1a16;
   --recover: #e08a4e;
-  --caution: #e0b341;
-  --caution-soft: #241d0e;
-  --caution-ink: #e0b341;
+  --caution: #e3c84a;
+  --caution-soft: #2a2408;
+  --caution-ink: #e3c84a;
   --danger: #f28b82;
   --deep: #16302a;
   --deep-ink: #e8efec;
@@ -180,7 +184,7 @@ button, summary, label[for] { -webkit-tap-highlight-color: transparent; }
 button:not(:disabled), summary { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
 input, textarea, select { accent-color: var(--accent); }
-input::placeholder, textarea::placeholder { color: var(--faint); opacity: .85; }
+input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .site-header { background: var(--surface); border-bottom: 1px solid var(--border); }
 .workspace-main { min-height: 65vh; }
 .eyebrow { font: 500 11px/1.5 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }

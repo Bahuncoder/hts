@@ -73,13 +73,26 @@ const { ctx, page } = await newPage();
 const body = () => page.locator("body").innerText();
 const rowsOf = () => page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /Details|Hide details/ }) });
 
+/** After a successful run the import panel folds into a one-line summary with
+ *  an "Edit catalogue" button (the results then start near the top of the
+ *  page). These open it again before touching the form. */
+async function openImport(p) {
+  if (!(await p.locator("textarea").isVisible())) await p.getByRole("button", { name: "Edit catalogue" }).click();
+  await p.locator("textarea").waitFor();
+}
+async function fillText(p, text) {
+  await openImport(p);
+  await p.fill("textarea", text);
+}
+
 /** Runs an audit and returns once ITS results are on screen. Earlier results
  *  stay visible while a new run is in flight, so waiting for the results
  *  element alone would return at once with the old ones. */
 async function finishRun(p, before) {
   for (let i = 0; i < 200 && engine.calls.length <= before; i++) await new Promise((r) => setTimeout(r, 50));
   assert.ok(engine.calls.length > before, "the audit request was never sent");
-  await p.getByRole("button", { name: "Run audit" }).waitFor({ timeout: 20000 });
+  // The run is over when the import panel has folded into its summary bar.
+  await p.getByTestId("import-summary").waitFor({ timeout: 20000 });
   await p.locator('[data-testid="reconciliation"]').waitFor({ timeout: 20000 });
 }
 async function runOn(p, text) {
@@ -88,7 +101,7 @@ async function runOn(p, text) {
   // audit.test.mjs.
   await db.execute("DELETE FROM usage_event");
   const before = engine.calls.length;
-  await p.fill("textarea", text);
+  await fillText(p, text);
   await p.getByRole("button", { name: "Run audit" }).click();
   await finishRun(p, before);
 }
@@ -108,13 +121,17 @@ try {
     assert.match(await body(), /results for the sample catalogue, not your data/);
     assert.equal(await page.getByRole("button", { name: /Save and watch/ }).isDisabled(), true,
       "sample results must not be saved as the customer's catalogue");
+    // One warning about the sample, not two: the results carry it, so the
+    // import panel (reopened) does not repeat it.
+    await openImport(page);
+    assert.equal(await page.getByText(/This is sample data, not yours/).count(), 0);
     await page.getByRole("button", { name: "Clear" }).click();
     assert.equal(await page.inputValue("textarea"), "");
   });
 
   await check("a header problem is named and blocks the run; the template is offered", async () => {
     const before = engine.calls.length;
-    await page.fill("textarea", "sku,description,value\nA,shirt,10");
+    await fillText(page, "sku,description,value\nA,shirt,10");
     assert.match(await page.locator("#catalogue-preflight").innerText(), /Missing the “country” column/);
     await page.getByRole("button", { name: "Run audit" }).click();
     assert.equal(await page.locator('#catalogue-preflight[role="alert"]').count(), 1, "announced as an alert");
@@ -122,13 +139,13 @@ try {
     const href = await page.getByRole("link", { name: "Download template" }).last().getAttribute("href");
     assert.match(href, /^data:text\/csv/);
     assert.match(decodeURIComponent(href), /sku,description,country,value,hts/);
-    await page.fill("textarea", "description,country,value,amount\nshirt,China,1,2");
+    await fillText(page, "description,country,value,amount\nshirt,China,1,2");
     assert.match(await page.locator("#catalogue-preflight").innerText(), /“value” column appears more than once/);
   });
 
   await check("every row is sent with its row number; unreadable amounts go as 0", async () => {
     engine.calls.length = 0;
-    await page.fill("textarea", MIXED);
+    await fillText(page, MIXED);
     assert.match(await page.locator("#catalogue-preflight").innerText(), /9 rows read · 1 look incomplete/);
     await page.getByRole("button", { name: "Run audit" }).click();
     await finishRun(page, 0);
@@ -207,6 +224,7 @@ try {
   await check("assumptions are listed, and entries and transport reach the engine", async () => {
     await page.locator("details", { hasText: "Assumptions behind these figures" }).locator("summary").click();
     assert.match(await body(), /Vessel shipment assumed/);
+    await openImport(page);
     await page.locator("details", { hasText: /^Assumptions: 1 formal entry/ }).locator("summary").click();
     await page.fill('input[type="number"]', "3");
     await page.getByLabel("Transport", { exact: true }).selectOption("air");
@@ -221,22 +239,23 @@ try {
   });
 
   await check("progress is announced while running and the button cannot be double-pressed", async () => {
-    await page.fill("textarea", "sku,description,country,value\nS-1,slow shirt,China,100");
+    await fillText(page, "sku,description,country,value\nS-1,slow shirt,China,100");
     await page.getByRole("button", { name: "Run audit" }).click();
     await page.getByRole("status").filter({ hasText: /Auditing 1 rows/ }).waitFor({ timeout: 5000 });
     assert.equal(await page.getByRole("button", { name: /Auditing/ }).isDisabled(), true);
-    await page.getByRole("button", { name: "Run audit" }).waitFor({ timeout: 15000 });
+    await page.getByTestId("import-summary").waitFor({ timeout: 15000 });
     assert.match(await body(), /Submitted 1 · Ready 1/);
   });
 
   await check("a changed catalogue is flagged against results from the earlier text", async () => {
-    await page.fill("textarea", "sku,description,country,value\nS-2,another shirt,China,5");
+    await fillText(page, "sku,description,country,value\nS-2,another shirt,China,5");
     assert.match(await body(), /You have changed the catalogue or shipping assumptions since this audit/);
   });
 
   await check("a failed re-run keeps the previous result and never leaves the button busy", async () => {
     await runAudit(MIXED);
     engine.mode = "down";
+    await openImport(page);
     await page.getByRole("button", { name: "Run audit" }).click();
     await page.locator('[role="alert"]').filter({ hasText: /engine down/ }).waitFor({ timeout: 10000 });
     assert.match(await page.locator('[role="alert"]').filter({ hasText: /engine down/ }).innerText(), /previous successful audit/);
@@ -267,7 +286,7 @@ try {
   });
 
   await check("upload is keyboard-operable with a visible focus ring", async () => {
-    await page.fill("textarea", "");
+    await fillText(page, "");
     await page.locator("textarea").focus();
     await page.keyboard.press("Tab");
     assert.equal(await page.evaluate(() => document.activeElement?.id), "catalogue-file");
@@ -438,7 +457,7 @@ try {
       await p2.goto(`${app.base}/audit`, { waitUntil: "networkidle" });
       rows.push("F-201,shirt,China,201");
       const before = engine.calls.length;
-      await p2.fill("textarea", rows.join("\n"));
+      await fillText(p2, rows.join("\n"));
       // One over the ceiling: the page says so and will not send it (the
       // server refuses it too: audit.test.mjs).
       await p2.getByText(/more than the 200 products one audit takes/).waitFor({ timeout: 15000 });
@@ -566,7 +585,7 @@ try {
   const p = await c.newPage();
   await bare.check("with signing unconfigured in production, results show but saving reports it is unavailable", async () => {
     await p.goto(`${app2.base}/audit`, { waitUntil: "networkidle" });
-    await p.fill("textarea", "sku,description,country,value\nA,shirt,China,100");
+    await fillText(p, "sku,description,country,value\nA,shirt,China,100");
     await p.getByRole("button", { name: "Run audit" }).click();
     await p.locator('[data-testid="reconciliation"]').waitFor({ timeout: 15000 });
     await p.fill('input[placeholder*="Autumn"]', "Nope");

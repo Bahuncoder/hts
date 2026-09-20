@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AuthForm, AuthFooterLink } from "@/components/AuthForm";
 import { signUpAction } from "@/lib/actions";
 import { currentViewer } from "@/lib/auth";
+import { nextQuery, safeNext } from "@/lib/next";
 
 export const metadata = { title: "Create an account" };
 export const dynamic = "force-dynamic";
@@ -9,10 +10,11 @@ export const dynamic = "force-dynamic";
 export default async function SignUpPage({
   searchParams,
 }: {
-  searchParams: Promise<{ verify?: string }>;
+  searchParams: Promise<{ verify?: string; next?: string | string[] }>;
 }) {
-  if (await currentViewer()) redirect("/account");
-  const { verify } = await searchParams;
+  const { verify, next: rawNext } = await searchParams;
+  const next = safeNext(rawNext);
+  if (await currentViewer()) redirect(next ?? "/account");
   return (
     <>
       {verify === "expired" ? (
@@ -25,12 +27,13 @@ export default async function SignUpPage({
         action={signUpAction}
         submit="Create account"
         newPassword
+        hidden={next ? { next } : undefined}
         heading="Create an account"
         blurb="Free. Classify and price up to 200 products at a time."
         footer={
           <>
             Already have one?{" "}
-            <AuthFooterLink href="/login">Sign in</AuthFooterLink>.
+            <AuthFooterLink href={`/login${nextQuery(next)}`}>Sign in</AuthFooterLink>.
           </>
         }
       />

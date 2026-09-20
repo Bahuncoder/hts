@@ -13,6 +13,15 @@ export default async function Home() {
   const health = await getHealth();
   const counts = health.ok ? health.data.counts : undefined;
   const edition = health.ok ? health.data.hts_edition : undefined;
+  // Row counts only come back to a keyed caller. When they are missing the
+  // block shows the sources sentence alone; "Unavailable" four times over
+  // would read as a fault, not as figures we choose not to show.
+  const figures = ([
+    ["HTS lines", counts?.hts],
+    ["CBP rulings", counts?.ruling],
+    ["Chapter 99 rules", counts?.ch99_rule],
+    ["Scoped code links", counts?.ch99_scope],
+  ] as [string, number | undefined][]).filter(([, n]) => typeof n === "number");
   return (
     <div className="space-y-14 sm:space-y-20">
       <section className="hero">
@@ -23,11 +32,12 @@ export default async function Home() {
             Go from a product description to a duty estimate you can explore.
             HTS codes, trade remedies, and the evidence behind them — in one workspace.
           </p>
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link href="/audit" className="btn btn-primary">Audit your catalogue <span aria-hidden="true">→</span></Link>
             <Link href="/classify" className="btn btn-secondary">Classify one product</Link>
+            <span className="inline-flex min-h-[44px] items-center rounded-full border border-border bg-accent-soft px-4 text-[14px] font-medium text-accent">Free while in beta</span>
           </div>
-          <p className="mt-4 text-xs text-faint">Free while in beta. Try the tools without an account; a free account saves your catalogues and watches your codes.</p>
+          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Try the tools without an account; a free account saves your catalogues and watches your codes.</p>
         </div>
         <div className="hero-example" aria-label="Illustrative duty breakdown, not a live quote">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -70,10 +80,13 @@ export default async function Home() {
 
       <section className="panel grid gap-8 p-6 sm:p-8 md:grid-cols-2" aria-labelledby="evidence-title">
         <div><p className="eyebrow">Evidence you can inspect</p><h2 id="evidence-title" className="serif mt-3 text-3xl tracking-tight">Every figure needs context.</h2><p className="mt-4 max-w-md text-sm leading-relaxed text-muted">Follow classifications back to ruling precedent. Inspect duty components and assumptions. Keep incomplete estimates visible while you review the details with your broker.</p></div>
-        <div className="self-center"><dl className="grid grid-cols-2 gap-x-5 gap-y-7">
-          {[["HTS lines", counts?.hts], ["CBP rulings", counts?.ruling], ["Chapter 99 rules", counts?.ch99_rule], ["Scoped code links", counts?.ch99_scope]].map(([label, count]) => <div key={String(label)}><dt className="lbl">{label}</dt><dd className="mono mt-2 text-xl">{typeof count === "number" ? count.toLocaleString() : "Unavailable"}</dd></div>)}
-        </dl>
-          <p className="mt-7 text-xs text-faint">{edition ? `Reference edition: ${edition}.` : "Live reference figures are temporarily unavailable."} Sources: USITC, CBP, and the Federal Register.</p>
+        <div className="self-center">
+          {figures.length ? (
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-7">
+              {figures.map(([label, count]) => <div key={label}><dt className="lbl">{label}</dt><dd className="mono mt-2 text-xl">{(count as number).toLocaleString()}</dd></div>)}
+            </dl>
+          ) : null}
+          <p className={`${figures.length ? "mt-7 text-xs text-faint" : "text-sm leading-relaxed text-muted"}`}>{edition ? `Reference edition: ${edition}.` : health.ok ? "" : "Live reference figures are temporarily unavailable."} Sources: USITC, CBP, and the Federal Register.</p>
         </div>
       </section>
     </div>

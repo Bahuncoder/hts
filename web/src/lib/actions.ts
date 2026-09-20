@@ -13,6 +13,7 @@ import { audit } from "./audit";
 import { emailEnabled, send } from "./email";
 import { passwordResetEmail, verifyEmail } from "./emails/auth";
 import { consume, issue } from "./tokens";
+import { safeNext } from "./next";
 
 export type FormState = { error?: string; notice?: string };
 
@@ -66,7 +67,7 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
   const { id } = await signUp(email, password);
   await audit("signup", { accountId: id, email, detail: "email unverified (no provider)" });
   await startSession(id);
-  redirect("/account");
+  redirect(safeNext(form.get("next")) ?? "/account");
 }
 
 export async function loginAction(_prev: FormState, form: FormData): Promise<FormState> {
@@ -91,7 +92,9 @@ export async function loginAction(_prev: FormState, form: FormData): Promise<For
   await clearAttempts("login", email);
   await audit("signin", { accountId: id, email });
   await startSession(id);
-  redirect("/account");
+  // `next` comes from a hidden field, so it is checked again against the
+  // allowlist here rather than trusted (lib/next.ts).
+  redirect(safeNext(form.get("next")) ?? "/account");
 }
 
 export async function logoutAction(): Promise<void> {

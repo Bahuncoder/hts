@@ -92,6 +92,19 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
+      <Section title="Browser storage">
+        <p>
+          If you run a catalogue audit without an account, your browser keeps
+          the catalogue text and the two shipping settings (formal entries,
+          transport) in its local storage for up to 24 hours, so the work is
+          still there after you create an account. It stays on your device: it
+          is not sent to us and holds no results. It is deleted when you sign
+          out, when you restore or discard it, after you save the catalogue,
+          or when you choose &ldquo;Forget it now&rdquo;. Restoring it never
+          runs an audit by itself.
+        </p>
+      </Section>
+
       <Section title="Contact">
         <p>
           <a href="mailto:privacy@htsdesk.com">privacy@htsdesk.com</a>.

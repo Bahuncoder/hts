@@ -1,5 +1,6 @@
 .PHONY: help data refresh rulings fedreg api web build test test-duty test-api eval check \
-        preflight backup restore install mailcatch diff email-preview
+        preflight backup restore install mailcatch diff email-preview \
+        test-ui test-draft test-contrast
 
 help:
 	@echo "Data"
@@ -17,7 +18,7 @@ help:
 	@echo "  make test-duty  duty engine only (no server needed)"
 	@echo "  make test-api   API contract + security (needs a running API)"
 	@echo "  make test-diff / test-outbox / test-audit / test-migrate / test-retired"
-	@echo "  make test-csvparse / test-proof / test-review"
+	@echo "  make test-csvparse / test-proof / test-review / test-ui / test-draft / test-contrast"
 	@echo "                  catalogue reader, audit proofs, review workspace (test-review needs Chrome)"
 	@echo "                  integration tests against a scratch production server"
 	@echo "  make test-journey  browser walk-through of the customer journey"
@@ -64,7 +65,8 @@ build:
 
 # --- verify -----------------------------------------------------------------
 test: test-duty test-classify-eval test-refresh test-api test-email test-diff \
-      test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review
+      test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review \
+      test-ui test-draft test-contrast
 
 test-duty:
 	@python3 tests/test_duty.py
@@ -82,7 +84,8 @@ eval:
 	python3 tests/eval_classify.py 400
 
 check: build test-duty test-classify-eval test-refresh test-api test-email \
-       test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review test-journey test-security test-authflow eval
+       test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review \
+       test-ui test-draft test-contrast test-journey test-security test-authflow eval
 
 test-email:
 	@cd web && node tests/email.test.mjs
@@ -118,6 +121,21 @@ test-proof:
 # browser against its own production server (3311/3312) and a fake engine.
 test-review:
 	@cd web && node tests/review.test.mjs
+
+# The workspace UI (home, audit, calculator, sign-in, code page, self-hosted
+# fonts) in a real browser on 3378/3380.
+test-ui:
+	@cd web && node tests/ui-workspace.test.mjs
+
+# An audit surviving sign-up: the client-side draft, its expiry and privacy
+# limits, and the allowlisted ?next= return. Ports 3351/3352.
+test-draft:
+	@cd web && node tests/draft.test.mjs
+
+# WCAG contrast of the rendered text on the main pages, light and dark
+# (system and explicit theme). Ports 3361/3362.
+test-contrast:
+	@cd web && node tests/contrast.test.mjs
 
 # Drives a real browser through the customer journey. Needs the API and web
 # app running, and a Chrome on the machine.
