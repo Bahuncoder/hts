@@ -366,6 +366,19 @@ def _():
     assert call("/api/changes?since=nope", key=KEY)[0] == 400
 
 
+@check("hts page: remedies say whether they cover the origin being viewed")
+def _():
+    s, cn = call("/api/hts/6109.10.00.12?country=China", key=KEY)
+    s2, ca = call("/api/hts/6109.10.00.12?country=Canada", key=KEY)
+    assert s == s2 == 200
+    def by_head(d):
+        return {r["heading"]: r["applies_to_origin"] for r in d["trade_remedies"]}
+    a, b = by_head(cn), by_head(ca)
+    assert a and a == {h: a[h] for h in a}, a
+    assert a["9903.88.15"] is True and a["9903.03.12"] is False, a
+    assert b["9903.03.12"] is True and b["9903.88.15"] is False, b
+
+
 def main() -> int:
     # Authenticated: the anonymous budget may already be spent by the very
     # tests below, and a reachability probe should not compete with them.

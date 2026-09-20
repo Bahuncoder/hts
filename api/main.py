@@ -28,7 +28,7 @@ from api.security import (ANON_AUDIT_ITEMS, KEYED_AUDIT_ITEMS, MAX_TEXT,
                           clean_text, guard)
 from core.classify import classify as run_classify
 from core.classify import reset_caches as reset_classify_caches
-from core.duty import (FEE_CONSTANTS_EFFECTIVE_THROUGH, entry_mpf,
+from core.duty import (FEE_CONSTANTS_EFFECTIVE_THROUGH, _origin_key, entry_mpf,
                        fee_constants_stale)
 from core.countries import UnknownCountry
 from core.engine import TariffEngine
@@ -215,6 +215,22 @@ def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
     }
 
 
+def _remedy(row: dict, country: str) -> dict:
+    """A remedy row plus whether it covers the origin being viewed.
+
+    A code page lists every remedy whose scope includes the code. Showing a
+    Canada-only remedy under a China quote reads as if it applied to it, so the
+    caller is told which ones do. A remedy naming no country applies to all.
+    """
+    try:
+        named = json.loads(row.get("countries") or "[]")
+    except ValueError:
+        named = []
+    row["applies_to_origin"] = (
+        not named or _origin_key(country) in {_origin_key(c) for c in named})
+    return row
+
+
 @app.get("/api/hts/{code}")
 def hts_detail(code: str,
                country: str = Query("China", max_length=MAX_TEXT),
@@ -264,7 +280,7 @@ def hts_detail(code: str,
         "units": json.loads(row["units"] or "[]"),
         "quote": quote,
         "rulings": [dict(r) for r in rulings],
-        "trade_remedies": [dict(r) for r in remedies],
+        "trade_remedies": [_remedy(dict(r), country) for r in remedies],
     }
 
 
