@@ -124,7 +124,7 @@ def _():
 
 @real("pure code-list exceptions exempt a product; use-based ones (aircraft parts, pharma) never do")
 def _():
-    exc = E.regimes.exception_scopes
+    exc = {h: e.codes for h, e in E.regimes.exceptions.items()}
     def first_code(h):
         return next(l.hts for l in E.tree.leaves
                     if any(l.digits.startswith(p) for p in sorted(exc[h])[:300]))
@@ -151,23 +151,66 @@ def _():
 
 @real("a country-wide duty is never applied when its exception lists are missing (fail closed)")
 def _():
-    saved = dict(E.regimes.exception_scopes)
+    import dataclasses
+    saved = dict(E.regimes.exceptions)
     try:
-        E.regimes.exception_scopes = {h: set() for h in saved}
+        E.regimes.exceptions = {h: dataclasses.replace(e, codes=frozenset())
+                                for h, e in saved.items()}
         E.regimes.finish()
         r = quote("6109.10.00.12", "China")
         assert not any("9903.05.31" in x for x in labels(r)), "applied without evidence"
         assert r.scope_unverified and r.as_dict()["complete"] is False
     finally:
-        E.regimes.exception_scopes = saved
+        E.regimes.exceptions = saved
         E.regimes.finish()
 
 
-@real("deal-specific origins stay flagged rather than guessed (Canada, Mexico, EU, Japan)")
+@real("each note-52 exception excuses only the headings it names, and its list is its own")
 def _():
-    for origin in ("Canada", "Mexico", "Germany", "Japan"):
-        r = quote("6109.10.00.12", origin)
-        assert r.scope_unverified, (origin, "quoted as complete")
+    ex = E.regimes.exceptions
+    assert ex["9903.05.96"].targets == (("9903.05.81", "9903.05.81"),)          # United Kingdom
+    assert ex["9903.05.97"].targets == (("9903.05.38", "9903.05.39"),)          # European Union
+    assert ex["9903.06.14"].targets == (("9903.05.75", "9903.05.76"),)          # Taiwan
+    uk, eu, ch = ex["9903.05.96"].codes, ex["9903.05.97"].codes, ex["9903.05.98"].codes
+    # The lists used to run together: the UK's absorbed the EU's and Switzerland's.
+    assert "45011000" in eu and "45011000" not in uk, "EU list leaked into the UK's"
+    assert "04101000" in ch and "04101000" not in eu
+    assert ex["9903.05.93"].claim == "USMCA" and ex["9903.06.06"].claim == "CAFTA-DR"
+
+
+@real("a country's list excepts that country only: a UK-listed code is exempt for the UK, charged for Vietnam")
+def _():
+    dom = E.regimes._exception_domains["9903.05.96"]
+    code = next(l.hts for l in E.tree.leaves
+                if dom.covers(l.digits) and not E.regimes.domain_232.covers(l.digits))
+    uk = quote(code, "United Kingdom")
+    assert not any("9903.05" in x for x in labels(uk)), labels(uk)
+    other = quote("6109.10.00.12", "United Kingdom")           # not on the list
+    assert any("9903.05.81" in x for x in labels(other)), labels(other)
+
+
+@real("USMCA: Canada and Mexico owe the note-52 duty unless free treatment is claimed, and the quote says which")
+def _():
+    for origin, heading in (("Canada", "9903.05.29"), ("Mexico", "9903.05.55")):
+        plain = E.quote(hts="6109.10.00.12", country=origin, value=10000)
+        assert any(heading in x for x in labels(plain)), (origin, labels(plain))
+        assert any("No USMCA claim" in a or "no USMCA claim" in a for a in plain.assumptions), plain.assumptions
+        claimed = E.quote(hts="6109.10.00.12", country=origin, value=10000, preference_program="S")
+        assert not any(heading in x for x in labels(claimed)), (origin, labels(claimed))
+        assert any("USMCA" in a and "assumed to qualify" in a for a in claimed.assumptions), claimed.assumptions
+
+
+@real("CAFTA-DR: a claim for a code on the country's list excuses the duty; no claim does not")
+def _():
+    dom = E.regimes._exception_domains["9903.06.06"]
+    code = next(l.hts for l in E.tree.leaves
+                if dom.covers(l.digits) and not E.regimes.domain_232.covers(l.digits)
+                and E.tree.effective_rate_cell(l.hts, "special")[0]
+                and "P" in E.tree.effective_rate_cell(l.hts, "special")[0])
+    plain = E.quote(hts=code, country="Guatemala", value=10000)
+    assert any("9903.05.40" in x for x in labels(plain)), labels(plain)
+    claimed = E.quote(hts=code, country="Guatemala", value=10000, preference_program="P")
+    assert not any("9903.05.40" in x for x in labels(claimed)), labels(claimed)
 
 
 @real("silent omission is closed: Section 232 wood, furniture and cabinets are flagged, not dropped")

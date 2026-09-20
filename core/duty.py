@@ -22,6 +22,8 @@ from functools import lru_cache
 
 from core.ch99 import Ch99Rule, Effect
 from core.countries import country_code, require_country
+from core.regimes import IEEPA_PREFIXES, Claim
+from core.units import parse_specific, unit_of
 
 # --- FY2026 user fees (effective 2025-10-01) ---------------------------------
 MPF_RATE = Decimal("0.003464")
@@ -44,12 +46,12 @@ def fee_constants_stale(today: date | None = None) -> bool:
 # countries, held as ISO codes so every spelling of an origin reaches it.
 COLUMN_2_COUNTRIES = frozenset({"CU", "KP", "RU", "BY"})
 
-# Subchapter I of chapter 99 carries the tariffs imposed under IEEPA. The
+# Subchapters I and II of chapter 99 carry the tariffs imposed under IEEPA. The
 # Supreme Court held on 2026-02-20 that IEEPA confers no such authority, so
 # these provisions are printed in the schedule but legally void. Duty paid
 # under them is potentially refundable, so they are reported separately rather
 # than folded into the amount currently owed.
-IEEPA_PREFIX = "9903.01"
+IEEPA_PREFIX = IEEPA_PREFIXES
 IEEPA_STRUCK_DOWN = "2026-02-20"
 
 # Preference programs whose eligibility is a fixed set of origins (General
@@ -105,6 +107,9 @@ class DutyResult:
     refund_unverified: list[str] = field(default_factory=list)
     country_code: str = ""
     dataset_revision: str = ""
+    # Units a quantity-based duty is charged in; asked of the caller when the
+    # duty could not be priced without one.
+    quantity_needed: list[str] = field(default_factory=list)
 
     @property
     def refundable_amount(self) -> Decimal:
@@ -143,6 +148,7 @@ class DutyResult:
             "complete": not self.incomplete and not self.scope_unverified,
             "country_code": self.country_code,
             "dataset_revision": self.dataset_revision,
+            "quantity_needed": self.quantity_needed,
         }
 
 
@@ -342,7 +348,7 @@ class Resolution:
 
 def resolve_ch99(
     rules: list[Ch99Rule], hts: str, country: str,
-    scopes: dict | None = None, regimes=None,
+    scopes: dict | None = None, regimes=None, claim=None,
 ) -> Resolution:
     """Give every Chapter 99 rule an explicit verdict for this code and origin.
 
@@ -380,7 +386,7 @@ def resolve_ch99(
             if r.countries:
                 out.unverified.append(r)
         else:
-            verdict, note = regimes.verdict(r, digits, _origin_key)
+            verdict, note = regimes.verdict(r, digits, _origin_key, claim)
             if verdict == APPLY:
                 out.applied.append(r)
                 if note:
@@ -389,6 +395,7 @@ def resolve_ch99(
                 out.unverified.append(r)
             elif note:
                 out.assumptions.append(note)
+    out.assumptions = list(dict.fromkeys(out.assumptions))
 
     exempt_codes = {m.hts for m in out.applied if m.effect is Effect.PASSTHROUGH}
     out.applied = [
@@ -408,6 +415,69 @@ def _positive_value(entered_value: Decimal | float | str) -> Decimal:
     return value
 
 
+def _pct(value: Decimal) -> str:
+    return format(value.normalize(), "f")
+
+
+def _positive_quantity(quantity: Decimal | float | str | None) -> Decimal | None:
+    if quantity is None or (isinstance(quantity, str) and not quantity.strip()):
+        return None
+    try:
+        q = Decimal(str(quantity))
+    except Exception as exc:
+        raise ValueError("quantity must be a number") from exc
+    if not q.is_finite() or q <= 0:
+        raise ValueError("quantity must be a positive amount")
+    return q
+
+
+def _price_specific(parts: tuple[str, ...], cell: str, quantity: Decimal | None,
+                    quantity_unit: str | None, res: "DutyResult") -> Decimal | None:
+    """Dollar amount of a rate's quantity-based parts, or None (with the reason
+    recorded on `res`) when they cannot be priced exactly from what was given."""
+    rates = [parse_specific(p) for p in parts]
+    if any(r is None for r in rates):
+        bad = [p for p, r in zip(parts, rates) if r is None]
+        res.warnings.append(
+            f"Base rate {cell!r} includes a duty this calculator cannot price "
+            f"({'; '.join(bad)}). It is NOT included in this total, which is "
+            "therefore understated.")
+        res.incomplete.append("specific_duty_unsupported")
+        return None
+    dims = {r.unit.dimension for r in rates}
+    res.quantity_needed = sorted({r.unit_text for r in rates})
+    if len(dims) > 1:
+        res.warnings.append(
+            f"Base rate {cell!r} charges duty in more than one kind of unit, "
+            "which one quantity cannot cover. It is NOT included in this total, "
+            "which is therefore understated.")
+        res.incomplete.append("specific_duty_unsupported")
+        return None
+    if quantity is None:
+        res.warnings.append(
+            f"Base rate {cell!r} includes a quantity-based duty "
+            f"({'; '.join(parts)}). Enter the quantity in {rates[0].unit_text} "
+            "to include it; until then it is NOT included in this total, "
+            "which is therefore understated.")
+        res.incomplete.append("specific_duty_omitted")
+        return None
+    given = unit_of(quantity_unit) if (quantity_unit or "").strip() else rates[0].unit
+    if given is None or given.dimension not in dims:
+        res.warnings.append(
+            f"The quantity unit {quantity_unit!r} cannot be converted to "
+            f"{rates[0].unit_text}, the unit this duty is charged in "
+            f"({'; '.join(parts)}). The duty is NOT included in this total, "
+            "which is therefore understated.")
+        res.incomplete.append("quantity_unit_mismatch")
+        return None
+    if not (quantity_unit or "").strip():
+        res.assumptions.append(
+            f"The quantity {quantity} was taken to be in {rates[0].unit_text}, "
+            "the unit this duty is charged in.")
+    base_quantity = quantity * given.factor
+    return sum((r.per_base_unit() * base_quantity for r in rates), Decimal("0"))
+
+
 def compute(
     *,
     hts: str,
@@ -423,8 +493,11 @@ def compute(
     preference_program: str | None = None,
     by_vessel: bool = True,
     is_formal_entry: bool = True,
+    quantity: Decimal | float | str | None = None,
+    quantity_unit: str | None = None,
 ) -> DutyResult:
     value = _positive_value(entered_value)
+    qty = _positive_quantity(quantity)
     origin = require_country(country)
     res = DutyResult(hts=hts, country=country, entered_value=value,
                      country_code=origin)
@@ -432,6 +505,7 @@ def compute(
 
     # --- 1. base rate --------------------------------------------------------
     parsed: ParsedRate | None = None
+    used: str | None = None
     if origin in COLUMN_2_COUNTRIES:
         cell, label, authority = column2_rate_cell, "Column 2 duty", "HTSUS Column 2"
         if fta_claimed or program:
@@ -456,12 +530,12 @@ def compute(
             "No rate of duty was found for this line, so no base duty is "
             "included in the total.")
         res.incomplete.append("rate_missing")
+    specific_exact = Decimal("0")
+    specific_priced = True
     if parsed.specific:
-        res.warnings.append(
-            f"Base rate {cell!r} includes a quantity-based duty "
-            f"({'; '.join(parsed.specific)}) that needs quantity data. It is "
-            "NOT included in this total, which is therefore understated.")
-        res.incomplete.append("specific_duty_omitted")
+        priced = _price_specific(parsed.specific, cell, qty, quantity_unit, res)
+        specific_priced = priced is not None
+        specific_exact = priced or Decimal("0")
     if parsed.unparsed:
         res.warnings.append(
             f"Part of base rate {cell!r} could not be interpreted and is NOT "
@@ -469,14 +543,29 @@ def compute(
         res.incomplete.append("rate_unparsed")
 
     pct = parsed.pct
-    base_amount = (value * pct / 100).quantize(Decimal("0.01"))
-    res.components.append(DutyComponent(label, pct, base_amount, cell or "Free", authority))
+    base_exact = value * pct / 100 + specific_exact
+    base_amount = base_exact.quantize(Decimal("0.01"))
+    # The ad valorem equivalent (U.S. note 52(k)): duty payable over customs
+    # value. Unknown while any part of the base duty is unpriced.
+    base_ave = (base_exact / value * 100
+                if specific_priced and not parsed.unparsed and (cell or "").strip()
+                else None)
+    shown_rate = (base_ave.quantize(Decimal("0.0001"))
+                  if parsed.specific and specific_priced else pct)
+    basis = cell or "Free"
+    if parsed.specific and specific_priced and qty is not None:
+        basis += f" on {qty} {quantity_unit or res.quantity_needed[0]}"
+    res.components.append(DutyComponent(label, shown_rate, base_amount, basis, authority))
+    claim = Claim(program=used,
+                  free=(label == "FTA preferential duty" and pct == 0
+                        and not parsed.specific and not parsed.unparsed))
 
     # --- 2. Chapter 99 overlays ---------------------------------------------
-    resolution = resolve_ch99(ch99_rules or [], hts, country, scopes, regimes)
+    resolution = resolve_ch99(ch99_rules or [], hts, country, scopes, regimes, claim)
     applied, unscoped = resolution.applied, resolution.unverified
     res.assumptions.extend(resolution.assumptions)
     replacements: list[Ch99Rule] = []
+    deals: list[Ch99Rule] = []
     for rule in applied:
         if rule.hts.startswith(IEEPA_PREFIX) and rule.rate_pct:
             rate = Decimal(str(rule.rate_pct))
@@ -485,6 +574,9 @@ def compute(
                 (value * rate / 100).quantize(Decimal("0.01")),
                 rule.raw_rate, f"HTSUS {rule.hts} — void per Supreme Court",
             ))
+            continue
+        if rule.threshold_pct is not None:
+            deals.append(rule)
             continue
         if rule.effect is Effect.ADD and rule.rate_pct:
             rate = Decimal(str(rule.rate_pct))
@@ -500,6 +592,36 @@ def compute(
             ))
         elif rule.effect is Effect.REPLACE and rule.rate_pct:
             replacements.append(rule)
+
+    # Deal headings turn on the entry's own column 1 rate (U.S. note 52(k)): at
+    # or above the threshold the duty is left alone; below it, the additional
+    # duty tops the total up to the threshold.
+    if deals:
+        if base_ave is None:
+            res.warnings.append(
+                f"{', '.join(r.hts for r in deals)} charge a duty that depends on this "
+                "line's own ad valorem equivalent rate, which cannot be found while its "
+                "base duty is unpriced. They are NOT in this total, which is therefore "
+                "understated.")
+            res.incomplete.append("deal_rate_unresolved")
+        else:
+            for rule in deals:
+                threshold = Decimal(str(rule.threshold_pct))
+                if (base_ave >= threshold) != rule.threshold_above:
+                    continue
+                if rule.effect is Effect.REPLACE and rule.rate_pct:
+                    total_rate = Decimal(str(rule.rate_pct))
+                    top_up = (value * total_rate / 100 - base_exact).quantize(Decimal("0.01"))
+                    res.components.append(DutyComponent(
+                        f"Trade remedy {rule.hts} (tops the duty up to {_pct(total_rate)}%)",
+                        (total_rate - base_ave).quantize(Decimal("0.0001")), top_up,
+                        rule.raw_rate, f"HTSUS {rule.hts}",
+                    ))
+                else:
+                    res.assumptions.append(
+                        f"The duty on this line is {base_ave.quantize(Decimal('0.01'))}%, "
+                        f"at or above {_pct(threshold)}%, so {rule.hts} adds nothing "
+                        "(U.S. note 52(k)).")
 
     # A replacement rate supersedes the base rate; the most specific wins.
     if replacements:

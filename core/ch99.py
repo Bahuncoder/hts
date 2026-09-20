@@ -37,6 +37,11 @@ class Ch99Rule:
     suspended: bool = False
     country_inherited: bool = False
     suspension_note: str = ""
+    # Deal-style headings apply on one side of a threshold on the entry's own
+    # column 1 rate ("equal to or greater than 10 percent" / "less than 10
+    # percent"). threshold_above is True for the first form.
+    threshold_pct: float | None = None
+    threshold_above: bool | None = None
 
 
 # Order matters: most specific first.
@@ -65,11 +70,22 @@ _EU_MEMBER_STATE = re.compile(r"member\s+states?\s+of\s+the\s+European\s+Union",
 _BASE_REF = re.compile(r"provided\s+for\s+in\s+(?:subheadings?|headings?)?\s*([\d.,\s]+(?:or\s+[\d.]+)?)", re.I)
 _EXCEPT = re.compile(r"^Except\s+for\s+(?:products|articles)\s+described\s+in\s+(?:subheadings?|headings?)\s+([\d.,\s]+(?:or\s+[\d.]+)?)", re.I)
 
+_THRESHOLD = re.compile(
+    r"ad valorem \(or ad valorem equivalent\) rate of duty under column 1\s+"
+    r"(equal to or greater than|less than)\s+([\d.]+)\s+percent", re.I)
+
 _STOPWORDS = {"The", "Articles", "Except", "United States", "U", "US"}
 
 
 def _codes(blob: str) -> list[str]:
     return re.findall(r"\d{4}\.\d{2}(?:\.\d{2})?(?:\.\d{2})?", blob or "")
+
+
+def _product_codes(blob: str) -> list[str]:
+    """Codes that name goods. A Chapter 98/99 heading in the same sentence
+    ("except as provided for in headings 9903.01.34 ...") is an exception
+    reference; treating it as the base subheading made 121 rules match nothing."""
+    return [c for c in _codes(blob) if not c.startswith(("98", "99"))]
 
 
 def parse_rate(raw: str) -> tuple[Effect, float | None, bool]:
@@ -121,14 +137,17 @@ def parse_rule(row: dict) -> Ch99Rule:
     effect, rate, non_us = parse_rate(raw)
     exc_m = _EXCEPT.match(desc)
     base_m = _BASE_REF.search(desc)
+    th = _THRESHOLD.search(desc)
     return Ch99Rule(
         hts=row.get("htsno", ""),
         effect=effect,
         rate_pct=rate,
         countries=parse_countries(desc),
-        base_refs=_codes(base_m.group(1)) if base_m else [],
+        base_refs=_product_codes(base_m.group(1)) if base_m else [],
         excepts=_codes(exc_m.group(1)) if exc_m else [],
         non_us_content_only=non_us,
         description=desc,
         raw_rate=raw.strip(),
+        threshold_pct=float(th.group(2)) if th else None,
+        threshold_above=(th.group(1).lower().startswith("equal")) if th else None,
     )

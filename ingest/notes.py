@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 
 # Subdivision markers are indented and start a line: "    (b)    Heading ..."
-SUBDIV = re.compile(r"\n\s{2,}\(([a-z]{1,4})\)\s")
+SUBDIV = re.compile(r"\n\s{2,}\(([a-z]{1,4}|\d{1,2})\)\s")
 # Product codes. Chapter 98/99 codes are cross-references, never product scope.
 HTS8 = re.compile(r"\b(\d{4}\.\d{2}\.\d{2})\b")
 BINDS = [
@@ -92,7 +92,15 @@ def _countries(text: str) -> list[str]:
 
 def _blocks(raw: str) -> list[tuple[str, str]]:
     """Yield (subdivision_letter, body) for every indented subdivision."""
-    marks = [(m.group(1), m.start(), m.end()) for m in SUBDIV.finditer(raw)]
+    marks = []
+    for m in SUBDIV.finditer(raw):
+        # A numbered item ("(2)") starts its own block only when it introduces a
+        # heading: elsewhere numbers only count the entries of a list, and
+        # splitting there would cut that list off from the heading it scopes.
+        if m.group(1).isdigit() and not any(
+                p.match(raw[m.end():m.end() + 200].lstrip()) for p in BINDS):
+            continue
+        marks.append((m.group(1), m.start(), m.end()))
     out = []
     for i, (letter, _, end) in enumerate(marks):
         stop = marks[i + 1][1] if i + 1 < len(marks) else len(raw)
@@ -156,18 +164,62 @@ def extract(raw: str, binds: list | None = None) -> dict[str, NoteScope]:
     return scopes
 
 
-# U.S. note 52 lists its exceptions as "As provided in heading 9903.05.86, ...".
-# That phrasing binds unrelated headings elsewhere in the notes, so it is used
-# only to harvest the note-52 exception range and is never added to BINDS.
-_EXCEPTION_BINDS = [*BINDS, re.compile(r"[Aa]s provided in headings?\s+(9903\.\d{2}\.\d{2})")]
+# U.S. note 52 lists each exception as "As provided in heading 9903.06.14, the
+# duties imposed by headings 9903.05.75-9903.05.76 shall not apply to articles
+# the product of Taiwan that are classifiable in the following provisions:" and
+# then the codes. Each statement names the headings it excuses, so it is read
+# as its own segment; the generic subdivision binder above cannot do that, and
+# would let one country's list bleed into the next.
+_AS_PROVIDED = re.compile(r"As provided in headings?\s+(9903\.\d{2}\.\d{2})")
+_IMPOSED = re.compile(
+    r"dut(?:y|ies)\s+imposed\s+by\s+headings?\s+(.*?)\s+shall\s+not\s+apply", re.S)
+_HEADING_SPAN = re.compile(r"(9903\.\d{2}\.\d{2})(?:\s*[–-]\s*(9903\.\d{2}\.\d{2}))?")
+_LIST_CODE = re.compile(r"\b(\d{4}\.\d{2}\.\d{2}(?:\d{2})?)\b")
+_CLAIMS = (("USMCA", re.compile(r"United States-Mexico-Canada Agreement")),
+           ("CAFTA-DR", re.compile(r"Dominican Republic-Central America-United States")))
+
+
+@dataclass
+class Note52Exception:
+    heading: str
+    targets: tuple[tuple[str, str], ...]     # (lo, hi) heading spans excused
+    codes: frozenset[str]                    # HTS digit prefixes listed
+    claim: str | None = None                 # agreement the entry must claim
+    head: str = ""                           # the statement, before the list
+
+    def applies_to(self, rule_heading: str) -> bool:
+        return not self.targets or any(lo <= rule_heading <= hi for lo, hi in self.targets)
+
+
+def extract_note52(raw: str, lo: str = "9903.05.85",
+                   hi: str = "9903.06.21") -> dict[str, Note52Exception]:
+    """Every exception statement of U.S. note 52, keyed by exception heading."""
+    start = raw.find("Except as provided in headings 9903.05.85")
+    if start < 0:
+        return {}
+    tail = raw[start:]
+    marks = list(_AS_PROVIDED.finditer(tail))
+    out: dict[str, Note52Exception] = {}
+    for i, m in enumerate(marks):
+        h = m.group(1)
+        if not (lo <= h <= hi):
+            continue
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(tail)
+        seg = tail[m.start():end]
+        head = re.sub(r"\s+", " ", seg[:1200])
+        imposed = _IMPOSED.search(seg[:1200])
+        targets = tuple((a, b or a) for a, b in _HEADING_SPAN.findall(imposed.group(1))) if imposed else ()
+        codes = frozenset(c.replace(".", "") for c in _LIST_CODE.findall(seg)
+                          if not c.startswith(("98", "99")))
+        claim = next((name for name, pat in _CLAIMS if pat.search(head)), None)
+        out[h] = Note52Exception(h, targets, codes, claim, head)
+    return out
 
 
 def extract_exceptions(raw: str, lo: str = "9903.05.85",
                        hi: str = "9903.06.21") -> dict[str, set[str]]:
-    """Product prefixes (digits) of each exception heading in [lo, hi]."""
-    found = extract(raw, _EXCEPTION_BINDS)
-    return {h: {c.replace(".", "") for c in sc.codes}
-            for h, sc in found.items() if lo <= h <= hi}
+    """Product prefixes (digits) of each note-52 exception heading."""
+    return {h: set(e.codes) for h, e in extract_note52(raw, lo, hi).items()}
 
 
 def load(path: str) -> dict[str, NoteScope]:

@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from core.ch99 import Ch99Rule, Effect
+from ingest.notes import Note52Exception
 
 APPLY, SKIP, UNKNOWN = "apply", "skip", "unknown"
 
@@ -36,6 +37,24 @@ APPLY, SKIP, UNKNOWN = "apply", "skip", "unknown"
 # 52(a) lists every exception to them as headings 9903.05.85-9903.06.21.
 NOTE52_RULES = ("9903.05.20", "9903.05.84")
 NOTE52_EXCEPTIONS = ("9903.05.85", "9903.06.21")
+
+# Headings 9903.01 and 9903.02 impose the IEEPA tariffs the Supreme Court held
+# void on 2026-02-20 (fentanyl-related duties and reciprocal tariffs). Their
+# product scope is "everything except Annex II", so an unlisted product is
+# charged, not skipped; only a stated scope can settle it.
+IEEPA_PREFIXES = ("9903.01", "9903.02")
+
+# Preference programs (Column 1 Special indicators) that stand for an agreement
+# an exception can require the entry to claim.
+_CLAIM_PROGRAMS = {"USMCA": frozenset({"S", "S+"}), "CAFTA-DR": frozenset({"P", "P+"})}
+
+
+@dataclass(frozen=True)
+class Claim:
+    """The preference the entry actually takes, as far as the caller stated it."""
+    program: str | None = None
+    free: bool = False        # the preference rate applied is duty-free
+
 
 # Exceptions that depend on the entry itself, not on the product code. They
 # cannot be evaluated from a catalogue, so a quote states them as assumptions.
@@ -69,6 +88,10 @@ _METAL_CHAPTERS = ("72", "73", "74", "76")
 _FAMILY_232_PREFIXES = ("9903.74", "9903.76", "9903.78", "9903.79", "9903.81",
                         "9903.82", "9903.85", "9903.94")
 _FAMILY_232_NOTES = (16, 31, 33, 37, 38, 39, 40)
+
+_PROVIDED_FOR = re.compile(r"provided\s+for\s+in\s+([^;)]*)", re.I)
+_NARROWING = re.compile(r"\b(?:except|other than|not|excluding)\b", re.I)
+_CHAPTER_LIST = re.compile(r"\bchapters?\s+(\d{1,2}(?:(?:,|\s+and|\s+or)\s*\d{1,2})*)", re.I)
 
 _HTS_DOTTED = re.compile(r"\b(\d{4}(?:\.\d{2}){1,3})\b")
 _HEADING_LIST = re.compile(
@@ -150,6 +173,27 @@ def _codes_in(text: str) -> set[str]:
     return {c for c in out if not c.startswith(("98", "99"))}
 
 
+def described_scope(description: str) -> frozenset[str] | None:
+    """The goods a provision names for itself ("provided for in heading 4104 or
+    4107", "provided for in chapter 64"), as HTS digit prefixes.
+
+    Only a plain statement of scope is read: if anything that narrows or negates
+    ("except", "other than", "not") precedes the first such phrase, the phrase
+    may name what is left out rather than what is covered, and None is returned.
+    """
+    m = _PROVIDED_FOR.search(description or "")
+    if not m or _NARROWING.search((description or "")[:m.start()]):
+        return None
+    prefixes: set[str] = set()
+    for pm in _PROVIDED_FOR.finditer(description):
+        span = pm.group(1)
+        prefixes |= {_digits(c) for c in re.findall(r"\b\d{4}(?:\.\d{2}){0,3}\b", span)}
+        for cm in _CHAPTER_LIST.finditer("chapter " + span if span.strip()[:1].isdigit() else span):
+            prefixes |= {n.zfill(2) for n in re.findall(r"\d{1,2}", cm.group(1))}
+    prefixes = {p for p in prefixes if not p.startswith(("98", "99"))}
+    return frozenset(prefixes) or None
+
+
 def note_refs(description: str) -> list[int]:
     """Subchapter note numbers a rule cites. General notes and the additional
     notes of other chapters are different documents and are not returned."""
@@ -179,11 +223,11 @@ def _expired_ranges(blocks: dict[int, str]) -> list[tuple[str, str, int]]:
 @dataclass
 class RegimeIndex:
     """Everything the engine needs to give a verdict on an unscoped rule."""
-    exception_scopes: dict[str, set[str]] = field(default_factory=dict)  # heading -> 8-digit prefixes
+    exceptions: dict[str, Note52Exception] = field(default_factory=dict)
     exception_kind: dict[str, str] = field(default_factory=dict)
-    exception_countries: dict[str, list[str]] = field(default_factory=dict)
     domain_232: Domain = field(default_factory=Domain)
     note_domain: dict[int, Domain] = field(default_factory=dict)
+    desc_domain: dict[str, Domain] = field(default_factory=dict)   # heading -> goods it names
     expired: dict[str, str] = field(default_factory=dict)    # heading -> reason
     as_of: date = field(default_factory=date.today)
 
@@ -192,8 +236,8 @@ class RegimeIndex:
 
     def finish(self) -> "RegimeIndex":
         """Build the lookup structures once the index is fully populated."""
-        self._exception_domains = {h: Domain(frozenset(c))
-                                   for h, c in self.exception_scopes.items()}
+        self._exception_domains = {h: Domain(e.codes)
+                                   for h, e in self.exceptions.items()}
         return self
 
     # ------------------------------------------------------------- expiry
@@ -202,52 +246,91 @@ class RegimeIndex:
         return reason
 
     # ---------------------------------------------------------- verdicts
-    def verdict(self, rule: Ch99Rule, digits: str, origin_of) -> tuple[str, str | None]:
+    def verdict(self, rule: Ch99Rule, digits: str, origin_of=None,
+                claim: Claim | None = None) -> tuple[str, str | None]:
         """(verdict, assumption) for a rule whose scope is not a code list."""
         if _in_range(rule.hts, *NOTE52_RULES):
-            return self._note52(rule, digits, origin_of)
+            return self._note52(rule, digits, claim or Claim())
         return self._product_specific(rule, digits)
 
-    def _note52(self, rule: Ch99Rule, digits: str, origin_of) -> tuple[str, str | None]:
-        # Only the plain additive duty is resolved. The deal-specific "replace"
-        # lines (EU, Japan, Korea, Switzerland, Taiwan) turn on the entry's
-        # own column 1 rate and stay unknown.
-        if rule.effect is not Effect.ADD or not rule.rate_pct:
+    def _note52(self, rule: Ch99Rule, digits: str, claim: Claim) -> tuple[str, str | None]:
+        # Two shapes are resolved: the plain additive duty, and the deal headings
+        # that turn on the entry's own column 1 rate (the caller applies the
+        # threshold once the base duty is known). Anything else stays unknown.
+        deal = rule.threshold_pct is not None
+        if not deal and not (rule.effect is Effect.ADD and rule.rate_pct):
             return UNKNOWN, None
-        origin = origin_of(rule.countries[0]) if rule.countries else None
-        if origin is None:
-            return UNKNOWN, None
+        skipped: list[str] = []
+        unknown = False
         entry_bound = False
+        unclaimed: list[str] = []
         for h, kind in self.exception_kind.items():
+            ex = self.exceptions.get(h)
+            if ex is not None and not ex.applies_to(rule.hts):
+                continue
+            domain = self._exception_domains.get(h)
             if kind == "entry":
                 entry_bound = True
             elif kind == "code":
-                domain = self._exception_domains.get(h)
                 if not domain:
-                    return UNKNOWN, None           # list not extracted: fail closed
-                if domain.covers(digits):
+                    unknown = True                 # list not extracted: fail closed
+                elif domain.covers(digits):
                     return SKIP, None
             elif kind == "code_use":
-                domain = self._exception_domains.get(h)
                 if not domain or domain.covers(digits):
-                    return UNKNOWN, None           # exempt only for the stated end use
+                    unknown = True                 # exempt only for the stated end use
             elif kind == "family232":
                 if self.domain_232.covers(digits) or not self.domain_232:
-                    return UNKNOWN, None
-            elif kind == "country":
-                if any(origin_of(c) == origin for c in self.exception_countries.get(h, [])):
-                    return UNKNOWN, None           # a deal-specific exception applies
+                    unknown = True
+            elif kind == "claim":
+                programs = _CLAIM_PROGRAMS.get(ex.claim, frozenset())
+                if domain and not domain.covers(digits):
+                    continue                       # this list does not name the code
+                if claim.program in programs:
+                    if ex.claim == "USMCA":
+                        if claim.free:
+                            skipped.append(
+                                f"{rule.hts} does not apply because the entry is claimed "
+                                f"free of duty under USMCA (exception {h}); the goods are "
+                                "assumed to qualify.")
+                        else:
+                            unclaimed.append(
+                                f"USMCA was claimed but the rate is not duty-free, so "
+                                f"exception {h} does not apply")
+                    elif domain:
+                        skipped.append(
+                            f"{rule.hts} does not apply because {ex.claim} treatment is "
+                            f"claimed for this code (exception {h}); the goods are assumed "
+                            "to qualify.")
+                    else:
+                        unknown = True             # a textile/apparel test we cannot run
+                else:
+                    unclaimed.append(f"no {ex.claim} claim is made, so exception {h} "
+                                     "does not apply")
             else:
-                return UNKNOWN, None               # an exception we cannot classify
-        text = (
-            f"{rule.raw_rate.split('+')[-1].strip() or str(rule.rate_pct) + '%'} under "
-            f"{rule.hts} (U.S. note 52) is applied to all products of this origin "
-            "because the code is in none of the note's product exceptions."
-        )
+                unknown = True                     # an exception we cannot classify
+        if skipped:
+            return SKIP, skipped[0]
+        if unknown:
+            return UNKNOWN, None
+        if deal:
+            text = ""
+        else:
+            text = (
+                f"{rule.raw_rate.split('+')[-1].strip() or str(rule.rate_pct) + '%'} under "
+                f"{rule.hts} (U.S. note 52) is applied to all products of this origin "
+                "because the code is in none of the note's product exceptions."
+            )
+        if unclaimed:
+            text += " " + "; ".join(u[0].upper() + u[1:] for u in unclaimed) + "."
         if entry_bound:
-            text += (" It assumes no entry-specific exemption applies: goods "
+            text += (" It assumes" if not deal else " The note 52 duty assumes")
+            text += (" no entry-specific exemption applies: goods "
                      "in transit before the effective date, donations, "
                      "informational materials, or a Chapter 98 claim.")
+        text = text.strip()
+        if deal and not text:
+            return APPLY, None
         return APPLY, text
 
     def _product_specific(self, rule: Ch99Rule, digits: str) -> tuple[str, str | None]:
@@ -255,12 +338,17 @@ class RegimeIndex:
             return SKIP, None                       # an exemption: nothing to charge
         if re.search(r"transship", rule.description, re.I):
             return SKIP, None        # a penalty CBP determines after entry
+        if rule.hts.startswith(IEEPA_PREFIXES):
+            return UNKNOWN, None     # scope is everything but Annex II: not derivable
         refs = note_refs(rule.description)
         # Out of scope only if EVERY note the rule cites has a product list to
         # check against; a cited note that is prose leaves the question open.
         if refs and all(n in self.note_domain for n in refs):
             covered = any(self.note_domain[n].covers(digits) for n in refs)
             return (UNKNOWN, None) if covered else (SKIP, None)
+        named = self.desc_domain.get(rule.hts)
+        if named is not None and not refs:
+            return (UNKNOWN, None) if named.covers(digits) else (SKIP, None)
         return UNKNOWN, None                        # no evidence it is out of scope
 
 
@@ -269,29 +357,37 @@ def _in_range(heading: str, lo: str, hi: str) -> bool:
 
 
 def build_index(rules: list[Ch99Rule], scopes: dict, raw_notes: str,
-                exception_scopes: dict[str, set[str]],
+                exceptions: dict[str, Note52Exception],
                 as_of: date | None = None) -> RegimeIndex:
     """Assemble the index from the parsed rules and the notes text."""
     idx = RegimeIndex(as_of=as_of or date.today())
     by = {r.hts: r for r in rules}
 
     for h, r in by.items():
-        if _in_range(h, *NOTE52_EXCEPTIONS):
-            blob = r.description or ""
-            if r.countries:
-                idx.exception_kind[h] = "country"
-                idx.exception_countries[h] = list(r.countries)
-            elif _ENTRY_EXCEPTION.search(blob):
-                idx.exception_kind[h] = "entry"
-            elif _FAMILY_232.search(blob):
-                idx.exception_kind[h] = "family232"
-            elif h in exception_scopes and _USE_EXCEPTION.search(blob):
-                idx.exception_kind[h] = "code_use"
-            elif h in exception_scopes:
-                idx.exception_kind[h] = "code"
-            else:
-                idx.exception_kind[h] = "unclassified"
-            idx.exception_scopes[h] = {c for c in exception_scopes.get(h, set())}
+        if not _in_range(h, *NOTE52_EXCEPTIONS):
+            continue
+        blob = r.description or ""
+        ex = exceptions.get(h)
+        head = ex.head if ex else blob
+        if ex is not None:
+            idx.exceptions[h] = ex
+        if ex is not None and ex.claim:
+            idx.exception_kind[h] = "claim"
+        elif _ENTRY_EXCEPTION.search(blob):
+            idx.exception_kind[h] = "entry"
+        elif _FAMILY_232.search(blob) or _FAMILY_232.search(head):
+            idx.exception_kind[h] = "family232"
+        elif ex is not None and ex.codes and _USE_EXCEPTION.search(head):
+            idx.exception_kind[h] = "code_use"
+        elif ex is not None and ex.codes:
+            idx.exception_kind[h] = "code"
+        else:
+            idx.exception_kind[h] = "unclassified"
+
+    for r in rules:
+        named = described_scope(r.description)
+        if named:
+            idx.desc_domain[r.hts] = Domain(named)
 
     blocks = note_blocks(raw_notes, _FAMILY_232_NOTES + tuple(range(1, 60)))
     for n, text in blocks.items():

@@ -11,7 +11,7 @@ from core.ch99 import Ch99Rule, parse_countries, parse_rule
 from core.duty import DutyResult, compute
 from core.hts import HtsTree, InvalidHts, NotStatisticalLine  # noqa: F401
 from core.regimes import build_index
-from ingest.notes import extract_exceptions, load as load_scopes
+from ingest.notes import extract_note52, load as load_scopes
 
 
 class TariffEngine:
@@ -65,7 +65,7 @@ class TariffEngine:
             self.ch99.append(rule)
 
         self.regimes = (build_index(self.ch99, self.scopes, raw_notes,
-                                    extract_exceptions(raw_notes))
+                                    extract_note52(raw_notes))
                         if raw_notes else None)
 
     @cached_property
@@ -76,6 +76,8 @@ class TariffEngine:
         self, *, hts: str, country: str, value: Decimal | float | str,
         fta_claimed: bool = False, preference_program: str | None = None,
         by_vessel: bool = True, is_formal_entry: bool = True,
+        quantity: Decimal | float | str | None = None,
+        quantity_unit: str | None = None,
     ) -> DutyResult:
         """Price one statistical line.
 
@@ -96,6 +98,7 @@ class TariffEngine:
             regimes=self.regimes,
             fta_claimed=fta_claimed, preference_program=preference_program,
             by_vessel=by_vessel, is_formal_entry=is_formal_entry,
+            quantity=quantity, quantity_unit=quantity_unit,
         )
         res.dataset_revision = self.revision
         return res

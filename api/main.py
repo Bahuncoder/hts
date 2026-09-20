@@ -139,6 +139,14 @@ class QuoteRequest(BaseModel):
         None, max_length=8,
         description="Special-rate program indicator (e.g. KR, S, AU) when a "
                     "preference is claimed")
+    quantity: float | None = Field(
+        None, gt=0, le=1e12,
+        description="Quantity, needed only to price a per-unit duty "
+                    "(cents per kg, per liter, each...)")
+    quantity_unit: str | None = Field(
+        None, max_length=32,
+        description="Unit of `quantity` (kg, lb, liter, each, doz...). Defaults "
+                    "to the unit the duty is charged in.")
     by_vessel: bool = True
     formal_entry: bool = True
 
@@ -154,6 +162,10 @@ class CatalogItem(BaseModel):
     country: str = Field("", max_length=2000)
     value: float = 0.0
     hts: str | None = Field(None, max_length=200)
+    quantity: float | None = Field(None, description="Quantity for a per-unit duty")
+    quantity_unit: str | None = Field(None, max_length=32)
+    preference_program: str | None = Field(
+        None, max_length=8, description="Program the entry claims (e.g. S for USMCA)")
 
 
 class AuditRequest(BaseModel):
@@ -235,6 +247,8 @@ def _remedy(row: dict, country: str) -> dict:
 def hts_detail(code: str,
                country: str = Query("China", max_length=MAX_TEXT),
                value: float = Query(10000.0, gt=0, le=1e12),
+               quantity: float | None = Query(None, gt=0, le=1e12),
+               quantity_unit: str | None = Query(None, max_length=32),
                conn=Depends(db), _=Depends(guard("cheap"))):
     if len(code) > 20:
         raise HTTPException(404, f"HTS code not found")
@@ -245,7 +259,9 @@ def hts_detail(code: str,
     quote = None
     if row["is_leaf"]:
         try:
-            quote = engine(conn).quote(hts=code, country=country, value=value).as_dict()
+            quote = engine(conn).quote(hts=code, country=country, value=value,
+                                       quantity=quantity,
+                                       quantity_unit=quantity_unit).as_dict()
         except (InvalidOperation, ValueError) as exc:
             raise _bad_request(exc) from exc
 
@@ -315,7 +331,8 @@ def quote(req: QuoteRequest, conn=Depends(db), _=Depends(guard("cheap"))):
             hts=req.hts, country=req.country, value=req.value,
             fta_claimed=req.fta_claimed,
             preference_program=req.preference_program,
-            by_vessel=req.by_vessel, is_formal_entry=req.formal_entry)
+            by_vessel=req.by_vessel, is_formal_entry=req.formal_entry,
+            quantity=req.quantity, quantity_unit=req.quantity_unit)
     except NotStatisticalLine as exc:
         raise HTTPException(400, str(exc)) from exc
     except InvalidHts as exc:
@@ -330,6 +347,23 @@ def quote(req: QuoteRequest, conn=Depends(db), _=Depends(guard("cheap"))):
 LINE_STATUSES = ("error", "unclassified", "not_processed", "incomplete",
                  "scope_review", "suffix_review", "low_confidence", "ready")
 _PRICED = {"incomplete", "scope_review", "suffix_review", "low_confidence", "ready"}
+
+
+_INCOMPLETE_TEXT = {
+    "specific_duty_omitted": "has a per-unit duty; add its quantity in {unit} to price it",
+    "quantity_unit_mismatch": "has a quantity unit that cannot be converted to {unit}",
+    "specific_duty_unsupported": "has a per-unit duty this calculator cannot price",
+    "deal_rate_unresolved": "has a duty that depends on its per-unit rate, which is not priced",
+    "rate_missing": "has no base rate in the schedule",
+    "rate_unparsed": "has a base rate this calculator cannot read",
+}
+
+
+def _incomplete_message(q) -> str:
+    unit = "/".join(q.quantity_needed) or "the duty's unit"
+    parts = [_INCOMPLETE_TEXT.get(r, r.replace("_", " ")).format(unit=unit)
+             for r in q.incomplete]
+    return "The duty is understated: this line " + "; and ".join(parts) + "."
 
 
 def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
@@ -364,9 +398,15 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         suggested = [c.as_dict() for c in cls.candidates]
     base["hts"] = hts
 
+    if item.quantity is not None and not (
+            math.isfinite(item.quantity) and 0 < item.quantity <= 1e12):
+        return refuse("error", "invalid_quantity", "Quantity must be a positive number.")
+    program = (item.preference_program or "").strip() or None
     try:
         q = eng.quote(hts=hts, country=item.country, value=item.value,
-                      by_vessel=req.by_vessel, is_formal_entry=False)
+                      preference_program=program,
+                      by_vessel=req.by_vessel, is_formal_entry=False,
+                      quantity=item.quantity, quantity_unit=item.quantity_unit)
     except InvalidHts as exc:
         return refuse("error", "invalid_code", str(exc))
     except UnknownCountry as exc:
@@ -395,8 +435,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
 
     triggers: list[tuple[str, str]] = []
     if q.incomplete:
-        triggers.append(("incomplete",
-                         "The duty is understated: " + "; ".join(q.incomplete)))
+        triggers.append(("incomplete", _incomplete_message(q)))
     if q.scope_unverified:
         triggers.append(("scope_review",
                          f"{len(q.scope_unverified)} trade-remedy heading(s) may apply to "
@@ -415,6 +454,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         "review_reasons": [t[1] for t in triggers],
         "warnings": q.warnings,
         "incomplete": q.incomplete,
+        "quantity_needed": q.quantity_needed,
         "assumptions": q.assumptions,
         "entered_value": float(q.entered_value),
         "duty": float(q.total_duty),
@@ -492,8 +532,9 @@ def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audi
          if req.formal_entry else "Informal entry assumed: no Merchandise Processing Fee."),
         ("Vessel shipment assumed: Harbor Maintenance Fee applied."
          if req.by_vessel else "Non-vessel shipment: no Harbor Maintenance Fee."),
-        "Preference programs and quantity-based duties are not modelled here; "
-        "lines that carry a quantity-based rate are flagged as incomplete.",
+        "Quantity-based (per-unit) duties are priced only for lines that give a "
+        "quantity; the others are flagged as incomplete. A trade preference is "
+        "applied only to lines that name the program.",
     ]
     # What individual lines rest on (for example a country-wide duty applied on
     # the assumption that no entry-specific exemption holds), once each.

@@ -397,6 +397,44 @@ def _():
     assert all(ln["status"] != "ready" for ln in d["lines"]), [ln["status"] for ln in d["lines"]]
 
 
+@check("quote: a per-unit duty is priced from a quantity, and unpriced (flagged) without one")
+def _():
+    body = {"hts": "0102.29.40.24", "country": "Vietnam", "value": 5000}
+    s, without = call("/api/quote", method="POST", body=body, key=KEY)
+    assert s == 200 and "specific_duty_omitted" in without["incomplete"], without
+    assert without["quantity_needed"] == ["kg"] and without["complete"] is False
+    s, kg = call("/api/quote", method="POST", body={**body, "quantity": 1000}, key=KEY)
+    s, lb = call("/api/quote", method="POST", body={**body, "quantity": 2204.62262185, "quantity_unit": "lb"}, key=KEY)
+    assert kg["incomplete"] == [] and kg["complete"] is True, kg
+    assert kg["total_duty"] == lb["total_duty"] > without["total_duty"], (kg["total_duty"], lb["total_duty"])
+    s, bad = call("/api/quote", method="POST", body={**body, "quantity": 5, "quantity_unit": "liter"}, key=KEY)
+    assert s == 200 and "quantity_unit_mismatch" in bad["incomplete"], bad
+    for q in (0, -3):
+        s, _ = call("/api/quote", method="POST", body={**body, "quantity": q}, key=KEY)
+        assert s == 422, (q, s)
+
+
+@check("audit: a line's quantity prices its per-unit duty; without one it says what to add")
+def _():
+    row = {"sku": "C", "description": "cattle", "country": "Vietnam", "value": 5000, "hts": "0102.29.40.24"}
+    d = _audit([row, {**row, "sku": "C2", "quantity": 1000}, {**row, "sku": "C3", "quantity": -1}])
+    a, b, c = d["lines"]
+    assert a["status"] == "incomplete" and any("quantity in kg" in r for r in a["review_reasons"]), a
+    assert a["quantity_needed"] == ["kg"]
+    assert b["status"] != "incomplete" and b["duty"] > a["duty"], (a["duty"], b["duty"])
+    assert c["status"] == "error" and c["error_code"] == "invalid_quantity", c
+
+
+@check("audit: a line naming USMCA gets it, and Canada without a claim is priced with the assumption stated")
+def _():
+    row = {"sku": "K", "description": "tee", "country": "Canada", "value": 10000, "hts": "6109.10.00.12"}
+    d = _audit([row, {**row, "sku": "K2", "preference_program": "S"}])
+    plain, claimed = d["lines"]
+    assert plain["duty"] > claimed["duty"], (plain["duty"], claimed["duty"])
+    assert any("No USMCA claim" in a for a in plain["assumptions"]), plain["assumptions"]
+    assert any("claimed free of duty under USMCA" in a for a in claimed["assumptions"])
+
+
 def main() -> int:
     # Authenticated: the anonymous budget may already be spent by the very
     # tests below, and a reachability probe should not compete with them.
