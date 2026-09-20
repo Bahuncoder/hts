@@ -10,7 +10,13 @@ export function isComplete(q: Quote): boolean {
 
 const REASONS: Record<string, string> = {
   specific_duty_omitted:
-    "This line has a quantity-based duty (per kg, per unit) that needs quantity data; it is not included.",
+    "This line has a per-unit duty (per kg, per piece) and no quantity was given; it is not included. Enter the quantity to price it.",
+  quantity_unit_mismatch:
+    "The quantity's unit cannot be converted to the unit this duty is charged in; the duty is not included.",
+  specific_duty_unsupported:
+    "This line's duty has a form this calculator cannot price (for example a sliding scale or a per-content rate); that part is not included.",
+  deal_rate_unresolved:
+    "A trade-deal duty for this origin depends on this line's per-unit rate, which is not priced; it is not included.",
   rate_missing:
     "No base rate of duty was found for this line, so no base duty is included.",
   rate_unparsed:
@@ -55,11 +61,13 @@ export function ScenarioLine({
   byVessel = true,
   formalEntry = true,
   program,
+  quantity,
 }: {
   quote: Quote;
   byVessel?: boolean;
   formalEntry?: boolean;
   program?: string;
+  quantity?: string;
 }) {
   const origin = quote.country_code
     ? `${quote.country} (${quote.country_code})`
@@ -70,6 +78,7 @@ export function ScenarioLine({
       origin {origin} · {byVessel ? "sea (vessel)" : "air"} ·{" "}
       {formalEntry ? "formal" : "informal"} entry
       {program ? ` · special-rate program ${program} requested` : ""}
+      {quantity ? ` · quantity ${quantity}` : ""}
       {quote.dataset_revision ? (
         <>
           {" "}

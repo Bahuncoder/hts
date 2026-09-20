@@ -155,8 +155,11 @@ export default function AuditClient({
       // Every data row goes to the server, in order, with its row number. A
       // row that cannot be read is sent with amount 0 so it comes back as an
       // error line with a reason, never silently missing.
-      const items = p.items.map(({ row, sku, description, country, value, hts }) => ({
+      const items = p.items.map(({ row, sku, description, country, value, hts, quantity, quantityUnit, program }) => ({
         row, sku, description, country, value, hts,
+        ...(quantity !== null ? { quantity } : {}),
+        ...(quantityUnit ? { quantity_unit: quantityUnit } : {}),
+        ...(program ? { preference_program: program } : {}),
       }));
       const res = await fetch("/api/audit", {
         method: "POST",

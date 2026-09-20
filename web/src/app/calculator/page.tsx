@@ -47,6 +47,8 @@ export default async function CalculatorPage({
   const transport = one(sp.transport) === "air" ? "air" : "sea";
   const entry = one(sp.entry) === "informal" ? "informal" : "formal";
   const program = (one(sp.program) ?? "").trim().toUpperCase().slice(0, 8);
+  const rawQuantity = (one(sp.quantity) ?? "").trim();
+  const quantityUnit = (one(sp.unit) ?? "").trim().slice(0, 32);
   const q = (one(sp.q) ?? "").trim();
 
   const scenario: Record<string, string> = {
@@ -56,6 +58,8 @@ export default async function CalculatorPage({
     transport,
     entry,
     program,
+    quantity: rawQuantity,
+    unit: quantityUnit,
   };
   const href = (over: Record<string, string> = {}) => {
     const p = new URLSearchParams();
@@ -67,6 +71,7 @@ export default async function CalculatorPage({
 
   // --- price the code --------------------------------------------------
   const value = parseValue(rawValue);
+  const quantity = rawQuantity ? parseValue(rawQuantity) : null;
   let inputProblem: string | null = null;
   if (hts) {
     if (!country) {
@@ -75,6 +80,9 @@ export default async function CalculatorPage({
     } else if (value === null) {
       inputProblem =
         "Enter an entered value above $0, for example 10000 or 2499.50.";
+    } else if (rawQuantity && quantity === null) {
+      inputProblem =
+        "Enter the quantity as a number above 0, for example 2500, or leave it blank.";
     }
   }
   const quote =
@@ -86,6 +94,8 @@ export default async function CalculatorPage({
           byVessel: transport === "sea",
           formalEntry: entry === "formal",
           preferenceProgram: program || undefined,
+          quantity: quantity ?? undefined,
+          quantityUnit: quantityUnit || undefined,
         })
       : null;
 
@@ -173,6 +183,42 @@ export default async function CalculatorPage({
               aria-describedby="program-hint"
               className={inputClass}
             />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            id="quantity"
+            label="Quantity (only for per-unit duties)"
+            hint="Some goods are charged per kilogram or per piece. Enter how many, and the unit if it is not the one the duty uses."
+          >
+            <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
+              <input
+                id="quantity"
+                name="quantity"
+                defaultValue={rawQuantity}
+                placeholder="e.g. 2500"
+                inputMode="decimal"
+                autoComplete="off"
+                aria-describedby="quantity-hint"
+                className={`tabular ${inputClass}`}
+              />
+              <input
+                id="unit"
+                name="unit"
+                aria-label="Quantity unit"
+                defaultValue={quantityUnit}
+                placeholder="kg"
+                list="units"
+                autoComplete="off"
+                className={inputClass}
+              />
+              <datalist id="units">
+                {["kg", "g", "lb", "t", "liter", "gal", "each", "doz", "pair"].map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+            </div>
           </Field>
         </div>
 
@@ -288,6 +334,7 @@ export default async function CalculatorPage({
           bySea={transport === "sea"}
           formal={entry === "formal"}
           program={program || undefined}
+          quantity={quantity !== null ? `${rawQuantity}${quantityUnit ? ` ${quantityUnit}` : ""}` : undefined}
         />
       ) : null}
     </div>
@@ -300,12 +347,14 @@ function Estimate({
   bySea,
   formal,
   program,
+  quantity,
 }: {
   result: Quote;
   country: string;
   bySea: boolean;
   formal: boolean;
   program?: string;
+  quantity?: string;
 }) {
   const complete = isComplete(result);
   const flag = complete ? undefined : "Estimate is incomplete";
@@ -317,6 +366,7 @@ function Estimate({
         byVessel={bySea}
         formalEntry={formal}
         program={program}
+        quantity={quantity}
       />
       <Assumptions quote={result} />
 

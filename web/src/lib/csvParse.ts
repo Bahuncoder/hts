@@ -20,11 +20,17 @@ export type ParsedItem = {
   /** What the cell said, for the on-screen row when it could not be read. */
   rawValue: string;
   hts: string | null;
+  /** For a per-unit duty; null when the column is absent or blank. */
+  quantity: number | null;
+  /** The unit `quantity` is in ("kg", "lb", "doz"...); blank means the unit the duty is charged in. */
+  quantityUnit: string;
+  /** A preference program the entry claims ("S" for USMCA, "KR"...); blank when none. */
+  program: string;
   /** Why this row looks incomplete before it is sent (informational only). */
   problems: string[];
 };
 
-export type Field = "sku" | "description" | "country" | "value" | "hts";
+export type Field = "sku" | "description" | "country" | "value" | "hts" | "quantity" | "unit" | "program";
 
 export const REQUIRED: Field[] = ["description", "country", "value"];
 
@@ -36,6 +42,9 @@ export const ALIASES: Record<Field, string[]> = {
   value: ["value", "amount", "entered value", "price", "total value", "total", "customs value"],
   sku: ["sku", "part number", "part no", "item number", "item no", "product code", "style"],
   hts: ["hts", "hts code", "htsus", "hs", "hs code", "tariff code", "tariff", "hts number"],
+  quantity: ["quantity", "qty", "units", "number of units", "quantity to import"],
+  unit: ["unit", "uom", "unit of measure", "quantity unit", "qty unit"],
+  program: ["program", "preference program", "special program", "preference", "trade program", "fta"],
 };
 
 export const FIELD_LABEL: Record<Field, string> = {
@@ -44,16 +53,20 @@ export const FIELD_LABEL: Record<Field, string> = {
   value: "value",
   sku: "sku",
   hts: "hts",
+  quantity: "quantity",
+  unit: "unit",
+  program: "program",
 };
 
 /** The engine's per-field limits. One over-long field makes it reject the
  *  entire request, so these are enforced before sending. */
-const MAX_LEN = { sku: 64, description: 2000, country: 2000, hts: 200 };
+const MAX_LEN = { sku: 64, description: 2000, country: 2000, hts: 200, unit: 32, program: 8 };
 
 export const TEMPLATE_CSV =
-  "sku,description,country,value,hts\r\n" +
-  "TS-001,mens knitted cotton t-shirt short sleeve,China,48000,\r\n" +
-  "MG-09,ceramic coffee mug,Germany,12000,6912.00.44.00\r\n";
+  "sku,description,country,value,hts,quantity,unit,program\r\n" +
+  "TS-001,mens knitted cotton t-shirt short sleeve,China,48000,,,,\r\n" +
+  "MG-09,ceramic coffee mug,Germany,12000,6912.00.44.00,,,\r\n" +
+  "CH-31,processed cheese,Canada,20000,,2500,kg,S\r\n";
 
 export const SAMPLE_CSV = `sku,description,country,value,hts
 TS-001,mens knitted cotton t-shirt short sleeve,China,48000,
@@ -64,7 +77,8 @@ MG-09,ceramic coffee mug,Germany,12000,`;
 
 export const EXPECTED_FORMAT =
   "One product per row. Columns: description, country (or origin) and value are required; " +
-  "sku and hts are optional. Leave hts blank and it will be classified.";
+  "sku and hts are optional. Leave hts blank and it will be classified. Add quantity (and unit) " +
+  "for goods charged per kilogram or per piece, and program (for example S for USMCA) when you claim one.";
 
 function normHeader(h: string): string {
   return h
@@ -205,6 +219,13 @@ export function parseCatalogue(text: string): ParseResult {
     const amount = parseAmount(rawValue);
     const hts = limited("hts", MAX_LEN.hts);
     const sku = limited("sku", MAX_LEN.sku);
+    const quantityUnit = limited("unit", MAX_LEN.unit);
+    const program = limited("program", MAX_LEN.program).toUpperCase();
+    const rawQuantity = cell(r, "quantity");
+    const quantityAmount = rawQuantity ? parseAmount(rawQuantity) : null;
+    if (rawQuantity && (quantityAmount === null || quantityAmount <= 0)) {
+      problemsHere.push("quantity not readable");
+    }
     if (!description && !hts) problemsHere.push("no description");
     if (!country) problemsHere.push("no country");
     if (amount === null) problemsHere.push(rawValue ? "amount not readable" : "no amount");
@@ -218,6 +239,9 @@ export function parseCatalogue(text: string): ParseResult {
       value: amount !== null && amount > 0 ? amount : 0,
       rawValue,
       hts: hts || null,
+      quantity: quantityAmount !== null && quantityAmount > 0 ? quantityAmount : null,
+      quantityUnit,
+      program,
       problems: problemsHere,
     };
   });

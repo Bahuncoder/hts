@@ -45,6 +45,8 @@ export type Quote = {
   complete?: boolean;
   country_code?: string;
   dataset_revision?: string;
+  /** Units a per-unit duty is charged in, when it could not be priced without a quantity. */
+  quantity_needed?: string[];
 };
 
 export type Ruling = {
@@ -183,6 +185,10 @@ export type QuoteInput = {
   /** Special-rate program indicator (KR, S, AU...). Sent only when the
    *  customer states one; eligibility is never inferred. */
   preferenceProgram?: string;
+  /** Needed only to price a per-unit duty (cents per kg, per piece...). */
+  quantity?: number;
+  /** Unit of `quantity`; the unit the duty is charged in when omitted. */
+  quantityUnit?: string;
 };
 
 export const getQuote = (q: QuoteInput) =>
@@ -196,6 +202,8 @@ export const getQuote = (q: QuoteInput) =>
       by_vessel: q.byVessel ?? true,
       formal_entry: q.formalEntry ?? true,
       ...(q.preferenceProgram ? { preference_program: q.preferenceProgram } : {}),
+      ...(q.quantity ? { quantity: q.quantity } : {}),
+      ...(q.quantity && q.quantityUnit ? { quantity_unit: q.quantityUnit } : {}),
     }),
     cache: "no-store",
   });

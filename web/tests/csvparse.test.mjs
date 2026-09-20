@@ -121,6 +121,28 @@ await check("the template and sample are themselves valid", () => {
   assert.equal(ok(csv.SAMPLE_CSV).items.length, 5);
 });
 
+await check("quantity, unit and program columns are read; a bad quantity is flagged, never silently zero", () => {
+  const r = ok("sku,description,country,value,qty,uom,program\n" +
+    "A,cheese,Canada,100,2500,kg,s\n" +
+    "B,cheese,Canada,100,1,200,\n" +
+    "C,cheese,Canada,100,,,\n" +
+    "D,cheese,Canada,100,-4,lb,\n");
+  const [a, b, c, d] = r.items;
+  assert.deepEqual([a.quantity, a.quantityUnit, a.program], [2500, "kg", "S"]);
+  assert.deepEqual([c.quantity, c.quantityUnit, c.program], [null, "", ""]);
+  assert.equal(d.quantity, null);
+  assert.match(d.problems.join(), /quantity not readable/);
+  assert.equal(r.items.length, 4, "no row is dropped");
+  assert.equal(b.quantity, 1);
+});
+
+await check("the template carries the optional columns and reads back with a quantity", () => {
+  const r = ok(csv.TEMPLATE_CSV);
+  assert.deepEqual(r.items.map((i) => i.quantity), [null, null, 2500]);
+  assert.equal(r.items[2].program, "S");
+  assert.deepEqual(r.ignored, []);
+});
+
 // --- the shared model and export -------------------------------------------
 
 await check("counts are a partition: ready + review + failed = submitted", () => {

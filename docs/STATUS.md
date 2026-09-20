@@ -21,10 +21,11 @@ tables in an existing accounts database are left dormant, not dropped.
 |---|---|
 | Chapter 99 rate-line parser | 565/565 lines parsed |
 | HTS tree with rate inheritance | 19,949 statistical lines |
-| U.S. Notes scope extractor | 67 headings, 12,362 heading/code pairs |
+| U.S. Notes scope extractor | 69 headings, 12,362 heading/code pairs; note 52's exceptions are read as separate statements (targets, list, claimed agreement) |
 | Duty stack resolver | base + remedies + HMF per line, MPF per entry; every line cites its authority |
 | Origin handling | names, ISO codes and aliases resolve to one key; unrecognised origins are refused |
-| Rate grammar | ad valorem, quantity-based and unparsed parts separated; omitted parts reported in `incomplete` |
+| Rate grammar | ad valorem, quantity-based and unparsed parts separated; per-unit duties are priced from an optional quantity (units convert within a dimension), and anything not priced is reported in `incomplete` |
+| Deal-rate math | U.S. note 52(k): EU, Japan, Korea, Switzerland and Taiwan duties top the total up to 10 / 12.5 %, decided by the line's ad valorem equivalent (needs the quantity when the base rate is per-unit) |
 | Preferences | matched to a named program or the one program covering the origin; fixed-membership FTAs eligibility-checked, others flagged as asserted |
 | Refresh pipeline | one validated transaction, versioned release directories, indexes rebuilt inside it, engine reloads on revision change |
 | Audit API | every row returned with a status, reasons and its own row number; summary reconciles and says whether totals are complete |
@@ -87,12 +88,27 @@ before claiming anything for it.
   are exempt; products on its use-conditional lists (civil-aircraft parts,
   pharmaceutical articles) are flagged, because a code alone cannot prove the
   end use. Still flagged, deliberately (fail closed):
-  Section 232 metals, vehicles, wood and furniture, semiconductors and other
-  product-specific regimes, and every origin with a deal-specific structure
-  (Canada, Mexico, EU, Japan, Korea, Switzerland, Taiwan, UK...). This replaced
-  a state where *every* quote was flagged and 36 charge lines were dropped
-  silently (Section 232 autos, wood and chips, and five countries whose names
-  the parser missed).
+  Section 232 metals and derivatives, vehicles and auto parts, wood and
+  furniture, semiconductors and other product-specific regimes, and the two
+  end-use lists of note 52 (civil-aircraft parts, pharmaceutical articles).
+  Origins with a deal structure are now resolved: the UK, Malaysia, Taiwan and
+  others take only their own exception list; Canada and Mexico owe the note-52
+  duty unless USMCA free treatment is claimed (the `program` column / field,
+  `S`), and a claim is assumed to qualify; Guatemala and El Salvador likewise
+  for CAFTA-DR (`P`). Measured on a 1,500-line sample (metals excluded from
+  the sample, chapters 72/73/76): 70.7 % of quotes are complete for any of
+  China, Vietnam, India, Canada, Mexico, the UK, the EU, Korea, Taiwan and
+  Switzerland (Japan 68.8 %), up from 0 % for Germany and Japan at the previous
+  commit. With a quantity supplied for every per-unit
+  line the figure is 81.3 %. The remainder is Section 232 (about 15 % of lines
+  fall in a 232 product list, which the engine cannot price), vehicle parts,
+  the end-use lists, and per-unit forms it cannot price (sliding scales,
+  "on copper content").
+  Found and fixed while building this: 121 rules named a Chapter 99 exception
+  as their base subheading and never matched (all 9903.02 reciprocal duties
+  among them); note 51's three Canada headings shared one merged 554-code list;
+  the 9903.02 reciprocal duties are IEEPA and now feed the refund estimate
+  (flagged unscoped) instead of vanishing.
 - **Two editorial facts must be re-verified each refresh.** The engine reads
   expiry from the schedule's compiler's notes where they exist, but the
   Section 122 surcharge (9903.03.01–.11) is not yet marked expired there, so its
@@ -100,8 +116,15 @@ before claiming anything for it.
   (`KNOWN_EXPIRED`), taken from Proclamation 11012 and public reporting. The
   reading of note 52 (apply to everything not excepted) follows the note's own
   text in 52(a) but has not been confirmed by a customs broker or attorney.
-- Quantity-based duties (cents/kg, $/each) need quantity input, which does not
-  exist yet: such lines are flagged incomplete, never silently understated.
+- Quantity-based duties (cents/kg, $/each) are priced only when the caller
+  gives a quantity (calculator field; `quantity`/`unit` audit columns). Without
+  one the line is flagged incomplete and says which unit to enter (about 13 %
+  of lines carry such a duty). The customs value is the entered value; no
+  proof-gallon, drained-weight or metal-content basis is modelled.
+- Section 232 is the largest remaining completeness gap (about 15 % of lines).
+  Its scope is a product list per regime with per-country deal rates and
+  content-value rules; it needs its own extraction and verification, not a
+  tweak to the note-52 logic.
 - AD/CVD orders are not integrated (separate CBP/ITA dataset). For many
   China/Vietnam/India goods this is the largest omitted charge and is **not
   flagged** yet.
