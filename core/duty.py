@@ -97,6 +97,12 @@ class DutyResult:
     # figure is complete for the inputs given; it is never inferred from the
     # absence of warnings, which are prose.
     incomplete: list[str] = field(default_factory=list)
+    # Facts a duty rests on that the caller did not state and the engine cannot
+    # check (for example "no entry-specific exemption applies").
+    assumptions: list[str] = field(default_factory=list)
+    # Struck-down (IEEPA) headings whose scope is unresolved: they cannot make
+    # the amount owed wrong, only the refund estimate incomplete.
+    refund_unverified: list[str] = field(default_factory=list)
     country_code: str = ""
     dataset_revision: str = ""
 
@@ -132,6 +138,8 @@ class DutyResult:
             "warnings": self.warnings,
             "scope_unverified": self.scope_unverified,
             "incomplete": self.incomplete,
+            "assumptions": self.assumptions,
+            "refund_unverified": self.refund_unverified,
             "complete": not self.incomplete and not self.scope_unverified,
             "country_code": self.country_code,
             "dataset_revision": self.dataset_revision,
@@ -325,6 +333,71 @@ def applicable_ch99(
     return applied, unscoped
 
 
+@dataclass
+class Resolution:
+    applied: list[Ch99Rule] = field(default_factory=list)
+    unverified: list[Ch99Rule] = field(default_factory=list)
+    assumptions: list[str] = field(default_factory=list)
+
+
+def resolve_ch99(
+    rules: list[Ch99Rule], hts: str, country: str,
+    scopes: dict | None = None, regimes=None,
+) -> Resolution:
+    """Give every Chapter 99 rule an explicit verdict for this code and origin.
+
+    With `regimes=None` this is exactly `applicable_ch99`. With a RegimeIndex the
+    two cases that function could not decide are decided from the schedule's own
+    text (see core/regimes.py): country-wide duties with enumerated exceptions,
+    and lines with neither a country nor a scope, which were dropped silently.
+    A rule the evidence cannot settle stays in `unverified`, so a quote is never
+    quietly understated.
+    """
+    from core.regimes import APPLY, SKIP
+
+    origin = _origin_key(country or "")
+    digits = hts.replace(".", "")
+    out = Resolution()
+
+    for r in rules:
+        if r.suspended:
+            continue
+        if regimes is not None and regimes.is_expired(r):
+            continue
+        if r.countries and not any(_origin_key(x) == origin for x in r.countries):
+            continue
+        if r.base_refs:
+            if not any(digits.startswith(b.replace(".", "")) for b in r.base_refs):
+                continue
+            out.applied.append(r)
+        elif scopes and r.hts in scopes:
+            sc = scopes[r.hts]
+            if sc.countries and not any(_origin_key(x) == origin for x in sc.countries):
+                continue
+            if sc.covers(hts):
+                out.applied.append(r)
+        elif regimes is None:
+            if r.countries:
+                out.unverified.append(r)
+        else:
+            verdict, note = regimes.verdict(r, digits, _origin_key)
+            if verdict == APPLY:
+                out.applied.append(r)
+                if note:
+                    out.assumptions.append(note)
+            elif verdict != SKIP:
+                out.unverified.append(r)
+            elif note:
+                out.assumptions.append(note)
+
+    exempt_codes = {m.hts for m in out.applied if m.effect is Effect.PASSTHROUGH}
+    out.applied = [
+        m for m in out.applied
+        if not (m.effect is Effect.ADD and set(m.excepts) & exempt_codes)
+    ]
+    return out
+
+
 def _positive_value(entered_value: Decimal | float | str) -> Decimal:
     try:
         value = Decimal(str(entered_value))
@@ -345,6 +418,7 @@ def compute(
     column2_rate_cell: str = "",
     ch99_rules: list[Ch99Rule] | None = None,
     scopes: dict | None = None,
+    regimes=None,
     fta_claimed: bool = False,
     preference_program: str | None = None,
     by_vessel: bool = True,
@@ -399,7 +473,9 @@ def compute(
     res.components.append(DutyComponent(label, pct, base_amount, cell or "Free", authority))
 
     # --- 2. Chapter 99 overlays ---------------------------------------------
-    applied, unscoped = applicable_ch99(ch99_rules or [], hts, country, scopes)
+    resolution = resolve_ch99(ch99_rules or [], hts, country, scopes, regimes)
+    applied, unscoped = resolution.applied, resolution.unverified
+    res.assumptions.extend(resolution.assumptions)
     replacements: list[Ch99Rule] = []
     for rule in applied:
         if rule.hts.startswith(IEEPA_PREFIX) and rule.rate_pct:
@@ -449,13 +525,23 @@ def compute(
             )
 
     for rule in unscoped:
-        if rule.effect is Effect.ADD and rule.rate_pct:
-            res.scope_unverified.append(rule.hts)
+        if rule.effect in (Effect.ADD, Effect.REPLACE) and rule.rate_pct:
+            if rule.hts.startswith(IEEPA_PREFIX):
+                res.refund_unverified.append(rule.hts)
+            else:
+                res.scope_unverified.append(rule.hts)
     if res.scope_unverified:
         res.warnings.append(
-            f"{len(res.scope_unverified)} trade-remedy heading(s) cover {country} but "
-            "define product scope in the Chapter 99 U.S. Notes. They are excluded "
-            "from this figure pending scope verification."
+            f"{len(res.scope_unverified)} trade-remedy heading(s) may apply to this "
+            f"entry from {country}, but their product scope is defined only in the "
+            "Chapter 99 U.S. Notes and could not be resolved. They are excluded from "
+            "this figure pending scope verification."
+        )
+    if res.refund_unverified:
+        res.warnings.append(
+            f"{len(res.refund_unverified)} struck-down (IEEPA) heading(s) could not be "
+            "scoped, so the refundable figure may be understated. This does not "
+            "change the duty owed."
         )
 
     # --- 3. user fees --------------------------------------------------------

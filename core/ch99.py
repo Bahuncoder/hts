@@ -58,7 +58,10 @@ _PASSTHROUGH = re.compile(r"^\s*(?:the\s+duty\s+provided\s+in\s+the\s+applicable
 _FREE = re.compile(r"^\s*free\s*$", re.I)
 _FLAT = re.compile(r"^\s*([\d.]+)\s*%\s*$")
 
-_COUNTRY = re.compile(r"products?\s+of\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)")
+# Names may follow "the" ("the Bahamas") and use non-ASCII letters ("Türkiye").
+_NAME = r"[A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’.-]*"
+_COUNTRY = re.compile(rf"products?\s+of\s+(?:the\s+)?({_NAME}(?:\s+{_NAME})*)")
+_EU_MEMBER_STATE = re.compile(r"member\s+states?\s+of\s+the\s+European\s+Union", re.I)
 _BASE_REF = re.compile(r"provided\s+for\s+in\s+(?:subheadings?|headings?)?\s*([\d.,\s]+(?:or\s+[\d.]+)?)", re.I)
 _EXCEPT = re.compile(r"^Except\s+for\s+(?:products|articles)\s+described\s+in\s+(?:subheadings?|headings?)\s+([\d.,\s]+(?:or\s+[\d.]+)?)", re.I)
 
@@ -97,6 +100,13 @@ def parse_countries(desc: str) -> list[str]:
             part = part.strip().rstrip(",.")
             if part and part not in _STOPWORDS and len(part) > 1:
                 out.append(part)
+    # "A member state of the European Union" names no country, so the twenty-
+    # seven members are listed; an origin is matched against them one by one.
+    from core.countries import EU_MEMBERS
+    if _EU_MEMBER_STATE.search(desc or ""):
+        out.extend(EU_MEMBERS)
+    if "European Union" in out:
+        out = [c for c in out if c != "European Union"] + list(EU_MEMBERS)
     seen, uniq = set(), []
     for c in out:
         if c.lower() not in seen:

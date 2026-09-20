@@ -69,7 +69,7 @@ CG|Congo|COG|Republic of the Congo;Congo-Brazzaville;Congo, Republic of the
 CD|Democratic Republic of the Congo|COD|Democratic Republic;DR Congo;DRC;Congo, Democratic Republic of the;Congo-Kinshasa
 CK|Cook Islands|COK|
 CR|Costa Rica|CRI|
-CI|Cote d'Ivoire|CIV|Ivory Coast;Côte d'Ivoire
+CI|Cote d'Ivoire|CIV|Ivory Coast;Côte d'Ivoire;Côte;Cote
 HR|Croatia|HRV|
 CU|Cuba|CUB|
 CW|Curacao|CUW|Curaçao
@@ -314,3 +314,14 @@ def require_country(name: str | None) -> str:
 
 def country_name(code: str) -> str:
     return _BY_ISO2[code]
+
+
+# The twenty-seven member states, for Chapter 99 lines that say "a member state
+# of the European Union" instead of naming countries.
+EU_MEMBERS = (
+    "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czech Republic",
+    "Denmark", "Estonia", "Finland", "France", "Germany", "Greece", "Hungary",
+    "Ireland", "Italy", "Latvia", "Lithuania", "Luxembourg", "Malta",
+    "Netherlands", "Poland", "Portugal", "Romania", "Slovakia", "Slovenia",
+    "Spain", "Sweden",
+)

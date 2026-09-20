@@ -9,6 +9,7 @@ import {
   IncompleteReasons,
   RefundScenario,
   ScenarioLine,
+  Assumptions,
   isComplete,
 } from "@/components/QuoteFigures";
 
@@ -317,6 +318,7 @@ function Estimate({
         formalEntry={formal}
         program={program}
       />
+      <Assumptions quote={result} />
 
       <div className="grid gap-5 sm:grid-cols-3">
         <Card>

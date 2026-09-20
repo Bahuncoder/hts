@@ -11,6 +11,7 @@ import {
   IncompleteReasons,
   RefundScenario,
   ScenarioLine,
+  Assumptions,
   isComplete,
 } from "@/components/QuoteFigures";
 import { currentViewer } from "@/lib/auth";
@@ -285,6 +286,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
         <>
           <div className="space-y-1">
             <ScenarioLine quote={q} />
+            <Assumptions quote={q} />
             <p className="text-[13px] text-muted">
               Different value, transport or entry type?{" "}
               <Link

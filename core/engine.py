@@ -10,7 +10,8 @@ import re
 from core.ch99 import Ch99Rule, parse_countries, parse_rule
 from core.duty import DutyResult, compute
 from core.hts import HtsTree, InvalidHts, NotStatisticalLine  # noqa: F401
-from ingest.notes import load as load_scopes
+from core.regimes import build_index
+from ingest.notes import extract_exceptions, load as load_scopes
 
 
 class TariffEngine:
@@ -19,6 +20,7 @@ class TariffEngine:
         self.revision = revision
         self.tree = HtsTree.load(hts_path)
         self.scopes = load_scopes(notes_path) if notes_path else {}
+        raw_notes = open(notes_path, errors="ignore").read() if notes_path else ""
         with open(hts_path) as fh:
             rows = json.load(fh)
         self.ch99: list[Ch99Rule] = []
@@ -52,7 +54,19 @@ class TariffEngine:
                     rule.suspended = True
                     rule.suspension_note = val.strip()
                     break
+            # A compiler's note on the group header ("Duties suspended except on
+            # certain goods entered from foreign trade zones") suspends the
+            # provisions beneath it for ordinary entries.
+            context = " ".join([rule.description, *(line.path if line else [])])
+            note = re.search(r"[Cc]ompiler.s note:[^\]]*[Dd]uties? (?:are )?suspended[^\]]*", context)
+            if note and not rule.suspended:
+                rule.suspended = True
+                rule.suspension_note = note.group(0).strip()
             self.ch99.append(rule)
+
+        self.regimes = (build_index(self.ch99, self.scopes, raw_notes,
+                                    extract_exceptions(raw_notes))
+                        if raw_notes else None)
 
     @cached_property
     def leaf_count(self) -> int:
@@ -79,6 +93,7 @@ class TariffEngine:
             hts=code, country=country, entered_value=value,
             base_rate_cell=general, special_rate_cell=special,
             column2_rate_cell=other, ch99_rules=self.ch99, scopes=self.scopes,
+            regimes=self.regimes,
             fta_claimed=fta_claimed, preference_program=preference_program,
             by_vessel=by_vessel, is_formal_entry=is_formal_entry,
         )

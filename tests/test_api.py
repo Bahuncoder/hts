@@ -379,6 +379,24 @@ def _():
     assert b["9903.03.12"] is True and b["9903.88.15"] is False, b
 
 
+@check("audit: a China apparel line is complete and states the assumption its duty rests on")
+def _():
+    d = _audit([{"sku": "T", "description": "cotton tee", "country": "China",
+                 "value": 10000, "hts": "6109.10.00.12"}])
+    ln = d["lines"][0]
+    assert ln["status"] == "ready", (ln["status"], ln["review_reasons"])
+    assert any("note 52" in a for a in ln["assumptions"]), ln["assumptions"]
+    assert any("note 52" in a for a in d["summary"]["assumptions"]), d["summary"]["assumptions"]
+    assert d["summary"]["totals_complete"] is True, d["summary"]
+
+
+@check("audit: metals and vehicles are never presented as ready")
+def _():
+    d = _audit([{"sku": "S", "description": "bolt", "country": "China", "value": 1000, "hts": "7318.15.20.00"},
+                {"sku": "V", "description": "car", "country": "Vietnam", "value": 1000, "hts": "8703.23.01.90"}])
+    assert all(ln["status"] != "ready" for ln in d["lines"]), [ln["status"] for ln in d["lines"]]
+
+
 def main() -> int:
     # Authenticated: the anonymous budget may already be spent by the very
     # tests below, and a reachability probe should not compete with them.

@@ -38,7 +38,8 @@ tables in an existing accounts database are left dormant, not dropped.
 | Suite | Count | What it exercises |
 |---|---|---|
 | `tests/test_duty.py` | 46 | duty arithmetic, refusals, rate grammar, preferences, origins, fees |
-| `tests/test_api.py` | 32 | API contract, security regressions, audit row/status behaviour, cursor paging |
+| `tests/test_regimes.py` | 17 | Chapter 99 regimes on the real schedule: what is charged, exempt, expired, or unknown |
+| `tests/test_api.py` | 35 | API contract, security regressions, audit row/status behaviour, cursor paging |
 | `tests/test_refresh.py` | 10 | index survival, stale-data removal, rollback, engine reload across editions |
 | `tests/test_classify_eval.py` | 3 | a held-out ruling cannot vote for itself; reasoning cannot run in evaluation |
 | `web` `npm run test:integration` | 86 | real routes over scratch databases with fake engine/mail servers |
@@ -75,9 +76,30 @@ before claiming anything for it.
 
 ## Known gaps
 
-- ~78 remedy headings are still unscoped: their notes describe goods in prose,
-  so every China/Vietnam-origin line is reported as `scope_review` rather than
-  ready. Honest, but noisy; it needs the reasoning layer or manual scoping.
+- **Chapter 99 scope, what is and is not resolved.** The schedule's country-wide
+  duties (U.S. note 52: 10–12.5% on about 55 economies, the regime that replaced
+  the Section 122 surcharge on 2026-07-24) are applied to every product of the
+  origin *except* the note's own exception lists, which are extracted from the
+  schedule text. A China, Vietnam, India, Philippines... quote for an ordinary
+  consumer product is therefore complete and states its assumption (no
+  entry-specific exemption: goods in transit, donations, informational
+  materials, Chapter 98 claims). Products on the note's pure code-list exceptions
+  are exempt; products on its use-conditional lists (civil-aircraft parts,
+  pharmaceutical articles) are flagged, because a code alone cannot prove the
+  end use. Still flagged, deliberately (fail closed):
+  Section 232 metals, vehicles, wood and furniture, semiconductors and other
+  product-specific regimes, and every origin with a deal-specific structure
+  (Canada, Mexico, EU, Japan, Korea, Switzerland, Taiwan, UK...). This replaced
+  a state where *every* quote was flagged and 36 charge lines were dropped
+  silently (Section 232 autos, wood and chips, and five countries whose names
+  the parser missed).
+- **Two editorial facts must be re-verified each refresh.** The engine reads
+  expiry from the schedule's compiler's notes where they exist, but the
+  Section 122 surcharge (9903.03.01–.11) is not yet marked expired there, so its
+  expiry on 2026-07-24 is an editorial override in `core/regimes.py`
+  (`KNOWN_EXPIRED`), taken from Proclamation 11012 and public reporting. The
+  reading of note 52 (apply to everything not excepted) follows the note's own
+  text in 52(a) but has not been confirmed by a customs broker or attorney.
 - Quantity-based duties (cents/kg, $/each) need quantity input, which does not
   exist yet: such lines are flagged incomplete, never silently understated.
 - AD/CVD orders are not integrated (separate CBP/ITA dataset). For many

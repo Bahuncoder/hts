@@ -399,8 +399,8 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
                          "The duty is understated: " + "; ".join(q.incomplete)))
     if q.scope_unverified:
         triggers.append(("scope_review",
-                         f"{len(q.scope_unverified)} trade-remedy heading(s) cover this "
-                         "origin and need scope verification."))
+                         f"{len(q.scope_unverified)} trade-remedy heading(s) may apply to "
+                         "this entry and need scope verification."))
     if alternatives:
         triggers.append(("suffix_review",
                          "Sibling statistical lines carry different rates; the "
@@ -415,6 +415,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         "review_reasons": [t[1] for t in triggers],
         "warnings": q.warnings,
         "incomplete": q.incomplete,
+        "assumptions": q.assumptions,
         "entered_value": float(q.entered_value),
         "duty": float(q.total_duty),
         "effective_rate_pct": float(q.effective_rate_pct),
@@ -494,6 +495,12 @@ def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audi
         "Preference programs and quantity-based duties are not modelled here; "
         "lines that carry a quantity-based rate are flagged as incomplete.",
     ]
+    # What individual lines rest on (for example a country-wide duty applied on
+    # the assumption that no entry-specific exemption holds), once each.
+    for ln in priced:
+        for a in ln.get("assumptions", []):
+            if a not in assumptions:
+                assumptions.append(a)
     if fee_constants_stale():
         assumptions.append(
             "User-fee constants are past their fiscal-year boundary and have "

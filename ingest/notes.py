@@ -100,7 +100,7 @@ def _blocks(raw: str) -> list[tuple[str, str]]:
     return out
 
 
-def extract(raw: str) -> dict[str, NoteScope]:
+def extract(raw: str, binds: list | None = None) -> dict[str, NoteScope]:
     """Bind every remedy heading to the product codes its note enumerates.
 
     Note subdivisions nest: heading 9903.88.15 (Section 301 List 4A) takes its
@@ -113,7 +113,7 @@ def extract(raw: str) -> dict[str, NoteScope]:
 
     for letter, body in _blocks(raw):
         heading = None
-        for pat in BINDS:
+        for pat in (binds if binds is not None else BINDS):
             m = pat.search(body[:1500])
             if m:
                 heading = m.group(1)
@@ -154,6 +154,20 @@ def extract(raw: str) -> dict[str, NoteScope]:
         current.codes.update(codes)
 
     return scopes
+
+
+# U.S. note 52 lists its exceptions as "As provided in heading 9903.05.86, ...".
+# That phrasing binds unrelated headings elsewhere in the notes, so it is used
+# only to harvest the note-52 exception range and is never added to BINDS.
+_EXCEPTION_BINDS = [*BINDS, re.compile(r"[Aa]s provided in headings?\s+(9903\.\d{2}\.\d{2})")]
+
+
+def extract_exceptions(raw: str, lo: str = "9903.05.85",
+                       hi: str = "9903.06.21") -> dict[str, set[str]]:
+    """Product prefixes (digits) of each exception heading in [lo, hi]."""
+    found = extract(raw, _EXCEPTION_BINDS)
+    return {h: {c.replace(".", "") for c in sc.codes}
+            for h, sc in found.items() if lo <= h <= hi}
 
 
 def load(path: str) -> dict[str, NoteScope]:

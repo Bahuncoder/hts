@@ -27,7 +27,7 @@ export function incompleteReasons(q: Quote): string[] {
   if (q.scope_unverified?.length) {
     const n = q.scope_unverified.length;
     out.push(
-      `${n === 1 ? "One trade-remedy heading" : `${n} trade-remedy headings`} (${q.scope_unverified.join(", ")}) cover${n === 1 ? "s" : ""} this origin, but ${n === 1 ? "its" : "their"} product scope is defined only in the Chapter 99 U.S. Notes. ${n === 1 ? "It is" : "They are"} excluded from this total until scope is verified.`,
+      `${n === 1 ? "One trade-remedy heading" : `${n} trade-remedy headings`} (${q.scope_unverified.join(", ")}) may apply to this entry, but ${n === 1 ? "its" : "their"} product scope is defined only in the Chapter 99 U.S. Notes and could not be resolved. ${n === 1 ? "It is" : "They are"} excluded from this total until scope is verified.`,
     );
   }
   return out;
@@ -78,6 +78,23 @@ export function ScenarioLine({
         </>
       ) : null}
     </p>
+  );
+}
+
+/** What the duty rests on that we cannot check from a catalogue. Shown beside
+ *  the figure, so a charge applied under an assumption never looks unconditional. */
+export function Assumptions({ quote }: { quote: Quote }) {
+  const list = quote.assumptions ?? [];
+  if (!list.length) return null;
+  return (
+    <div className="text-[12px] leading-snug text-muted">
+      <p className="font-medium">This figure assumes:</p>
+      <ul className="mt-1 list-disc space-y-1 pl-4">
+        {list.map((a) => (
+          <li key={a}>{a}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

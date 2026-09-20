@@ -33,11 +33,14 @@ export type Quote = {
   refundable: DutyComponent[];
   refundable_amount: number;
   warnings: string[];
-  /** Chapter 99 headings that cover this origin but whose product scope is
-   *  only in the U.S. Notes; excluded from the total. */
+  /** Chapter 99 headings that may apply to this entry but whose product scope
+   *  could not be resolved from the U.S. Notes; excluded from the total. */
   scope_unverified: string[];
   /** Reasons the total omits something it should include. */
   incomplete?: string[];
+  /** Facts the duty rests on that the engine cannot check (for example that
+   *  no entry-specific exemption applies). */
+  assumptions?: string[];
   /** False when `incomplete` or `scope_unverified` is non-empty. */
   complete?: boolean;
   country_code?: string;
