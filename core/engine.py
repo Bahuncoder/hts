@@ -9,6 +9,7 @@ from functools import cached_property
 import re
 
 from core.ch99 import Ch99Rule, parse_countries, parse_rule
+from core.adcvd import AdcvdIndex
 from core.duty import DutyResult, compute
 from core.hts import HtsTree, InvalidHts, NotStatisticalLine  # noqa: F401
 from core.regimes import build_index
@@ -81,6 +82,8 @@ class TariffEngine:
             if marks.exists():
                 shaded = set(json.loads(marks.read_text()).get("expired", []))
         self.shading_loaded = bool(shaded)
+        self.adcvd = (AdcvdIndex.load(Path(notes_path).with_name("adcvd_orders.json"))
+                      if notes_path else None)
 
         self.regimes = (build_index(self.ch99, self.scopes, raw_notes,
                                     extract_note52(raw_notes), shaded=shaded)
@@ -123,6 +126,27 @@ class TariffEngine:
             metal_weight_pct=metal_weight_pct, vehicle_use=vehicle_use,
         )
         res.dataset_revision = self.revision
+        if self.adcvd:
+            hits, res.adcvd_unchecked = self.adcvd.match(line.digits, res.country_code)
+            res.adcvd_checked = True
+            if hits:
+                res.adcvd = [o.as_dict() for o in hits]
+                res.incomplete.append("adcvd_possible")
+                cases = ", ".join(f"{o.case} ({o.product})" for o in hits[:4])
+                res.warnings.append(
+                    f"{len(hits)} antidumping or countervailing duty order(s) list this code "
+                    f"for {res.country}: {cases}{', ...' if len(hits) > 4 else ''}. The cash "
+                    "deposit depends on the exporter and is NOT included in this total, which "
+                    "is therefore understated if an order covers your goods.")
+            if res.adcvd_unchecked:
+                res.assumptions.append(
+                    f"{res.adcvd_unchecked} antidumping or countervailing duty order(s) for "
+                    f"{res.country} list no HTS number in their scope and could not be checked "
+                    f"against this code (orders as of {self.adcvd.generated}).")
+        else:
+            res.warnings.append(
+                "Antidumping and countervailing duty orders were not checked: no order data "
+                "is loaded.")
         return res
 
     def leaves_under(self, prefix8: str) -> list:

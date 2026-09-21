@@ -64,7 +64,7 @@ build:
 	cd web && rm -rf .next && npm run build
 
 # --- verify -----------------------------------------------------------------
-test: test-duty test-math test-classify-eval test-regimes test-refresh test-api test-email test-diff \
+test: test-duty test-math test-adcvd test-classify-eval test-regimes test-refresh test-api test-email test-diff \
       test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review \
       test-ui test-draft test-contrast
 
@@ -73,6 +73,9 @@ test-duty:
 
 test-math:
 	@python3 tests/test_math.py
+
+test-adcvd:
+	@python3 tests/test_adcvd.py
 
 test-api:
 	@python3 tests/test_api.py
@@ -89,7 +92,7 @@ test-classify-eval:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-math test-classify-eval test-regimes test-refresh test-api test-email \
+check: build test-duty test-math test-adcvd test-classify-eval test-regimes test-refresh test-api test-email \
        test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review \
        test-ui test-draft test-contrast test-journey test-security test-authflow eval
 

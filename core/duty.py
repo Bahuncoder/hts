@@ -113,6 +113,14 @@ class DutyResult:
     # Facts about the goods (metal_weight_pct, vehicle_use) that would settle a
     # Section 232 question the quote could not.
     facts_needed: list[str] = field(default_factory=list)
+    # Antidumping / countervailing orders that list this code for this origin.
+    # The cash deposit depends on the exporter and is never computed, so a match
+    # marks the total incomplete. `adcvd_checked` is False when no order data
+    # was loaded; `adcvd_unchecked` counts this origin's orders whose scope lists
+    # no HTS number and so could not be matched.
+    adcvd: list[dict] = field(default_factory=list)
+    adcvd_checked: bool = False
+    adcvd_unchecked: int = 0
 
     @property
     def refundable_amount(self) -> Decimal:
@@ -153,6 +161,9 @@ class DutyResult:
             "dataset_revision": self.dataset_revision,
             "quantity_needed": self.quantity_needed,
             "facts_needed": self.facts_needed,
+            "adcvd": self.adcvd,
+            "adcvd_checked": self.adcvd_checked,
+            "adcvd_unchecked": self.adcvd_unchecked,
         }
 
 

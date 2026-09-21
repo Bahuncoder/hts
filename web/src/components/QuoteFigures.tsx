@@ -15,6 +15,8 @@ const REASONS: Record<string, string> = {
     "The quantity's unit cannot be converted to the unit this duty is charged in; the duty is not included.",
   specific_duty_unsupported:
     "This line's duty has a form this calculator cannot price (for example a sliding scale or a per-content rate); that part is not included.",
+  adcvd_possible:
+    "An antidumping or countervailing duty order may cover these goods; its cash deposit depends on the exporter and is not included.",
   deal_rate_unresolved:
     "A trade-deal duty for this origin depends on this line's per-unit rate, which is not priced; it is not included.",
   rate_missing:
@@ -34,6 +36,12 @@ export function incompleteReasons(q: Quote): string[] {
     const n = q.scope_unverified.length;
     out.push(
       `${n === 1 ? "One trade-remedy heading" : `${n} trade-remedy headings`} (${q.scope_unverified.join(", ")}) may apply to this entry, but ${n === 1 ? "its" : "their"} product scope is defined only in the Chapter 99 U.S. Notes and could not be resolved. ${n === 1 ? "It is" : "They are"} excluded from this total until scope is verified.`,
+    );
+  }
+  if (q.adcvd?.length) {
+    const shown = q.adcvd.slice(0, 4).map((o) => `${o.case} ${o.product}`).join("; ");
+    out.push(
+      `${q.adcvd.length === 1 ? "One order lists" : `${q.adcvd.length} orders list`} this code for ${q.country} (${shown}${q.adcvd.length > 4 ? "; ..." : ""}). Check whether your goods and exporter are covered.`,
     );
   }
   const asks = (q.facts_needed ?? [])

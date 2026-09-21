@@ -449,7 +449,7 @@ def _():
         assert s == 400, (bad, s, d)
     s, _ = call("/api/quote", method="POST", body={**body, "metal_weight_pct": 140}, key=KEY)
     assert s == 422, s
-    hinge = {"hts": "8302.10.30.00", "country": "China", "value": 10000, "vehicle_use": "none"}
+    hinge = {"hts": "8205.59.55.60", "country": "China", "value": 10000}
     s, nw = call("/api/quote", method="POST", body=hinge, key=KEY)
     assert nw["facts_needed"] == ["metal_weight_pct"] and nw["complete"] is False, nw
     s, heavy = call("/api/quote", method="POST", body={**hinge, "metal_weight_pct": 60}, key=KEY)
@@ -458,14 +458,33 @@ def _():
 
 @check("audit: a line saying what is needed (metal weight, vehicle use) says so, and stating it prices the line")
 def _():
-    row = {"sku": "H", "description": "hinge", "country": "China", "value": 10000, "hts": "8302.10.30.00"}
-    d = _audit([row, {**row, "sku": "H2", "vehicle_use": "none", "metal_weight_pct": 5}])
+    row = {"sku": "H", "description": "hand tool", "country": "China", "value": 10000, "hts": "8205.59.55.60"}
+    d = _audit([row, {**row, "sku": "H2", "metal_weight_pct": 5}])
     a, b = d["lines"]
-    assert a["status"] == "scope_review" and "vehicle use" in " ".join(a["review_reasons"]), a
-    assert set(a["facts_needed"]) == {"metal_weight_pct", "vehicle_use"}
+    assert a["status"] == "scope_review" and "metal weight" in " ".join(a["review_reasons"]), a
+    assert a["facts_needed"] == ["metal_weight_pct"]
     assert b["status"] == "ready", (b["status"], b["review_reasons"])
     bad = _audit([{**row, "vehicle_use": "boat"}])["lines"][0]
     assert bad["status"] == "error" and bad["error_code"] == "invalid_input", bad
+
+
+@check("quote and audit: an antidumping order listing the code for the origin marks the total incomplete and names the case")
+def _():
+    if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "data", "adcvd_orders.json")):
+        return
+    nails = {"hts": "7317.00.55.02", "country": "China", "value": 10000}
+    s, q = call("/api/quote", method="POST", body=nails, key=KEY)
+    if s == 404:                                          # the line may not exist in this edition
+        return
+    assert "adcvd_possible" in q["incomplete"] and q["adcvd"], q
+    assert any(o["case"].startswith("A-570") for o in q["adcvd"]), q["adcvd"]
+    d = _audit([{"sku": "N", "description": "steel nails", "country": "China", "value": 10000,
+                 "hts": "7317.00.55.02"}])
+    ln = d["lines"][0]
+    assert ln["status"] == "incomplete" and any("A-570" in r for r in ln["review_reasons"]), ln
+    assert ln["adcvd"], ln
+    s, h = call("/api/health", key=KEY)
+    assert h["adcvd_orders"] > 400 and h["adcvd_generated"], h
 
 
 def main() -> int:

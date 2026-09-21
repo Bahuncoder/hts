@@ -152,9 +152,18 @@ before claiming anything for it.
   estimate. Not modelled: whole vehicles, the U.K.'s vehicle-part heading,
   importer-certified automobile parts, pharmaceutical (note 40) and semiconductor (note 39)
   articles.
-- AD/CVD orders are not integrated (separate CBP/ITA dataset). For many
-  China/Vietnam/India goods this is the largest omitted charge and is **not
-  flagged** yet.
+- **Antidumping and countervailing duty (AD/CVD) orders are flagged, not priced.**
+  `ingest/adcvd.py` reads the twelve latest monthly "Opportunity To Request
+  Administrative Review" notices (every order in effect, by country and case
+  number) and each order's scope from its order, continuation or latest review
+  notice, taking the HTS numbers Commerce lists. A quote whose code and origin
+  match an order is marked incomplete, names the case, and leaves out the cash
+  deposit, which depends on the exporter. Limits, all stated by the product:
+  Commerce lists HTS numbers "for convenience" (the written scope decides), so
+  a product an order covers but does not list is missed; an order whose scope
+  lists no HTS number cannot be matched (counted per quote as unchecked); no
+  scope rulings, circumvention findings, exclusions or exporter rates are read.
+  The absence of a flag is not proof that no order applies.
 - MPF preference exemptions are not modelled; the assumptions list says so.
 - The IEEPA "refundable" figure is a scenario estimate for one entry at the
   entered value. There is no entry date, paid duty or liquidation status, so it
@@ -182,7 +191,7 @@ All must be true before launch:
       (`web/tests/review.test.mjs`, browser).
 - [x] Integration tests exercise production routes, over isolated databases.
 - [ ] Reasoning layer measured, or the product described without it.
-- [ ] AD/CVD at least flagged for affected origins.
+- [x] AD/CVD flagged for affected origins (coverage limits above).
 - [ ] FY2027 fee constants entered (due 2026-10-01).
 - [ ] Deployed to real Vercel/Turso/VPS with monitoring and offsite backups,
       and real email delivery exercised.

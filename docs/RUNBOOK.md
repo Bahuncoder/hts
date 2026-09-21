@@ -48,6 +48,7 @@ owes.
 |---|---|---|---|
 | HTS schedule | on revision | `make refresh` | new codes, changed rates |
 | Chapter 99 notes | with HTS | `make refresh` | product scope for remedies |
+| AD/CVD orders | with HTS | `make refresh` | orders that may apply to a code and origin |
 | Federal Register | daily | `make fedreg` | rate changes, new actions |
 | CROSS bodies | continuous | `make rulings` | classifier accuracy |
 | Watched-code diff | daily, 09:30 UTC | `make diff` | alerts customers to changes |
@@ -60,6 +61,12 @@ the US business day.
 1. Downloads the schedule and Chapter 99 PDF into a new immutable directory,
    `data/releases/<utc timestamp>/`, and refuses to continue if the files look
    truncated (schedule under 20,000 rows, no 9903 headings).
+   It also reads the schedule's yellow "expired" shading out of the PDF
+   (`chapter99_expired.json`; needs poppler and Pillow; the refresh aborts if
+   the pass finds nothing) and refreshes the antidumping/countervailing order
+   list from the Federal Register (`adcvd_orders.json`; a case read within 180
+   days is reused, so a routine run fetches only the monthly notices; if the
+   Federal Register is unreachable the previous list is kept and the log says so).
 2. Builds the reference data in **one transaction**: clears and refills the
    schedule, remedy rules and scope, rebuilds both search indexes, then
    validates the result against absolute floors and the previous build (no more

@@ -238,6 +238,8 @@ def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
         "index": coverage,
         "index_complete": index_complete,
         "reasoning_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "adcvd_orders": len(_engine.adcvd.orders) if _engine is not None and _engine.adcvd else 0,
+        "adcvd_generated": (_engine.adcvd.generated if _engine is not None and _engine.adcvd else None),
         "fee_constants_stale": fee_constants_stale(),
         "fee_constants_effective_through": FEE_CONSTANTS_EFFECTIVE_THROUGH.isoformat(),
     }
@@ -372,6 +374,8 @@ _INCOMPLETE_TEXT = {
     "quantity_unit_mismatch": "has a quantity unit that cannot be converted to {unit}",
     "specific_duty_unsupported": "has a per-unit duty this calculator cannot price",
     "deal_rate_unresolved": "has a duty that depends on its per-unit rate, which is not priced",
+    "adcvd_possible": "may be covered by an antidumping or countervailing duty order ({cases}); "
+                      "the cash deposit is not included",
     "rate_missing": "has no base rate in the schedule",
     "rate_unparsed": "has a base rate this calculator cannot read",
 }
@@ -383,7 +387,8 @@ _FACT_TEXT = {"metal_weight_pct": "metal weight percentage",
 
 def _incomplete_message(q) -> str:
     unit = "/".join(q.quantity_needed) or "the duty's unit"
-    parts = [_INCOMPLETE_TEXT.get(r, r.replace("_", " ")).format(unit=unit)
+    cases = ", ".join(o["case"] for o in q.adcvd[:3]) + (", ..." if len(q.adcvd) > 3 else "")
+    parts = [_INCOMPLETE_TEXT.get(r, r.replace("_", " ")).format(unit=unit, cases=cases)
              for r in q.incomplete]
     return "The duty is understated: this line " + "; and ".join(parts) + "."
 
@@ -482,6 +487,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         "incomplete": q.incomplete,
         "quantity_needed": q.quantity_needed,
         "facts_needed": q.facts_needed,
+        "adcvd": q.adcvd,
         "assumptions": q.assumptions,
         "entered_value": float(q.entered_value),
         "duty": float(q.total_duty),
@@ -559,6 +565,9 @@ def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audi
          if req.formal_entry else "Informal entry assumed: no Merchandise Processing Fee."),
         ("Vessel shipment assumed: Harbor Maintenance Fee applied."
          if req.by_vessel else "Non-vessel shipment: no Harbor Maintenance Fee."),
+        "Antidumping and countervailing duty orders are matched by the HTS numbers "
+        "Commerce lists in each order's scope; the cash deposit depends on the exporter "
+        "and is never included, and an order that lists no HTS number is not matched.",
         "Quantity-based (per-unit) duties are priced only for lines that give a "
         "quantity; the others are flagged as incomplete. A trade preference is "
         "applied only to lines that name the program.",

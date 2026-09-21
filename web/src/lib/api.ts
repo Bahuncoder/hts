@@ -50,6 +50,10 @@ export type Quote = {
   /** Facts about the goods (metal_weight_pct, vehicle_use) that would settle a
    *  Section 232 question this quote could not. */
   facts_needed?: string[];
+  /** Antidumping or countervailing duty orders that list this code for this origin. */
+  adcvd?: { case: string; kind: string; product: string; country: string; source?: string | null; source_date?: string | null }[];
+  /** False when no order data was loaded, so orders were not checked at all. */
+  adcvd_checked?: boolean;
 };
 
 export type Ruling = {

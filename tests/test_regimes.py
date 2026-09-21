@@ -96,6 +96,12 @@ def other232(digits):
 
 
 
+def settled(res):
+    """Complete as far as duties go: an antidumping order that may apply is a
+    separate flag (it depends on the exporter), not a gap in the duty stack."""
+    return not res.scope_unverified and set(res.incomplete) <= {"adcvd_possible"}
+
+
 def labels(res):
     return [c.label for c in res.components]
 
@@ -114,7 +120,7 @@ def _():
     assert any("9903.05.31" in x for x in labels(r)), labels(r)
     assert any("9903.88.15" in x for x in labels(r)), labels(r)
     assert str(r.total_duty) == "3697.14", r.total_duty       # 16.5 + 12.5 + 7.5 % + fees
-    assert r.as_dict()["complete"] is True and not r.scope_unverified
+    assert settled(r) and not r.scope_unverified
 
 
 @real("the assumption behind a resolved country-wide duty is stated, entry-specific exceptions included")
@@ -176,12 +182,12 @@ def _():
     steel = next(l.hts for l in E.tree.leaves if l.hts.startswith("7208.10"))
     r = quote(steel, "Vietnam")
     assert any("9903.82.02" in x for x in labels(r)) and not any("9903.05" in x for x in labels(r)), labels(r)
-    assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
+    assert settled(r), (r.scope_unverified, r.incomplete)
     assert any("ordinary rate is assumed" in a for a in r.assumptions), r.assumptions
     kettle = next(l.hts for l in E.tree.leaves if l.hts.startswith("7323.93"))
     r = quote(kettle, "China")
     assert any("9903.82.09" in x for x in labels(r)) and not any("9903.05.31" in x for x in labels(r)), labels(r)
-    assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
+    assert settled(r), (r.scope_unverified, r.incomplete)
 
 
 def _hinge():
@@ -295,12 +301,12 @@ def _():
     chair = next(l.hts for l in E.tree.leaves if w.upholstered.covers(l.digits))
     r = quote(chair, "Vietnam")
     assert any("9903.76.02" in x for x in labels(r)) and not any("9903.05.84" in x for x in labels(r)), labels(r)
-    assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
+    assert settled(r), (r.scope_unverified, r.incomplete)
     for origin, heading in (("Germany", "9903.76.22"), ("Japan", "9903.76.21"), ("South Korea", "9903.76.23"),
                             ("Taiwan", "9903.76.24")):
         d = quote(chair, origin)
         assert any(heading in x for x in labels(d)) and not any("9903.76.02" in x for x in labels(d)), (origin, labels(d))
-        assert str(d.components[0].amount) == "1500.00" and d.as_dict()["complete"] is True, (origin, d.components)
+        assert str(d.components[0].amount) == "1500.00" and settled(d), (origin, d.components)
     uk = quote(chair, "United Kingdom")
     assert any("9903.76.20" in x for x in labels(uk)) and next(
         c.amount for c in uk.components if "9903.76.20" in c.label) == 1000, labels(uk)
@@ -323,7 +329,7 @@ def _():
     assert "9903.94.05" in unstated.scope_unverified and unstated.as_dict()["complete"] is False
     car = E.quote(hts=code, country="China", value=10000, vehicle_use="passenger")
     assert any("9903.94.05" in x for x in labels(car)) and not any("9903.05.31" in x for x in labels(car)), labels(car)
-    assert car.as_dict()["complete"] is True, (car.scope_unverified, car.incomplete)
+    assert settled(car), (car.scope_unverified, car.incomplete)
     other = E.quote(hts=code, country="China", value=10000, vehicle_use="none")
     assert any("9903.05.31" in x for x in labels(other)) and not any("9903.94" in x for x in labels(other)), labels(other)
     heavy = E.quote(hts=code, country="China", value=10000, vehicle_use="heavy")
@@ -345,7 +351,7 @@ def _():
     mfn = float(E.tree.effective_rate_cell(code, "general")[0].rstrip("%"))
     for origin in ("Germany", "France", "Japan", "South Korea", "Taiwan"):
         r = E.quote(hts=code, country=origin, value=10000, vehicle_use="passenger")
-        assert r.as_dict()["complete"] is True, (origin, r.scope_unverified, r.incomplete)
+        assert settled(r), (origin, r.scope_unverified, r.incomplete)
         parts = [c for c in r.components if "9903.94" in c.label]
         assert len(parts) == 1 and "tops the duty up to 15%" in parts[0].label, (origin, [c.label for c in r.components])
         assert float(next(c.amount for c in r.components if c.label.startswith("MFN")) + parts[0].amount) == 1500.0, (origin, mfn)

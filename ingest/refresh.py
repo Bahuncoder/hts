@@ -92,6 +92,17 @@ def main() -> None:
         # Expired provisions are marked only by yellow shading in the PDF.
         subprocess.run([sys.executable, "-m", "ingest.shading", str(release / "chapter99.pdf"),
                         str(release / "chapter99_expired.json")], check=True, cwd=ROOT)
+        # Antidumping/countervailing orders in effect (Federal Register). A failed
+        # fetch keeps the last good list rather than dropping the check.
+        orders_out, last = release / "adcvd_orders.json", data / "adcvd_orders.json"
+        try:
+            subprocess.run([sys.executable, "-m", "ingest.adcvd", str(orders_out), str(last)],
+                           check=True, cwd=ROOT)
+        except subprocess.CalledProcessError:
+            if not last.exists():
+                raise
+            shutil.copy(last, orders_out)
+            print("AD/CVD orders: fetch failed, keeping the previous list")
         check_downloads(release)
 
         # Exits non-zero, publishing nothing, if validation fails.
