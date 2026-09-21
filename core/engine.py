@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from decimal import Decimal
 from functools import cached_property
 
@@ -11,7 +12,7 @@ from core.ch99 import Ch99Rule, parse_countries, parse_rule
 from core.duty import DutyResult, compute
 from core.hts import HtsTree, InvalidHts, NotStatisticalLine  # noqa: F401
 from core.regimes import build_index
-from ingest.notes import extract_note52, load as load_scopes
+from ingest.notes import country_statements, extract_note52, load as load_scopes
 
 
 class TariffEngine:
@@ -64,8 +65,25 @@ class TariffEngine:
                 rule.suspension_note = note.group(0).strip()
             self.ch99.append(rule)
 
+        # A note that says "products of China shall be subject to" a list of
+        # headings names the country for headings whose own text does not.
+        for heads, country in country_statements(raw_notes):
+            for rule in self.ch99:
+                if rule.hts in heads and not rule.countries:
+                    rule.countries = parse_countries(f"products of {country}") or [country]
+                    rule.country_inherited = True
+
+        # The published schedule shades expired provisions; ingest.shading reads
+        # that shading into a file beside the notes.
+        shaded: set[str] = set()
+        if notes_path:
+            marks = Path(notes_path).with_name("chapter99_expired.json")
+            if marks.exists():
+                shaded = set(json.loads(marks.read_text()).get("expired", []))
+        self.shading_loaded = bool(shaded)
+
         self.regimes = (build_index(self.ch99, self.scopes, raw_notes,
-                                    extract_note52(raw_notes))
+                                    extract_note52(raw_notes), shaded=shaded)
                         if raw_notes else None)
 
     @cached_property

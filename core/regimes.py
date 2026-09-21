@@ -245,6 +245,35 @@ def note_refs(description: str) -> list[int]:
     return refs
 
 
+_SUSPENDED = re.compile(r"[Tt]he following provisions have been suspended[^\n]*(?:\n(?![ \t]*\n)[^\n]*)*")
+_CEASES = re.compile(
+    r"[Nn]o rate of duty provided for in [^.\n]*?(?:\n[^.\n]*)?in chapter 99 shall be imposed[^.]*?"
+    r"after the close of\s+([A-Z][a-z]+ \d{1,2}, \d{4})", re.S)
+
+
+def _suspended_ranges(raw: str) -> list[tuple[str, str]]:
+    """Heading ranges a note lists as "suspended pursuant to executive action"."""
+    out = []
+    for m in _SUSPENDED.finditer(raw):
+        for r in _HEADING_RANGE.finditer(m.group(0)):
+            out.append((r.group(1), r.group(2) or r.group(1)))
+    return out
+
+
+def _ceased_headings(blocks: dict[int, str]) -> list[tuple[list[str], date]]:
+    """Headings a note says no longer carry a duty after a stated date ("No rate of
+    duty provided for in such subheadings ... shall be imposed ... after the close
+    of September 25, 2012"), taken from the headings the note opens with."""
+    from core.ch99 import _parse_date
+    out = []
+    for text in blocks.values():
+        m = _CEASES.search(text)
+        d = _parse_date(m.group(1)) if m else None
+        if d:
+            out.append((re.findall(r"9903\.\d{2}\.\d{2}", text[:600]), d))
+    return out
+
+
 def _expired_ranges(blocks: dict[int, str]) -> list[tuple[str, str, int]]:
     """Heading ranges a note's own compiler's note records as expired."""
     out = []
@@ -284,7 +313,15 @@ class RegimeIndex:
     # ------------------------------------------------------------- expiry
     def is_expired(self, rule: Ch99Rule) -> str | None:
         reason = self.expired.get(rule.hts)
-        return reason
+        if reason:
+            return reason
+        if rule.effective_to and self.as_of >= rule.effective_to:
+            return f"the provision's own text limits it to entries before {rule.effective_to}"
+        return None
+
+    def not_yet(self, rule: Ch99Rule) -> bool:
+        """A provision whose own text starts it on a later date than the quote's."""
+        return bool(rule.effective_from and self.as_of < rule.effective_from)
 
     # ---------------------------------------------------------- verdicts
     def verdict(self, rule: Ch99Rule, digits: str, origin: str = "",
@@ -484,7 +521,20 @@ def _build_s232(rules: list[Ch99Rule], blocks: dict[int, str], idx: RegimeIndex,
              | table_codes(between(n38, r"\n\s*\(c\)\s+Heading 9903\.74\.02",
                                    r"\n\s*\(d\)\s+Heading 9903\.74\.03")))
     if pv and heavy and whole:
-        vehicles = VehicleIndex(dom(pv), dom(heavy), dom(whole), deals("9903.94.31", "9903.94.69"))
+        by_origin = deals("9903.94.31", "9903.94.69")
+        pairs: dict[str, tuple[str, str]] = {}
+        parts_rules = [r for r in rules
+                       if _in_range(r.hts, "9903.94.31", "9903.94.69") and r.threshold_pct is not None
+                       and (r.description or "").startswith("Parts of passenger vehicles and light trucks")
+                       and not re.search(r"subdivisions? \(r\)", r.description or "")]
+        for iso in by_origin:
+            mine = sorted((r for r in parts_rules if any(country_code(c) == iso for c in r.countries)),
+                          key=lambda r: r.hts)
+            hi = [r.hts for r in mine if r.threshold_above is True]
+            lo = [r.hts for r in mine if r.threshold_above is False]
+            if len(hi) == 1 and len(lo) == 1:
+                pairs[iso] = (hi[0], lo[0])
+        vehicles = VehicleIndex(dom(pv), dom(heavy), dom(whole), by_origin, pairs)
 
     wood = None
     n37 = blocks.get(37, "")
@@ -495,7 +545,8 @@ def _build_s232(rules: list[Ch99Rule], blocks: dict[int, str], idx: RegimeIndex,
     cab = table_codes(between(n37, r"\n\s*\(f\)\s+Except for as provided by heading 9903\.76\.04, the rates",
                               r"\n\s*\(g\)\s+Heading"))
     if soft and uph and cab:
-        wood = WoodIndex(dom(soft), dom(uph), dom(cab), deals("9903.76.20", "9903.76.24"))
+        own = {iso: sorted(h)[0] for iso, h in deals("9903.76.20", "9903.76.24").items() if len(h) == 1}
+        wood = WoodIndex(dom(soft), dom(uph), dom(cab), own)
 
     if not (metals or vehicles or wood):
         return None
@@ -511,7 +562,7 @@ def _build_s232(rules: list[Ch99Rule], blocks: dict[int, str], idx: RegimeIndex,
 
 def build_index(rules: list[Ch99Rule], scopes: dict, raw_notes: str,
                 exceptions: dict[str, Note52Exception],
-                as_of: date | None = None) -> RegimeIndex:
+                as_of: date | None = None, shaded: set[str] | frozenset[str] = frozenset()) -> RegimeIndex:
     """Assemble the index from the parsed rules and the notes text."""
     idx = RegimeIndex(as_of=as_of or date.today())
     by = {r.hts: r for r in rules}
@@ -582,6 +633,20 @@ def build_index(rules: list[Ch99Rule], scopes: dict, raw_notes: str,
             if _in_range(h, lo, hi):
                 idx.expired.setdefault(
                     h, f"U.S. note {n} records these provisions as expired or terminated")
+    for h in shaded:
+        if h in by:
+            idx.expired[h] = "the published schedule shades this provision as expired"
+    for lo, hi in _suspended_ranges(raw_notes):
+        for h in by:
+            if _in_range(h, lo, hi):
+                idx.expired.setdefault(
+                    h, "the schedule's notes record this provision as suspended pursuant to executive action")
+    for heads, when in _ceased_headings(blocks):
+        if idx.as_of > when:
+            for h in heads:
+                if h in by:
+                    idx.expired.setdefault(
+                        h, f"its U.S. note bars any duty under it after {when.isoformat()}")
     for lo, hi, when, why in KNOWN_EXPIRED:
         if idx.as_of > when:
             for h in by:

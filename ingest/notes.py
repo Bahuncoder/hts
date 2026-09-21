@@ -228,6 +228,24 @@ def extract_exceptions(raw: str, lo: str = "9903.05.85",
     return {h: set(e.codes) for h, e in extract_note52(raw, lo, hi).items()}
 
 
+_COUNTRY_STATEMENT = re.compile(
+    r"As provided in (?:sub)?headings?\s+([^\n]*(?:\n[^\n]+){0,3}?),?\s+products? of "
+    r"([A-Z][A-Za-z ]+?) shall be subject")
+
+
+def country_statements(raw: str) -> list[tuple[frozenset[str], str]]:
+    """Notes that say which country a group of headings charges ("As provided in
+    headings 9903.91.01 ... and subheading 9903.92.10, products of China shall
+    be subject to additional ad valorem rates"). A heading whose own text names
+    no country would otherwise be charged to every origin."""
+    out = []
+    for m in _COUNTRY_STATEMENT.finditer(raw):
+        heads = frozenset(re.findall(r"9903\.\d{2}\.\d{2}", m.group(1)))
+        if heads:
+            out.append((heads, m.group(2).strip()))
+    return out
+
+
 def load(path: str) -> dict[str, NoteScope]:
     with open(path, errors="ignore") as fh:
         return extract(fh.read())

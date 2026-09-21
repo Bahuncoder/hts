@@ -30,7 +30,7 @@ adduser --system --group htsdesk
 git clone <repo> /opt/htsdesk && cd /opt/htsdesk
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # pinned; never an unpinned pip install
-apt-get install -y poppler-utils          # pdftotext, for the Chapter 99 Notes
+apt-get install -y poppler-utils python3-pil   # pdftotext/pdftoppm and Pillow: Chapter 99 notes and their expired-row shading
 
 .venv/bin/python ingest/refresh.py        # HTS + Notes + Federal Register
 .venv/bin/python ingest/cross.py          # 200k ruling metadata, ~15 min

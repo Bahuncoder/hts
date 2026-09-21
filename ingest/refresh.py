@@ -32,6 +32,7 @@ HTS_URL = ("https://hts.usitc.gov/reststop/exportList"
 CH99_URL = ("https://hts.usitc.gov/reststop/file"
             "?release=currentRelease&filename=Chapter%2099")
 
+MIN_SHADING_HEADINGS = 300
 KEEP_RELEASES = 3
 # Well under the current ~30,000 schedule rows: enough to reject an error page
 # or a truncated body before spending time on a build.
@@ -57,6 +58,12 @@ def check_downloads(release: Path) -> None:
             f"rows, expected at least {MIN_SCHEDULE_ROWS:,}")
     if "9903" not in (release / "chapter99.txt").read_text(errors="ignore"):
         raise SystemExit("refresh aborted: Chapter 99 text has no 9903 headings")
+    marks = json.loads((release / "chapter99_expired.json").read_text())
+    if marks.get("headings_checked", 0) < MIN_SHADING_HEADINGS or not marks.get("expired"):
+        raise SystemExit(
+            f"refresh aborted: the shading pass checked {marks.get('headings_checked', 0)} "
+            f"headings and found {len(marks.get('expired', []))} expired; a layout change "
+            "would leave every old sanction looking live")
 
 
 def prune(releases: Path, active: Path) -> None:
@@ -82,6 +89,9 @@ def main() -> None:
         subprocess.run(
             ["pdftotext", "-layout", str(release / "chapter99.pdf"),
              str(release / "chapter99.txt")], check=True)
+        # Expired provisions are marked only by yellow shading in the PDF.
+        subprocess.run([sys.executable, "-m", "ingest.shading", str(release / "chapter99.pdf"),
+                        str(release / "chapter99_expired.json")], check=True, cwd=ROOT)
         check_downloads(release)
 
         # Exits non-zero, publishing nothing, if validation fails.

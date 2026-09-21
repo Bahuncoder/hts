@@ -87,40 +87,57 @@ before claiming anything for it.
   materials, Chapter 98 claims). Products on the note's pure code-list exceptions
   are exempt; products on its use-conditional lists (civil-aircraft parts,
   pharmaceutical articles) are exempt only when the importer states that end
-  use. Still flagged, deliberately (fail closed): whole vehicles, pharmaceutical (232) and semiconductor articles, and every
-  deal origin's own structure for vehicle parts and upholstered furniture.
+  use. Still flagged, deliberately (fail closed): whole vehicles,
+  pharmaceutical (232) and semiconductor articles, and the U.K.'s
+  vehicle-parts heading (its "10%" does not say what it is a rate on).
   Section 232 metals (note 16), vehicle parts (notes 33, 38) and wood (note 37)
   are resolved: metals need the metal weight only outside chapters 72-76;
   vehicle parts need the importer to say whether the goods are parts of a
   passenger vehicle, a heavy-duty vehicle, or neither; a stated use never
-  comes from the code. The note-52 civil-aircraft and pharmaceutical
-  exceptions apply only on a stated end use and are otherwise assumed
-  unclaimed (the quote says so). Whatever the quote could not settle names the
-  fact that would settle it (`facts_needed`).
+  comes from the code. For the EU, Japan, South Korea and Taiwan the parts and
+  upholstered-furniture headings are their own: parts are topped up to 15%
+  (unless the column 1 rate is already 15% or more), furniture and cabinets are
+  15% flat (every code on those lists is duty-free at column 1); the U.K.
+  furniture heading adds 10%. The note-52 civil-aircraft and pharmaceutical
+  exceptions apply only when the importer states that end use and are
+  otherwise assumed unclaimed (the quote says so). Whatever the quote could
+  not settle names the fact that would settle it (`facts_needed`).
   Origins with a deal structure are resolved for ordinary goods: the UK,
   Malaysia, Taiwan and others take only their own exception list; Canada and
   Mexico owe the note-52 duty unless USMCA free treatment is claimed (`program`
   `S`); Guatemala and El Salvador likewise for CAFTA-DR (`P`); a claim is
   assumed to qualify. Measured on a 1,500-line sample (metals chapters 72, 73,
   76 excluded) with no facts stated: 79.8 % of quotes are complete for China,
-  Canada and the UK (Germany 79.7 %, Japan 77.8 %); with a quantity for every
-  per-unit line, 90.4 % (Japan 88.1 %); with metal weight and vehicle use also
-  stated, 94.9 % (China). At the previous commit Germany and Japan were 0 %.
-  What is left is whole vehicles and heavy-duty vehicles, deal-origin (EU,
-  Japan, Korea, Taiwan, UK) vehicle parts, pharmaceutical 232 and
-  semiconductors, and per-unit forms it cannot price (sliding scales, "on
-  copper content").
+  Germany, Korea, Taiwan and the UK (Japan 77.9 %); with metal weight, vehicle
+  use and a quantity for every per-unit line, 94.9 % for China, 94.4 % for
+  Germany, Korea and Taiwan, 92.2 % for Japan, 92.6 % for the UK. At the
+  measurement's start Germany and Japan were 0 %.
+  What is left is whole vehicles and heavy-duty vehicles, the U.K.'s parts
+  heading, pharmaceutical 232 and semiconductors, and per-unit forms it cannot
+  price (sliding scales, "on copper content").
+  **Expired provisions.** The schedule marks an expired provision only by
+  yellow shading in the PDF, which the extracted text loses, so old sanctions
+  read as live duties: a 200% replacement rate on every cheese and wine quote,
+  25% on every tire quote, 100% on Japanese tools and computers, and a 100%
+  crane duty on every origin. `ingest/shading.py` now reads the shading (it
+  needs poppler and Pillow; the refresh aborts if it finds nothing), the notes'
+  own statements ("suspended pursuant to executive action", "no duty after the
+  close of ...") and each provision's stated effective dates are applied, and a
+  note that names the country for a list of headings supplies it to headings
+  that do not.
   Found and fixed while building this: 121 rules named a Chapter 99 exception
   as their base subheading and never matched (all 9903.02 reciprocal duties
   among them); note 51's three Canada headings shared one merged 554-code list;
   the 9903.02 reciprocal duties are IEEPA and now feed the refund estimate
   (flagged unscoped) instead of vanishing; U.S. note 31 (Section 301) had been
   counted as a Section 232 note, flagging its 990 lines for every origin.
-- **Two editorial facts must be re-verified each refresh.** The engine reads
-  expiry from the schedule's compiler's notes where they exist, but the
-  Section 122 surcharge (9903.03.01–.11) is not yet marked expired there, so its
-  expiry on 2026-07-24 is an editorial override in `core/regimes.py`
-  (`KNOWN_EXPIRED`), taken from Proclamation 11012 and public reporting. The
+- **One editorial fact must be re-verified each refresh.** The engine reads
+  expiry from the compiler's notes, the schedule's yellow shading and each
+  provision's stated dates. The published shading agrees that the Section 122
+  surcharge (9903.03.01–.11) has expired, so its 2026-07-24 date in
+  `core/regimes.py` (`KNOWN_EXPIRED`) is corroborated; but the shading lags
+  the law in places (9903.91.04 ended 2026-01-01 and is still unshaded), which
+  is why stated dates are applied as well. The
   reading of note 52 (apply to everything not excepted) follows the note's own
   text in 52(a) but has not been confirmed by a customs broker or attorney.
 - Quantity-based duties (cents/kg, $/each) are priced only when the caller
@@ -132,8 +149,8 @@ before claiming anything for it.
   rate (no 85 % U.S.-melted, 95 % U.K. or use-in-U.S.-manufacturing claim), no
   manufacturer import-adjustment offset, and no importer certification for
   automobile parts outside the enumerated list. These can only raise the
-  estimate. Not modelled: whole vehicles, the deal-origin vehicle-part and
-  furniture headings, pharmaceutical (note 40) and semiconductor (note 39)
+  estimate. Not modelled: whole vehicles, the U.K.'s vehicle-part heading,
+  importer-certified automobile parts, pharmaceutical (note 40) and semiconductor (note 39)
   articles.
 - AD/CVD orders are not integrated (separate CBP/ITA dataset). For many
   China/Vietnam/India goods this is the largest omitted charge and is **not

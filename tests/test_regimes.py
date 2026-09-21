@@ -296,8 +296,14 @@ def _():
     r = quote(chair, "Vietnam")
     assert any("9903.76.02" in x for x in labels(r)) and not any("9903.05.84" in x for x in labels(r)), labels(r)
     assert r.as_dict()["complete"] is True, (r.scope_unverified, r.incomplete)
-    eu = quote(chair, "Germany")
-    assert eu.scope_unverified and eu.as_dict()["complete"] is False, "an EU origin was priced at the ordinary rate"
+    for origin, heading in (("Germany", "9903.76.22"), ("Japan", "9903.76.21"), ("South Korea", "9903.76.23"),
+                            ("Taiwan", "9903.76.24")):
+        d = quote(chair, origin)
+        assert any(heading in x for x in labels(d)) and not any("9903.76.02" in x for x in labels(d)), (origin, labels(d))
+        assert str(d.components[0].amount) == "1500.00" and d.as_dict()["complete"] is True, (origin, d.components)
+    uk = quote(chair, "United Kingdom")
+    assert any("9903.76.20" in x for x in labels(uk)) and next(
+        c.amount for c in uk.components if "9903.76.20" in c.label) == 1000, labels(uk)
     lumber = next(l.hts for l in E.tree.leaves if w.softwood.covers(l.digits))
     r = quote(lumber, "Canada")
     assert any("9903.76.01" in x for x in labels(r)), labels(r)
@@ -322,10 +328,28 @@ def _():
     assert any("9903.05.31" in x for x in labels(other)) and not any("9903.94" in x for x in labels(other)), labels(other)
     heavy = E.quote(hts=code, country="China", value=10000, vehicle_use="heavy")
     assert not any("9903.94" in x for x in labels(heavy)), "a code not on the heavy-duty list was charged as a heavy part"
-    deal = E.quote(hts=code, country="Japan", value=10000, vehicle_use="passenger")
-    assert deal.scope_unverified and not any("9903.94.05" in x for x in labels(deal)), "a deal origin was priced at the ordinary 25%"
+    uk = E.quote(hts=code, country="United Kingdom", value=10000, vehicle_use="passenger")
+    assert uk.scope_unverified and not any("9903.94.05" in x for x in labels(uk)), "the U.K. was priced at the ordinary 25%"
     mx = E.quote(hts=code, country="Mexico", value=10000, vehicle_use="passenger", preference_program="S")
     assert not any("9903.94.05" in x for x in labels(mx)), labels(mx)
+
+
+@real("Section 232 vehicle parts, deal origins: the EU, Japan, Korea and Taiwan top the total up to exactly 15%")
+def _():
+    v = E.regimes.s232.vehicles
+    code = next(l.hts for l in E.tree.leaves
+                if v.pv_parts.covers(l.digits) and not v.heavy_parts.covers(l.digits)
+                and not v.vehicles.covers(l.digits)
+                and "%" in E.tree.effective_rate_cell(l.hts, "general")[0]
+                and 0 < float(E.tree.effective_rate_cell(l.hts, "general")[0].rstrip("%")) < 15)
+    mfn = float(E.tree.effective_rate_cell(code, "general")[0].rstrip("%"))
+    for origin in ("Germany", "France", "Japan", "South Korea", "Taiwan"):
+        r = E.quote(hts=code, country=origin, value=10000, vehicle_use="passenger")
+        assert r.as_dict()["complete"] is True, (origin, r.scope_unverified, r.incomplete)
+        parts = [c for c in r.components if "9903.94" in c.label]
+        assert len(parts) == 1 and "tops the duty up to 15%" in parts[0].label, (origin, [c.label for c in r.components])
+        assert float(next(c.amount for c in r.components if c.label.startswith("MFN")) + parts[0].amount) == 1500.0, (origin, mfn)
+        assert not any("9903.05" in c.label for c in r.components), origin
 
 
 @real("an unrecognised vehicle use is refused")

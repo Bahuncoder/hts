@@ -372,7 +372,7 @@ def resolve_ch99(
     for r in rules:
         if r.suspended:
             continue
-        if regimes is not None and regimes.is_expired(r):
+        if regimes is not None and (regimes.is_expired(r) or regimes.not_yet(r)):
             continue
         if r.countries and not any(_origin_key(x) == origin for x in r.countries):
             continue

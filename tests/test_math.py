@@ -456,6 +456,70 @@ def _():
         assert not any("9903.94" in c.label or "9903.74" in c.label for c in r.components), (l.hts, [c.label for c in r.components])
 
 
+def quote_of(code, origin):
+    return E.quote(hts=code, country=origin, value=10000, quantity=1)
+
+
+@real("expired, suspended and terminated provisions are not charged (200% cheese and wine, 25% tires, 100% Japanese tools)")
+def _():
+    def leaf(prefix):
+        return next(l.hts for l in E.tree.leaves if l.hts.startswith(prefix))
+    for prefix, origin in (("0406.20.44", "Vietnam"), ("0406.20.44", "Netherlands"), ("2204.21.20", "Vietnam"),
+                           ("4011.10.10", "Vietnam"), ("8467.29", "Japan"), ("8471.49", "Japan")):
+        r = quote_of(leaf(prefix), origin)
+        bad = [c.label for c in r.components if any(h in c.label for h in ("9903.04.", "9903.40.", "9903.41.1", "9903.41.2", "9903.41.3"))]
+        assert not bad, (prefix, origin, bad)
+        assert all(float(c.rate_pct or 0) < 100 for c in r.components if "Duty per" in c.label), (prefix, origin)
+
+
+@real("no ordinary quote is charged a replacement rate of 100% or more (the signature of an expired sanction)")
+def _():
+    hits = []
+    for l in random.Random(9).sample([x for x in E.tree.leaves if not x.hts.startswith(("98", "99"))], 1500):
+        for origin in ("Vietnam", "Germany"):
+            r = quote_of(l.hts, origin)
+            hits += [(l.hts, origin, c.label) for c in r.components
+                     if "Duty per" in c.label and float(c.rate_pct or 0) >= 100]
+    assert not hits, hits[:5]
+
+
+@real("a provision's own effective dates decide whether it is in force: ended ones are dropped, future ones wait")
+def _():
+    from datetime import date
+    from core.regimes import build_index
+    by = {r.hts: r for r in E.ch99}
+    raw = open(NOTES, errors="ignore").read()
+    now = build_index(E.ch99, E.scopes, raw, {}, as_of=date(2026, 9, 20))
+    later = build_index(E.ch99, E.scopes, raw, {}, as_of=date(2026, 12, 1))
+    assert now.is_expired(by["9903.91.04"]) and not now.is_expired(by["9903.91.05"])   # ended 2026-01-01
+    assert now.is_expired(by["9903.88.50"]) and not now.is_expired(by["9903.88.69"])   # exclusion through 2026-11-09
+    assert later.is_expired(by["9903.88.69"])
+    assert now.not_yet(by["9903.91.14"]) and now.not_yet(by["9903.91.12"])             # from 2026-11-10
+    assert not later.not_yet(by["9903.91.14"])
+
+
+@real("headings a note attributes to one country charge only that country (ship-to-shore cranes are China's, not everyone's)")
+def _():
+    by = {r.hts: r for r in E.ch99}
+    assert by["9903.91.14"].countries == ["China"] and by["9903.92.10"].countries == ["China"]
+    crane = next(l.hts for l in E.tree.leaves if l.hts.startswith("8426.19"))
+    vn = quote_of(crane, "Vietnam")
+    assert not any("9903.9" in c.label for c in vn.components), [c.label for c in vn.components]
+    cn = quote_of(crane, "China")
+    assert any("9903.92.10" in c.label for c in cn.components), [c.label for c in cn.components]
+
+
+@real("the shading pass marks the schedule's expired provisions (yellow rows) and only those")
+def _():
+    import json as _json
+    marks = _json.loads((ROOT / "data" / "chapter99_expired.json").read_text())
+    exp = set(marks["expired"])
+    assert marks["headings_checked"] >= 300
+    assert {"9903.41.15", "9903.41.20", "9903.41.25", "9903.04.15", "9903.40.05", "9903.03.01"} <= exp
+    assert not ({"9903.41.05", "9903.41.10", "9903.05.31", "9903.88.69", "9903.94.05"} & exp)
+    assert E.shading_loaded
+
+
 @real("property: pricing is deterministic")
 def _():
     l = sample_lines(1, 5)[0]

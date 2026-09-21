@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 from enum import Enum
 
 
@@ -42,6 +43,11 @@ class Ch99Rule:
     # percent"). threshold_above is True for the first form.
     threshold_pct: float | None = None
     threshold_above: bool | None = None
+    # "Effective with respect to entries on or after A, and through/before B":
+    # the provision applies from `effective_from` up to (not including)
+    # `effective_to`. None means unbounded on that side.
+    effective_from: date | None = None
+    effective_to: date | None = None
 
 
 # Order matters: most specific first.
@@ -74,8 +80,39 @@ _BASE_REF = re.compile(r"provided\s+for\s+in\s+(?:subheadings?|headings?)?\s*([\
 _EXCEPT = re.compile(r"^Except\s+for\s+(?:products|articles)\s+described\s+in\s+(?:subheadings?|headings?)\s+([\d.,\s]+(?:or\s+[\d.]+)?)", re.I)
 
 _THRESHOLD = re.compile(
-    r"ad valorem \(or ad valorem equivalent\) rate of duty under column 1\s+"
-    r"(equal to or greater than|less than)\s+([\d.]+)\s+percent", re.I)
+    r"ad valorem \(or ad valorem equivalent.{0,160}?rate of duty under column\s*1"
+    r"(?:-General(?: or column 1-Special)?)?\s+"
+    r"(equal to or greater than|less than)\s+([\d.]+)\s+percent", re.I | re.S)
+
+_EFFECTIVE_LEAD = re.compile(r"^\s*(?:Notwithstanding[^,]*,\s*)?[Ee]ffective\b")
+_DATE = r"([A-Z][a-z]+ \d{1,2},? \d{4})"
+_FROM = re.compile(r"on or after\s+(?:[^,]{0,80}?\bon\s+)?" + _DATE)
+_UNTIL = re.compile(r"(?:and\s+)?(through|before|prior to)\s+" + _DATE)
+
+
+def _parse_date(text: str) -> date | None:
+    try:
+        return datetime.strptime(text.replace(",", ""), "%B %d %Y").date()
+    except ValueError:
+        return None
+
+
+def parse_window(desc: str) -> tuple[date | None, date | None]:
+    """The entry-date window a provision states about itself, if it opens with
+    "Effective with respect to entries ...". `through D` includes D."""
+    head = (desc or "")[:400]
+    if not _EFFECTIVE_LEAD.match(head):
+        return None, None
+    m = _FROM.search(head)
+    start = _parse_date(m.group(1)) if m else None
+    end = None
+    u = _UNTIL.search(head[m.end():] if m else head)
+    if u:
+        d = _parse_date(u.group(2))
+        if d:
+            end = d + timedelta(days=1) if u.group(1) == "through" else d
+    return start, end
+
 
 _STOPWORDS = {"The", "Articles", "Except", "United States", "U", "US"}
 
@@ -154,6 +191,7 @@ def parse_rule(row: dict) -> Ch99Rule:
     exc_m = _EXCEPT.match(desc)
     base_m = _BASE_REF.search(desc)
     th = _THRESHOLD.search(desc)
+    start, end = parse_window(desc)
     return Ch99Rule(
         hts=row.get("htsno", ""),
         effect=effect,
@@ -166,4 +204,6 @@ def parse_rule(row: dict) -> Ch99Rule:
         raw_rate=raw.strip(),
         threshold_pct=float(th.group(2)) if th else None,
         threshold_above=(th.group(1).lower().startswith("equal")) if th else None,
+        effective_from=start,
+        effective_to=end,
     )

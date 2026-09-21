@@ -8,8 +8,9 @@ for one code, origin and set of importer-stated facts with one of
     unknown      it might, and the quote must say so
 
 Regimes: metals (note 16, core/metals.py), vehicle parts (notes 33 and 38),
-and wood products (note 37). Whole vehicles, pharmaceuticals, semiconductors
-and every deal-specific origin structure stay unknown; nothing here guesses.
+and wood products (note 37), including the EU, Japan, Korea and Taiwan deal
+headings. Whole vehicles, pharmaceuticals, semiconductors and the U.K.'s parts
+heading stay unknown; nothing here guesses.
 
 Cross-regime rules come from the notes themselves: parts of passenger and
 heavy vehicles are carved out of the metals duties (notes 33(f)(1), 38(h)(1)),
@@ -71,6 +72,11 @@ class VehicleIndex:
     heavy_parts: "Domain"                        # noqa: F821  38(i)
     vehicles: "Domain"                           # noqa: F821  33(b), 38(b), 38(c)
     deal_headings: dict[str, frozenset[str]]     # origin -> its own 9903.94/.74 headings
+    # origin -> the (at-or-above, below) threshold headings for parts of passenger
+    # vehicles: the EU, Japan, South Korea and Taiwan top the total duty up to 15%.
+    # The U.K.'s parts heading states a bare "10%" whose base is not stated, so it
+    # has no entry here and stays unknown.
+    parts_deals: dict[str, tuple[str, str]] = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         return bool(self.pv_parts) and bool(self.heavy_parts)
@@ -95,6 +101,13 @@ class VehicleIndex:
             return Selection(assumptions=[
                 f"The goods are stated to be {VEHICLE_USES[use]}, but their code is not on that "
                 "regime's parts list, so its duty is not charged."])
+        if use == "passenger" and origin in self.parts_deals:
+            pair = self.parts_deals[origin]
+            return Selection("subject", headings=pair, assumptions=[
+                f"The goods are stated to be {VEHICLE_USES[use]} of this origin, so the deal "
+                f"headings {pair[0]}/{pair[1]} apply instead of 9903.94.05: the duty is topped up "
+                "to 15% unless the column 1 rate is already 15% or more (U.S. note 33(l)-(u)). "
+                "No importer certification for automobile production or repair is assumed."])
         if use == "passenger" and origin in self.deal_headings:
             return Selection("unknown", candidates=("9903.94.05", *self.deal_headings[origin]))
         usmca = program in USMCA_PROGRAMS and origin in USMCA_ORIGINS
@@ -116,7 +129,7 @@ class WoodIndex:
     softwood: "Domain"                           # noqa: F821  37(b)  -> 9903.76.01
     upholstered: "Domain"                        # noqa: F821  37(d)  -> 9903.76.02
     cabinets: "Domain"                           # noqa: F821  37(f)  -> 9903.76.03
-    deal_headings: dict[str, frozenset[str]]
+    origin_heading: dict[str, str]               # origin -> its 9903.76.20-.24 heading
 
     def __bool__(self) -> bool:
         return bool(self.softwood) and bool(self.upholstered) and bool(self.cabinets)
@@ -129,16 +142,28 @@ class WoodIndex:
         return Selection("subject", headings=tuple(hits))
 
     def for_origin(self, sel: Selection, origin: str) -> Selection:
-        """Upholstered furniture and cabinets have their own headings for the
-        U.K., E.U., Japan, Korea and Taiwan; those origins stay unknown."""
-        own = self.deal_headings.get(origin)
-        if sel.status == "subject" and own and any(h != "9903.76.01" for h in sel.headings):
-            return Selection("unknown", candidates=(*sel.headings, *own))
-        if sel.status == "subject" and any(h == "9903.76.03" for h in sel.headings):
-            sel.assumptions.append(
+        """Upholstered furniture and cabinets have their own heading for the
+        U.K. (+10%) and for the E.U., Japan, Korea and Taiwan (15%, in lieu of
+        the ordinary rate). Every code on these lists is duty-free at column 1,
+        so the two readings of "15%" agree."""
+        own = self.origin_heading.get(origin)
+        if sel.status != "subject":
+            return sel
+        heads = tuple(h for h in sel.headings if h == "9903.76.01")
+        deal = [h for h in sel.headings if h != "9903.76.01"]
+        assumptions = list(sel.assumptions)
+        if deal and own:
+            heads += (own,)
+            assumptions.append(
+                f"The goods are of an origin with its own wood heading, so {own} applies instead "
+                f"of {' / '.join(deal)}.")
+        else:
+            heads += tuple(deal)
+        if "9903.76.03" in deal:
+            assumptions.append(
                 "The goods are assumed to be completed wooden kitchen cabinets or vanities, "
                 "or parts of them (U.S. note 37(f)-(g)).")
-        return sel
+        return Selection("subject", headings=heads, assumptions=assumptions)
 
 
 @dataclass
