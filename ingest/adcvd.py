@@ -197,9 +197,30 @@ def _rank(title: str) -> int:
     t = title.lower()
     if t.startswith(MONTHLY_TITLE.lower()):
         return 9
-    if "continuation of" in t or re.search(r"(?:antidumping|countervailing) duty order", t) and "review" not in t:
+    # A correction or a circumvention finding is a follow-on notice *about*
+    # the order, not the order's own scope text — either can contain the
+    # literal words "antidumping duty order" or "final determination" (a
+    # correction fixing an unrelated paragraph, a circumvention finding on
+    # one derivative product) without restating, or even mentioning, the
+    # HTS list. Left unguarded, one of these can outrank — and so get tried
+    # before — the actual order, continuation or suspension notice that
+    # carries it. A scope clarification is judged on its own merits: it
+    # sometimes narrows or restates the list, sometimes (as with a
+    # certification-only change) never mentions it, so it is worth trying
+    # but not worth preferring over the order itself.
+    followon = "correction" in t or "circumvention" in t
+    if not followon and (
+            "continuation of" in t
+            # A suspension agreement is the order-equivalent document for a
+            # case resolved that way (the monthly notice groups it with
+            # "Order, Finding, or Suspended Investigation" for exactly this
+            # reason); its own notice is where the scope was first stated.
+            or re.search(r"suspension of (?:the )?(?:antidumping|countervailing) duty investigation", t)
+            or (re.search(r"(?:antidumping|countervailing) duty order", t) and "review" not in t)):
         return 0
-    if "preliminary" in t and "review" in t or "amended final" in t or "final determination" in t:
+    if not followon and (
+            "clarification of the scope" in t
+            or "preliminary" in t and "review" in t or "amended final" in t or "final determination" in t):
         return 1
     if "final results" in t:
         return 2

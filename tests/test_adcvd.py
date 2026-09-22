@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.adcvd import AdcvdIndex, Order  # noqa: E402
-from ingest.adcvd import _own_case, country_iso, parse_list, scope_hts  # noqa: E402
+from ingest.adcvd import _own_case, _rank, country_iso, parse_list, scope_hts  # noqa: E402
 
 _results: list[tuple[str, str, str]] = []
 
@@ -272,6 +272,40 @@ def _():
 @check("own-case: a document with no header bracket at all returns 'unknown', not a false negative")
 def _():
     assert _own_case(HEADER_MISSING, "A-351-860") is None
+
+
+@check("rank: a correction notice never outranks the order it corrects, even reusing its exact phrase")
+def _():
+    order = "Antidumping Duty Order on Hydrofluorocarbon Blends From the People's Republic of China"
+    correction = ("White Grape Juice Concentrate From Argentina: Preliminary Affirmative Countervailing "
+                  "Duty Determination and Alignment of Final Determination With the Final Antidumping "
+                  "Duty Determination; Correction")
+    assert _rank(order) == 0
+    assert _rank(correction) > _rank(order), (correction, _rank(correction))
+
+
+@check("rank: a circumvention finding never outranks the order, though its title contains 'duty order'")
+def _():
+    circumvention = ("Antidumping Duty Order on Hydrofluorocarbon Blends From the People's Republic of "
+                      "China: Final Negative Determination of Circumvention With Respect to Certain Blends")
+    assert _rank(circumvention) > 0, circumvention
+
+
+@check("rank: a suspension agreement notice ranks with the order — it is the order-equivalent document")
+def _():
+    assert _rank("White Grape Juice Concentrate From Argentina: Suspension of Countervailing Duty Investigation") == 0
+
+
+@check("rank: a scope clarification is tried early even when its title omits the order's own phrasing")
+def _():
+    # Most real clarification titles repeat "... Antidumping Duty Order" and
+    # already rank with the order itself (fine — both are genuine
+    # scope-bearing candidates). This checks the branch that catches a
+    # clarification phrased without that, which would otherwise fall all the
+    # way to the bottom tier alongside an ordinary administrative notice.
+    bare = "Certain Widgets From Elsewhere: Clarification of the Scope"
+    assert _rank(bare) == 1, bare
+    assert _rank(bare) < _rank("Certain Widgets From Elsewhere: Final Results of Administrative Review")
 
 
 HTS, NOTES = ROOT / "data" / "hts_2026.json", ROOT / "data" / "chapter99.txt"
