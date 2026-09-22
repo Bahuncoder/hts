@@ -190,6 +190,23 @@ def scope_hts(text: str) -> list[str]:
         for m in re.finditer(r"Harmonized Tariff Schedule|\bHTSUS\b", body):
             codes |= {c.replace(".", "") for c in
                      _HTS_DOTTED.findall(body[max(0, m.start() - 1500):m.end() + 200])}
+    if not codes:
+        # Last resort: a scope naming only bare headings, no subheading
+        # digits at all ("... classified ... : 0702.", nothing after the
+        # decimal — Fresh Tomatoes From Mexico's order, A-201-820). Neither
+        # tier above catches this: it is not dotted, and "heading(s)" does
+        # not sit next to the number here (a long clause intervenes). A bare
+        # 4-digit number is unguarded elsewhere in this module for exactly
+        # the reason the docstring gives — "2020." reads as a year, a dollar
+        # figure as a code — so this only reads a window immediately BEFORE
+        # Commerce's own standard disclaimer, "the HTSUS numbers are
+        # provided for convenience ... the written description ... is
+        # dispositive," which in the corpus this was checked against never
+        # follows anything but an actual HTS list (and never even appears in
+        # a scope section with no HTS list at all).
+        for m in re.finditer(r"for\s+convenience", body, re.I):
+            window = body[max(0, m.start() - 300):m.start()]
+            codes |= {c for c in re.findall(r"\b(\d{4})\.(?:\s|,|\s+and\b|\s+or\b)", window)}
     return sorted(c for c in codes if not c.startswith(("98", "99")))
 
 

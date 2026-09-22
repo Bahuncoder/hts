@@ -141,6 +141,43 @@ def _():
     assert {"9404210010", "9404210013", "9404291095"} <= set(scope_hts(APPENDIX))
 
 
+# Real language, adapted from Fresh Tomatoes From Mexico's order (A-201-820,
+# 2025-13453): a bare heading, no subheading digits at all, which matches
+# neither the dotted pattern nor "heading(s) NNNN" — the word "subheading"
+# here sits nowhere near the number.
+BARE_HEADING = """
+Scope of the Order
+
+    The merchandise subject to the order is all fresh or chilled
+tomatoes. Tomatoes imported from Mexico covered by this order are
+classified under the following subheading of the Harmonized Tariff
+Schedule of the United States (HTSUS), according to the season of
+importation: 0702. Although the HTSUS numbers are provided for
+convenience and customs purposes, the written description of the scope
+of this order is dispositive.
+"""
+
+
+@check("scope: a scope naming only a bare heading (no subheading digits at all) is read from just before the standard disclaimer")
+def _():
+    assert scope_hts(BARE_HEADING) == ["0702"]
+
+
+NO_CODES_NEAR_CONVENIENCE = """
+Scope of the Order
+
+    The merchandise subject to this order is described in Appendix I,
+available for convenience at the Department's public file, docket
+number 2020, filed under 19 CFR 351.225. The written description
+governs.
+"""
+
+
+@check("scope: an unrelated 4-digit number merely near the word 'convenience' is not read as a code")
+def _():
+    assert scope_hts(NO_CODES_NEAR_CONVENIENCE) == []
+
+
 ORDERS = [
     Order("A-570-909", "AD", "CHINA", "CN", "Certain Steel Nails", frozenset({"731700", "7907"})),
     Order("A-570-190", "AD", "CHINA", "CN", "Abrasive Grains", frozenset()),
@@ -370,6 +407,13 @@ def _():
         code = next(l.hts for l in E.tree.leaves if l.hts.startswith(prefix))
         r = E.quote(hts=code, country=origin, value=10000)
         assert any(o["case"] == case for o in r.adcvd), (prefix, origin, case, [o["case"] for o in r.adcvd])
+
+
+@real("real orders: fresh tomatoes from Mexico are matched — the bare-heading scope_hts fallback, end to end")
+def _():
+    code = next(l.hts for l in E.tree.leaves if l.hts.startswith("0702.00"))
+    r = E.quote(hts=code, country="Mexico", value=10000)
+    assert any(o["case"] == "A-201-820" for o in r.adcvd), [o["case"] for o in r.adcvd]
 
 
 @real("real orders: an ordinary garment is not flagged, and every order carries an ISO country")
