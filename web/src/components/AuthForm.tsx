@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { startTransition, useActionState } from "react";
 import Link from "next/link";
 import type { FormState } from "@/lib/actions";
 
@@ -38,7 +38,23 @@ export function AuthForm({
         <p className="text-[15px] text-muted">{blurb}</p>
       </div>
 
-      <form action={formAction} className="space-y-4">
+      <form
+        // Submitting the native way (action={formAction}) stops resubmitting
+        // after a first non-revalidating response in this Next.js build (a
+        // failed sign-in returns only its error, with no page re-render, and
+        // the client's sequential action dispatcher never unblocks for the
+        // next submit). Driving the same action explicitly, from a fresh
+        // FormData snapshot on every submit, sidesteps whatever state that
+        // native binding gets stuck in.
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          startTransition(() => {
+            formAction(data);
+          });
+        }}
+        className="space-y-4"
+      >
         {Object.entries(hidden ?? {}).map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
