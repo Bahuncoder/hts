@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AuthForm, AuthFooterLink } from "@/components/AuthForm";
 import { signUpAction } from "@/lib/actions";
 import { currentViewer } from "@/lib/auth";
+import { googleEnabled } from "@/lib/googleAuth";
 import { nextQuery, safeNext } from "@/lib/next";
 
 export const metadata = { title: "Create an account" };
@@ -28,6 +29,7 @@ export default async function SignUpPage({
         submit="Create account"
         newPassword
         hidden={next ? { next } : undefined}
+        googleHref={googleEnabled() ? `/api/auth/google${nextQuery(next)}` : undefined}
         heading="Create an account"
         blurb="Free. Classify and price up to 200 products at a time."
         footer={

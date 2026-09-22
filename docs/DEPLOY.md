@@ -67,7 +67,10 @@ SITE_URL=https://yourdomain.com
 ```
 
 plus the email-provider, `HTSDESK_EMAIL_SECRET` and
-`HTSDESK_SIGNING_SECRET` values from `.env.example`. The signing secret makes
+`HTSDESK_SIGNING_SECRET` values from `.env.example`, and optionally
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (from Google Cloud Console, redirect
+URI `<SITE_URL>/api/auth/google/callback`) to offer "Continue with Google" —
+left unset, sign-in is email/password only. The signing secret makes
 saved catalogues server-produced (the audit proxy signs each result and saving
 verifies it), so it must be **identical on every instance or Vercel
 deployment** that serves the web app; without any secret, audits still run but

@@ -32,6 +32,7 @@ tables in an existing accounts database are left dormant, not dropped.
 | Free model and limits | No payments. Anonymous: 25 products per audit, 3 audits per 10 minutes, 150 items per rolling 24 h. Signed-in account: 200 products per audit, 10 audits per hour, 2,000 items per rolling 24 h, 20 saved catalogues, alert emails on (opt-out). All numbers live in `web/src/lib/plans.ts` |
 | Alerts | outbox with exact-id claims, bounded retries, cursor paging with lookback, failures never advance the cursor |
 | Public cost controls | request/item budgets per client or account, one audit in flight per caller, streamed body cap |
+| Sign-in | email/password, plus optional "Continue with Google" (authorization-code flow, state-cookie CSRF check, unverified emails refused) when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set; unset, the button does not render and the route 404s |
 | Accounts store | libSQL (Turso in production, embedded file in development) |
 
 ## Test coverage
@@ -46,6 +47,7 @@ tables in an existing accounts database are left dormant, not dropped.
 | `web` `npm run test:integration` | 86 | real routes over scratch databases with fake engine/mail servers |
 | browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 67 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
 | browser suites (`make test-ui`, `test-draft`, `test-contrast`) | 42 | workspace UI and self-hosted fonts (10), audit-survives-sign-up draft and `?next=` allowlist (21), measured WCAG contrast in light/dark (11) |
+| `web` `npm run test:google` | 12 | Google sign-in against a fake Google: new/existing account, unverified email, cancelled consent, CSRF and single-use state, feature-off gating |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
 evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
