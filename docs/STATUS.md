@@ -153,17 +153,32 @@ before claiming anything for it.
   importer-certified automobile parts, pharmaceutical (note 40) and semiconductor (note 39)
   articles.
 - **Antidumping and countervailing duty (AD/CVD) orders are flagged, not priced.**
-  `ingest/adcvd.py` reads the twelve latest monthly "Opportunity To Request
-  Administrative Review" notices (every order in effect, by country and case
-  number) and each order's scope from its order, continuation or latest review
-  notice, taking the HTS numbers Commerce lists. A quote whose code and origin
-  match an order is marked incomplete, names the case, and leaves out the cash
-  deposit, which depends on the exporter. Limits, all stated by the product:
-  Commerce lists HTS numbers "for convenience" (the written scope decides), so
-  a product an order covers but does not list is missed; an order whose scope
-  lists no HTS number cannot be matched (counted per quote as unchecked); no
-  scope rulings, circumvention findings, exclusions or exporter rates are read.
-  The absence of a flag is not proof that no order applies.
+  `ingest/adcvd.py` reads the thirteen latest monthly "Opportunity To Request
+  Administrative Review" notices (every order in effect, 713 of them, by
+  country and case number) and searches each case's full notice history —
+  not just its most recent notices — for whichever one states its scope's HTS
+  numbers most fully; 703 of 713 (98.6%) now resolve one, up from 683 (95.8%)
+  before two extraction bugs were fixed. A quote whose code and origin match
+  an order is marked incomplete, names the case, and leaves out the cash
+  deposit, which depends on the exporter.
+  Two correctness fixes matter here specifically because a wrong match would
+  be worse than a missed one: (1) a case number appearing anywhere in a
+  notice's text — a footnote citing a companion proceeding, a combined notice
+  for several countries — does not mean the notice is about that case, so a
+  candidate is only accepted when the case is one of the numbers the Federal
+  Register brackets at the top of the notice, where it states which case(s)
+  it concerns; (2) the plain-text conversion wraps prose to a fixed width, so
+  an ordinary word can start a new line by chance mid-sentence ("the Final
+  LTFV\nDetermination to reflect..."), which previously looked enough like a
+  section heading to cut a scope's extraction short — a stop now requires the
+  phrase to sit alone on its own line. `tests/test_adcvd.py` pins both bugs
+  with fixtures reproducing them.
+  Limits that remain, all stated by the product: Commerce lists HTS numbers
+  "for convenience" (the written scope decides), so a product an order covers
+  but does not list is missed; an order whose scope lists no HTS number
+  cannot be matched (counted per quote as unchecked); no scope rulings,
+  circumvention findings, exclusions or exporter rates are read. The absence
+  of a flag is not proof that no order applies.
 - MPF preference exemptions are not modelled; the assumptions list says so.
 - The IEEPA "refundable" figure is a scenario estimate for one entry at the
   entered value. There is no entry date, paid duty or liquidation status, so it

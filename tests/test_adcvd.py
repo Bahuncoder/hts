@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.adcvd import AdcvdIndex, Order  # noqa: E402
-from ingest.adcvd import country_iso, parse_list, scope_hts  # noqa: E402
+from ingest.adcvd import _own_case, country_iso, parse_list, scope_hts  # noqa: E402
 
 _results: list[tuple[str, str, str]] = []
 
@@ -165,6 +165,115 @@ def _():
     assert o.covers("7604210010") and o.covers("7610900000") and not o.covers("7610100000")
 
 
+
+WRAPPED_FALSE_STOP = """
+Scope of the Order
+
+    The product covered by this order is widgets from Ruritania. The
+merchandise is currently classifiable under HTSUS subheadings 7202.21.1000,
+7202.21.5000, and 7202.29.0010.
+
+Amendment to the Final LTFV
+Determination to reflect a ministerial error
+
+    We determine that we made certain ministerial errors in the sales at LTFV
+final determination. Widgets are further classifiable under subheading
+9999.99.9999, which is far past where extraction should have stopped.
+
+Scope Comments
+
+    Interested parties may request scope rulings.
+"""
+
+
+@check("scope: a common word that merely starts a wrapped line (mid-sentence) does not truncate the scope section early")
+def _():
+    got = set(scope_hts(WRAPPED_FALSE_STOP))
+    assert {"7202211000", "7202215000", "7202290010"} <= got, got
+    assert "9999999999" not in got, "ran past 'Scope Comments' into the next section"
+
+
+DEFERRED_APPENDIX = """
+Scope of the Orders
+
+    The product covered by these orders is ferrosilicon from Ruritania. For a
+complete description of the scope of the orders, see the appendix to this
+notice.
+
+Amendment to the Final LTFV
+Determination to reflect a ministerial error
+
+    Nothing relevant here, and no repeated "Scope of the Order" heading below.
+
+Appendix
+
+    The scope of these orders covers all forms and sizes of ferrosilicon.
+Ferrosilicon is currently classifiable under subheadings 7202.21.1000,
+7202.21.5000, 7202.21.7500, 7202.21.9000, 7202.29.0010, and 7202.29.0050 of
+the Harmonized Tariff Schedule of the United States (HTSUS). While the HTSUS
+numbers are provided for convenience, the written description is dispositive.
+"""
+
+
+@check("scope: an appendix that defers without repeating the 'Scope of the Order' heading is still found, from before the HTSUS phrase")
+def _():
+    got = set(scope_hts(DEFERRED_APPENDIX))
+    assert {"7202211000", "7202215000", "7202217500", "7202219000", "7202290010", "7202290050"} <= got, got
+
+
+HEADER_SHARED = """
+Federal Register, Volume 90
+
+
+DEPARTMENT OF COMMERCE
+
+International Trade Administration
+
+[A-351-860, A-834-812, A-557-828]
+
+
+Ferrosilicon From Malaysia: Amended Final Determination; Ferrosilicon From
+Brazil, Kazakhstan, and Malaysia: Antidumping Duty Orders
+"""
+
+HEADER_UNRELATED = """
+Federal Register, Volume 66
+
+
+DEPARTMENT OF COMMERCE
+
+International Trade Administration
+
+[A-560-811; A-455-803; A-823-809; A-822-804, A-570-860, A-580-844]
+
+
+Antidumping Duty Orders: Steel Concrete Reinforcing Bars From Several Countries
+
+    ... later in the body, an unrelated footnote happens to cite A-351-860
+    as a companion proceeding, which must not be read as this document
+    being about that case.
+"""
+
+HEADER_MISSING = "Some old-format document with no bracketed case-number header at all."
+
+
+@check("own-case: a case listed in the header bracket (singly or in a combined notice) is recognised as this document's own")
+def _():
+    assert _own_case(HEADER_SHARED, "A-351-860") is True
+    assert _own_case(HEADER_SHARED, "A-834-812") is True
+
+
+@check("own-case: a case merely mentioned in body text, absent from the header bracket, is rejected — not a false match")
+def _():
+    assert _own_case(HEADER_UNRELATED, "A-351-860") is False, (
+        "a footnote citing an unrelated case number was read as this document being about it")
+
+
+@check("own-case: a document with no header bracket at all returns 'unknown', not a false negative")
+def _():
+    assert _own_case(HEADER_MISSING, "A-351-860") is None
+
+
 HTS, NOTES = ROOT / "data" / "hts_2026.json", ROOT / "data" / "chapter99.txt"
 DATA = ROOT / "data" / "adcvd_orders.json"
 E = None
@@ -209,7 +318,7 @@ def _():
     assert len(data["orders"]) > 400, len(data["orders"])
     assert all(o.get("iso") for o in data["orders"]), [o["country"] for o in data["orders"] if not o.get("iso")]
     with_hts = sum(1 for o in data["orders"] if o["hts"])
-    assert with_hts / len(data["orders"]) > 0.8, f"only {with_hts} of {len(data['orders'])} orders list HTS numbers"
+    assert with_hts / len(data["orders"]) > 0.95, f"only {with_hts} of {len(data['orders'])} orders list HTS numbers"
 
 
 def main() -> int:

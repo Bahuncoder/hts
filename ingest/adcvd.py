@@ -6,7 +6,21 @@ publishes each month a notice listing every order whose anniversary falls in
 that month ("Antidumping or Countervailing Duty Order, Finding, or Suspended
 Investigation; Opportunity To Request Administrative Review"); the twelve most
 recent together are the orders in effect. Each order's scope, with the HTS
-subheadings Commerce lists for convenience, is read from its most recent notice.
+subheadings Commerce lists for convenience, is read from whichever of its own
+notices states the fullest list — often the original order or a continuation,
+sometimes only a later administrative review — searched across the case's
+full history, not just its most recent notices.
+
+Two things make that search reliable rather than merely broad. First, a case
+number can turn up in an unrelated document (a footnote citing a companion
+proceeding, a combined notice for several countries) without that document
+being about it; `_own_case` reads the case numbers the Federal Register
+brackets at the top of every notice — where it says which case(s) the notice
+actually concerns — and a candidate whose bracket excludes the case is
+skipped. Second, the Federal Register's own text is wrapped to a fixed width,
+so an ordinary word can start a new line by chance in the middle of a
+sentence; `_SCOPE_END` only stops a scope section at a heading recognisable by
+sitting alone on its line, not by that accident.
 
 What this gives a quote is a flag, never a figure: which orders may reach this
 product from this country. The duty itself depends on the exporter and is not
@@ -132,10 +146,22 @@ _HTS_DOTTED = re.compile(r"\b(\d{4}\.\d{2}(?:\.\d{2,4}(?:\.\d{2})?)?)\b")
 _HEADING_WORD = re.compile(
     r"\b(?:sub)?headings?\s+((?:\d{4}(?:\.\d{2}){0,3}(?:\s*(?:,|and|or|through)\s*)?)+)", re.I)
 _SCOPE_HEAD = re.compile(r"\n\s*Scope of the (?:Order|Orders|Antidumping Duty Order|Countervailing Duty Order)[^\n]*\n")
+# A stop phrase must sit alone on its own line — the plain-text conversion
+# wraps prose at a fixed width, so a short common word ("Determination",
+# "Verification") can start a wrapped line by pure chance in the middle of a
+# sentence ("the Malaysia Final LTFV\nDetermination to reflect ..."). Requiring
+# nothing but whitespace before the next newline is what tells a real section
+# heading (alone on its line) from that kind of accident.
 _SCOPE_END = re.compile(
-    r"\n\s*(?:Scope Comments|Scope Rulings|Analysis of Comments|Discussion of the Issues|"
-    r"Determination|Product Characteristics|Verification|Final Results|Preliminary Results|"
-    r"Affiliation|Applicable|Methodology|Use of|Date of|Period of|Final Determination)\b")
+    r"\n\s*(?:Scope Comments|Scope Rulings|Analysis of Comments(?: and Recommendations)?|"
+    r"Discussion of the Issues|Product Characteristics|Verification|"
+    r"(?:Amended )?Final (?:Results|Determination)(?: of (?:Sales|the Review|Review))?|"
+    r"(?:Amended )?Preliminary (?:Results|Determination)(?: of (?:Sales|the Review|Review))?|"
+    r"Successor[- ]in[- ]Interest|Separate Rates?|Surrogate (?:Country|Value)s?|"
+    r"(?:Application|Use) of (?:Adverse )?Facts Available|Critical Circumstances|"
+    r"Cash Deposit (?:Requirements|Rates?)|Assessment Rates?|Disclosure|"
+    r"Administrative Protective Order|Notification (?:to|Regarding)|ITC Notification)"
+    r"\s*\n")
 
 
 def scope_hts(text: str) -> list[str]:
@@ -155,10 +181,15 @@ def scope_hts(text: str) -> list[str]:
         for w in _HEADING_WORD.finditer(part):
             codes |= {c.replace(".", "") for c in re.findall(r"\d{4}(?:\.\d{2}){0,3}", w.group(1))}
     if not codes:
-        # No scope heading carries the list: take dotted numbers that follow a
-        # mention of the tariff schedule ("classifiable under HTSUS ...").
-        for m in re.finditer(r"HTSUS|Harmonized Tariff Schedule", body):
-            codes |= {c.replace(".", "") for c in _HTS_DOTTED.findall(body[m.end():m.end() + 1500])}
+        # No scope heading carried the list (an appendix that defers to
+        # "see the appendix" without repeating the heading, or a scope section
+        # cut short by an unrelated word like "Determination" appearing soon
+        # after). A number list almost always comes right BEFORE the phrase
+        # "of the Harmonized Tariff Schedule of the United States (HTSUS)",
+        # not after, so the window looks backward.
+        for m in re.finditer(r"Harmonized Tariff Schedule|\bHTSUS\b", body):
+            codes |= {c.replace(".", "") for c in
+                     _HTS_DOTTED.findall(body[max(0, m.start() - 1500):m.end() + 200])}
     return sorted(c for c in codes if not c.startswith(("98", "99")))
 
 
@@ -175,19 +206,51 @@ def _rank(title: str) -> int:
     return 5
 
 
+_HEADER_CASES = re.compile(r"International Trade Administration\s*\n+\s*\[([^\]]{3,400})\]")
+
+
+def _own_case(body: str, case: str) -> bool | None:
+    """Whether the case numbers bracketed at the top of a notice — where the
+    Federal Register cites exactly which case(s) it concerns, singly or as a
+    combined multi-country notice — include this one. A case number can turn
+    up elsewhere in a document (a cross-reference, a footnote, a table of
+    unrelated companion orders) without the document being about it, which
+    text search alone cannot tell apart; this can. None means the header was
+    not found (an unusual format), and the caller decides how to treat that."""
+    m = _HEADER_CASES.search(body[:2500])
+    if not m:
+        return None
+    found = {f"{g[0]}-{g[1]}-{g[2]}" for g in CASE.findall(m.group(1))}
+    return case in found
+
+
 def latest_scope(case: str) -> dict | None:
-    """HTS list from the best recent notice that quotes this case's scope: the
-    order or its continuation, else a preliminary or final review."""
-    d = _search(per_page=30, order="newest", **{
-        "conditions[term]": f'"{case}"',
+    """HTS list from the best notice that quotes this case's scope: the order
+    or its continuation, else a preliminary or final review.
+
+    The case number ("A-533-877") is searched with its digit groups
+    space-separated rather than as a quoted, hyphenated phrase: the Federal
+    Register's search treats a quoted "A-533-877" as a single literal token
+    that many of a case's own notices do not match verbatim (a rendering
+    difference in how the case number is printed), which silently starved the
+    candidate pool. A 100-notice pool, not 30, matters for a case with decades
+    of administrative reviews: the original order notice — the one most likely
+    to carry the scope in full — sorts oldest within its rank and can fall
+    outside a smaller page."""
+    term = case.replace("-", " ")
+    d = _search(per_page=100, order="newest", **{
+        "conditions[term]": term,
         "conditions[agencies][]": "international-trade-administration",
         "conditions[type][]": "NOTICE",
         "fields[]": ["title", "publication_date", "document_number", "raw_text_url"]})
     cands = sorted((r for r in d.get("results", []) if _rank(r["title"]) < 9),
                    key=lambda r: (_rank(r["title"]), -int(r["publication_date"].replace("-", ""))))
     first = None
-    for r in cands[:4]:
-        hts = scope_hts(_get(r["raw_text_url"]))
+    for r in cands[:8]:
+        body = _plain(_get(r["raw_text_url"]))
+        if _own_case(body, case) is False:
+            continue                              # this notice is about a different case
+        hts = scope_hts(body)
         got = {"source": r["document_number"], "source_date": r["publication_date"],
                "title": r["title"][:140], "hts": hts}
         first = first or got
@@ -212,9 +275,11 @@ def build(today: date | None = None, previous: dict | None = None) -> dict:
             orders.setdefault(o["case"], {**o, "listed_in": n["document_number"]})
     for i, (case, o) in enumerate(sorted(orders.items())):
         old = known.get(case)
-        if old and old.get("fetched") and not old.get("error") and (
-                now - date.fromisoformat(old["fetched"])).days < REUSE_DAYS and (
-                old.get("hts") or old.get("source")):
+        # An empty HTS list is retried every build: it is as likely to be a
+        # search miss as a genuinely code-free scope, and the miss is the kind
+        # this module keeps getting better at avoiding.
+        if old and old.get("fetched") and not old.get("error") and old.get("hts") and (
+                now - date.fromisoformat(old["fetched"])).days < REUSE_DAYS:
             o.update({k: old.get(k) for k in ("source", "source_date", "title", "hts", "fetched")})
             continue
         try:
