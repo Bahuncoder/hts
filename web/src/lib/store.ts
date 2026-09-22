@@ -211,20 +211,35 @@ async function init(c: Client): Promise<void> {
 
   if (!REMOTE_URL) {
     try { fs.chmodSync(LOCAL_PATH, 0o600); } catch { /* not ours to change */ }
+    for (const sidecar of [`${LOCAL_PATH}-wal`, `${LOCAL_PATH}-shm`]) {
+      try { fs.chmodSync(sidecar, 0o600); } catch { /* may not exist */ }
+    }
   }
 }
 
 /** Additive column migrations. SQLite has no IF NOT EXISTS for ADD COLUMN, so
  *  the current columns are read first. */
-async function addColumns(c: Client, table: string, columns: Record<string, string>): Promise<void> {
+export async function addColumns(c: Client, table: string, columns: Record<string, string>): Promise<void> {
   const info = await c.execute(`PRAGMA table_info(${table})`);
   const have = new Set(info.rows.map((r) => r.name as string));
   for (const [name, ddl] of Object.entries(columns)) {
-    if (!have.has(name)) await c.execute(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
+    if (!have.has(name)) {
+      try { await c.execute(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`); }
+      catch (error) {
+        // Another application instance may have completed the same additive
+        // migration after our PRAGMA. Ignore only that verified race.
+        const current = await c.execute(`PRAGMA table_info(${table})`);
+        if (!current.rows.some((r) => r.name === name)) throw error;
+      }
+    }
   }
 }
 
 async function migrate(c: Client): Promise<void> {
+  await c.batch([
+    "DELETE FROM watched_code WHERE catalogue_id IS NULL AND rowid NOT IN (SELECT MIN(rowid) FROM watched_code WHERE catalogue_id IS NULL GROUP BY account_id,digits)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS watched_standalone_unique ON watched_code(account_id,digits) WHERE catalogue_id IS NULL",
+  ], "write");
   await addColumns(c, "account", {
     alert_emails: "INTEGER NOT NULL DEFAULT 1",
     email_verified_at: "TEXT",
@@ -249,6 +264,8 @@ async function migrate(c: Client): Promise<void> {
   // before this have status NULL and are labelled as such rather than
   // guessed at.
   await addColumns(c, "catalogue_item", {
+    evidence_json: "TEXT",
+    review_version: "INTEGER NOT NULL DEFAULT 0",
     row_number: "INTEGER",
     status: "TEXT",
     error: "TEXT",
@@ -265,6 +282,9 @@ async function migrate(c: Client): Promise<void> {
     totals_complete: "INTEGER",
     calculated_at: "TEXT",
     mpf: "REAL",
+    // lib/catalogues.ts reads and writes this column; without it, saving or
+    // opening any catalogue fails outright (SQLITE_ERROR: no such column).
+    landed_cost_json: "TEXT",
   });
 }
 

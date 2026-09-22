@@ -95,10 +95,13 @@ export async function chargeAudit(subject: string, tier: Tier, items: number): P
  *  caller is over `limit`. Refused hits are not recorded. */
 export async function allow(scope: string, subject: string, limit: Limit): Promise<number | null> {
   await sweep();
-  const wait = await waitFor(scope, subject, limit, 1);
-  if (wait) return wait;
-  await record(scope, subject, new Date().toISOString(), 1);
-  return null;
+  const now = Date.now();
+  const result = await (await db()).execute({
+    sql: `INSERT INTO usage_event(scope,subject,at,cost) SELECT ?,?,?,1
+      WHERE (SELECT coalesce(sum(cost),0) FROM usage_event WHERE scope = ? AND subject = ? AND at >= ?) < ?`,
+    args: [scope, subject, new Date(now).toISOString(), scope, subject, new Date(now - limit.windowMs).toISOString(), limit.max],
+  });
+  return result.rowsAffected ? null : (await waitFor(scope, subject, limit, 1)) || 1;
 }
 
 /** One in-flight audit per subject. Returns a release function, or null when

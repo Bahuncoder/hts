@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Badge } from "@/components/ui";
 import { PartialMark, StatusChip } from "@/components/status";
 import { bucketOf, countLines, type AuditLine, type Bucket } from "@/lib/auditModel";
+import { landedCost, type LandedCostInputs } from "@/lib/landedCost";
+import CostInputs from "@/components/CostInputs";
 
 export type AuditSummary = {
   submitted: number;
@@ -35,6 +37,26 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "ready", label: "Ready" },
   { id: "failed", label: "Failed" },
 ];
+
+function LandedCostPanel({ goods, duty, inputs, onChange, partial }: { goods: number; duty: number; inputs: LandedCostInputs; onChange: (costs: LandedCostInputs) => void; partial: boolean }) {
+  const [open, setOpen] = useState(false);
+  let result = null, error = "";
+  try { result = landedCost(goods, duty, inputs); } catch (e) { error = (e as Error).message; }
+  return <section className="mt-5 rounded border border-rule bg-paper p-4" aria-label="Landed cost estimate">
+    <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+      <span><span className="eyebrow">Scenario tool</span><span className="mt-1 block text-[16px] font-semibold">Estimate landed cost</span></span>
+      <span className="text-sm text-muted">{open ? "Hide" : "Add import costs"} <span aria-hidden="true">{open ? "↑" : "↓"}</span></span>
+    </button>
+    {open ? <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_280px]">
+      <div><p className="mb-3 text-[13px] text-muted">Add costs outside the tariff calculation. These assumptions are included when you save the catalogue. Do not add MPF or HMF again.</p>
+        {partial && <p role="status" className="text-caution-ink">Partial estimate: unresolved products or duties are missing from these totals.</p>}
+        <CostInputs value={inputs} onChange={onChange} />
+        {error && <p role="alert">{error}</p>}
+      </div>
+      <div className="rounded border border-rule bg-surface p-4"><div className="lbl">{partial ? "Partial landed estimate" : "Estimated landed cost"} (USD)</div><div className="mono mt-1 text-2xl font-semibold">{money(result?.landed)}</div><div className="mt-1 text-xs text-muted">{result?.landedRatePct.toFixed(2) ?? "—"}% of goods value</div><dl className="mt-4 space-y-2 text-sm"><div className="flex justify-between"><dt>Goods</dt><dd className="mono">{money(goods)}</dd></div><div className="flex justify-between"><dt>Duty and fees</dt><dd className="mono">{money(duty)}</dd></div><div className="flex justify-between"><dt>Added costs</dt><dd className="mono">{money(result?.totalExtras)}</dd></div></dl></div>
+    </div> : null}
+  </section>;
+}
 
 function Metric({
   label, value, sub, partial, tone,
@@ -169,8 +191,10 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
 }
 
 export default function AuditResults({
-  summary, lines, inputs,
+  summary, lines, inputs, landedCosts, onCostsChange,
 }: {
+  landedCosts: LandedCostInputs;
+  onCostsChange: (costs: LandedCostInputs) => void;
   summary: AuditSummary;
   lines: AuditLine[];
   /** The amount submitted for each line, shown where a line carries none. */
@@ -261,6 +285,7 @@ export default function AuditResults({
           sub={`${counts.review.toLocaleString()} to review · ${counts.failed.toLocaleString()} failed`}
         />
       </div>
+      <LandedCostPanel goods={summary.entered_value} duty={summary.duty} inputs={landedCosts} onChange={onCostsChange} partial={partial} />
 
       <details className="text-[13px]">
         <summary className="cursor-pointer text-muted hover:underline">

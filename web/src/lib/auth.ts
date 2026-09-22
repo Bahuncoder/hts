@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { accountById, accountByEmail, createAccount, db, type Account } from "./store";
 import { LIMITS, type Limits } from "./plans";
+import { insertSession } from "./credentialStore";
 
 const COOKIE = "htsdesk_session";
 const SESSION_DAYS = 30;
@@ -56,28 +57,17 @@ export function passwordProblem(password: string): string | null {
 }
 
 export async function signUp(email: string, password: string,
-                             opts: { verified?: boolean } = {}): Promise<{ id: string }> {
+                             opts: { verified?: boolean } = {}): Promise<{ id: string; passwordHash: string }> {
   const id = crypto.randomUUID();
-  await createAccount(id, email.trim().toLowerCase(), hashPassword(password));
+  const passwordHash = hashPassword(password);
+  await createAccount(id, email.trim().toLowerCase(), passwordHash);
   if (opts.verified) {
     await (await db()).execute({
       sql: "UPDATE account SET email_verified_at = ? WHERE id = ?",
       args: [new Date().toISOString(), id],
     });
   }
-  return { id };
-}
-
-export async function setPassword(accountId: string, password: string): Promise<void> {
-  const c = await db();
-  await c.execute({
-    sql: "UPDATE account SET password_hash = ? WHERE id = ?",
-    args: [hashPassword(password), accountId],
-  });
-  // Every existing session is invalidated: a reset is what someone does when
-  // they believe the account is compromised, and leaving the intruder signed
-  // in defeats the point.
-  await c.execute({ sql: "DELETE FROM session WHERE account_id = ?", args: [accountId] });
+  return { id, passwordHash };
 }
 
 export async function markEmailVerified(accountId: string): Promise<void> {
@@ -87,7 +77,7 @@ export async function markEmailVerified(accountId: string): Promise<void> {
   });
 }
 
-export async function authenticate(email: string, password: string): Promise<string | null> {
+export async function authenticate(email: string, password: string): Promise<{ id: string; passwordHash: string } | null> {
   const acct = await accountByEmail(email.trim().toLowerCase());
   if (!acct) {
     // Hash anyway so a missing account is not detectably faster than a wrong
@@ -95,16 +85,13 @@ export async function authenticate(email: string, password: string): Promise<str
     hashPassword(password);
     return null;
   }
-  return verifyPassword(password, acct.password_hash) ? acct.id : null;
+  return verifyPassword(password, acct.password_hash) ? { id: acct.id, passwordHash: acct.password_hash } : null;
 }
 
-export async function startSession(accountId: string): Promise<void> {
+export async function startSession(accountId: string, expectedHash: string): Promise<boolean> {
   const token = crypto.randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
-  await (await db()).execute({
-    sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?, ?, ?)",
-    args: [token, accountId, expires.toISOString()],
-  });
+  if (!await insertSession(accountId, expectedHash, token, expires.toISOString())) return false;
   (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -112,6 +99,7 @@ export async function startSession(accountId: string): Promise<void> {
     path: "/",
     expires,
   });
+  return true;
 }
 
 export async function endSession(): Promise<void> {

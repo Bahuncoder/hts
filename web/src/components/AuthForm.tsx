@@ -68,9 +68,17 @@ export function AuthForm({
               autoComplete={newPassword ? "new-password" : "current-password"}
               className="field-control"
               style={field}
+              // The wrapping label also contains the hint text below, which
+              // would otherwise run into this field's accessible name (a
+              // screen reader announcing "New password At least 10
+              // characters" as the field's name, not its description). An
+              // explicit label keeps the name exactly "New password" /
+              // "Password"; the hint stays linked as a description.
+              aria-label={newPassword ? "New password" : "Password"}
+              aria-describedby={newPassword ? "new-password-hint" : undefined}
             />
             {newPassword ? (
-              <span className="block text-[12px] text-faint">
+              <span id="new-password-hint" className="block text-[12px] text-faint">
                 At least 10 characters.
               </span>
             ) : null}

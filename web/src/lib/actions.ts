@@ -3,17 +3,19 @@
 import { redirect } from "next/navigation";
 import {
   authenticate, currentViewer as _viewer, endSession, hashPassword,
-  markEmailVerified, passwordProblem, setPassword, signUp, startSession,
+  markEmailVerified, passwordProblem, signUp, startSession,
   validEmail,
 } from "./auth";
 import crypto from "node:crypto";
 import { accountByEmail, accountById, createAccount } from "./store";
-import { checkThrottle, clearAttempts, recordFailure } from "./throttle";
+import { checkThrottle, clearAttempts } from "./throttle";
+import { resetCredential } from "./credentialStore";
 import { audit } from "./audit";
 import { emailEnabled, send } from "./email";
 import { passwordResetEmail, verifyEmail } from "./emails/auth";
 import { consume, issue } from "./tokens";
 import { safeNext } from "./next";
+import { EMPTY_COSTS, parseCosts } from "./landedCost";
 
 export type FormState = { error?: string; notice?: string };
 
@@ -52,7 +54,6 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
       const mail = verifyEmail(token);
       await send({ ...mail, to: email, kind: "email_verify" });
     }
-    await recordFailure("signup", email);
     return { notice: "Check your inbox — we have sent you a link to finish signing in." };
   }
 
@@ -60,19 +61,19 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
   // duplicate case is visible; the throttle above is what keeps the resulting
   // oracle from being harvested.
   if (existing) {
-    await recordFailure("signup", email);
     return { error: "An account with that email already exists. Sign in instead." };
   }
 
-  const { id } = await signUp(email, password);
+  const { id, passwordHash } = await signUp(email, password);
   await audit("signup", { accountId: id, email, detail: "email unverified (no provider)" });
-  await startSession(id);
+  if (!await startSession(id, passwordHash)) return { error: "Credentials changed. Please sign in again." };
   redirect(safeNext(form.get("next")) ?? "/account");
 }
 
 export async function loginAction(_prev: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "").trim();
   const password = String(form.get("password") ?? "");
+  if (!validEmail(email) || password.length > 200) return { error: "That email and password do not match." };
 
   // Sign-in was unlimited: twenty wrong passwords in a row were accepted
   // without complaint, which is offline-speed guessing against a known email.
@@ -82,16 +83,16 @@ export async function loginAction(_prev: FormState, form: FormData): Promise<For
     return { error: `Too many sign-in attempts. Try again in ${wait} minutes.` };
   }
 
-  const id = await authenticate(email, password);
+  const credential = await authenticate(email, password);
   // One message for both failures: distinguishing them enumerates accounts.
-  if (!id) {
-    await recordFailure("login", email);
+  if (!credential) {
     await audit("signin_failed", { email });
     return { error: "That email and password do not match." };
   }
+  const { id, passwordHash } = credential;
   await clearAttempts("login", email);
   await audit("signin", { accountId: id, email });
-  await startSession(id);
+  if (!await startSession(id, passwordHash)) return { error: "Credentials changed. Please sign in again." };
   // `next` comes from a hidden field, so it is checked again against the
   // allowlist here rather than trusted (lib/next.ts).
   redirect(safeNext(form.get("next")) ?? "/account");
@@ -129,6 +130,7 @@ export type SavePayload = {
   signed_at: string;
   proof: string | null | undefined;
   inputs?: number[];
+  landedCosts?: unknown;
 };
 
 const RERUN = "These results could not be verified, so they cannot be saved. Run the audit again to save it.";
@@ -193,7 +195,10 @@ export async function saveCatalogueAction(
   const clean = String(p.name ?? "").trim().slice(0, 120) || "Untitled catalogue";
   let id: string;
   try {
-    id = await saveCatalogue(viewer.account.id, clean, body, inputs);
+    let costs;
+    try { costs = parseCosts(p.landedCosts ?? EMPTY_COSTS); }
+    catch (error) { return { error: (error as Error).message }; }
+    id = await saveCatalogue(viewer.account.id, clean, body, inputs, costs);
   } catch (err) {
     // Raised inside the save's own transaction, so it holds under concurrency.
     if (err instanceof CatalogueLimitError) return { error: err.message };
@@ -219,7 +224,8 @@ export async function deleteCatalogueAction(form: FormData): Promise<void> {
 export async function watchCodeAction(form: FormData): Promise<void> {
   const viewer = await currentViewer();
   if (!viewer) return;
-  const hts = String(form.get("hts") ?? "");
+  const hts = String(form.get("hts") ?? "").trim();
+  if (!/^\d{4}(?:\.\d{2}){0,3}$/.test(hts)) return;
   if (String(form.get("watched") ?? "") === "1") {
     await unwatchCode(viewer.account.id, hts);
   } else {
@@ -264,7 +270,6 @@ export async function requestResetAction(_prev: FormState, form: FormData): Prom
       await send({ ...mail, to: email, kind: "password_reset", accountId: account.id });
       await audit("password_reset_requested", { accountId: account.id, email });
     }
-    await recordFailure("reset", email);
   }
 
   return {
@@ -281,18 +286,18 @@ export async function completeResetAction(_prev: FormState, form: FormData): Pro
   const weak = passwordProblem(password);
   if (weak) return { error: weak };
 
-  const claim = await consume("password_reset", token);
-  if (!claim?.accountId) {
+  const passwordHash = hashPassword(password);
+  const accountId = await resetCredential(token, passwordHash);
+  if (!accountId) {
     return { error: "That link has expired or has already been used. Ask for a new one." };
   }
 
-  await setPassword(claim.accountId, password);
-  const account = await accountById(claim.accountId);
+  const account = await accountById(accountId);
   await audit("password_reset_completed", {
-    accountId: claim.accountId, email: account?.email,
+    accountId, email: account?.email,
     detail: "all sessions invalidated",
   });
-  await startSession(claim.accountId);
+  if (!await startSession(accountId, passwordHash)) return { error: "Credentials changed again. Please sign in." };
   redirect("/account");
 }
 
@@ -310,7 +315,6 @@ export async function completeVerifyAction(token: string): Promise<
   if (already) {
     await markEmailVerified(already.id);
     await audit("email_verified", { accountId: already.id, email: claim.email });
-    await startSession(already.id);
     return { ok: true };
   }
 
@@ -323,6 +327,5 @@ export async function completeVerifyAction(token: string): Promise<
   await createAccount(id, claim.email, hash);
   await markEmailVerified(id);
   await audit("signup", { accountId: id, email: claim.email, detail: "email verified" });
-  await startSession(id);
   return { ok: true };
 }

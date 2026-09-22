@@ -113,19 +113,44 @@ if (emailMode) {
     assert.ok(verifyLink, "no verification link in the email");
   });
 
-  await check("the verification link creates the account and signs in", async () => {
+  await check("merely loading the link (a preview, a crawler, an <img>) does not verify or consume it", async () => {
     const { ctx, page } = await newPage();
     await go(page, verifyLink);
+    await page.waitForTimeout(500);
+    // GET only ever renders the confirmation page itself (or, for a
+    // malformed token, bounces to /signup); it never reaches /login, which
+    // is where a completed verification sends the visitor.
+    assert.ok(!/\/login/.test(page.url()), `a bare GET completed verification: ${page.url()}`);
+    await ctx.close();
+  });
+
+  await check("the verification link creates the account, then sends the visitor to sign in with their password", async () => {
+    const { ctx, page } = await newPage();
+    await go(page, verifyLink);
+    // GET only shows a confirmation page (a link preview or crawler stops
+    // here); the account is created by the POST the visitor triggers
+    // themselves, below. Verifying never signs anyone in by itself — a
+    // clickable link is not treated as proof of the password — so the
+    // destination is /login, not /account.
+    await page.click('button[type=submit]');
     await page.waitForTimeout(1500);
-    assert.match(page.url(), /\/account/, `landed on ${page.url()}`);
+    assert.match(page.url(), /\/login/, `landed on ${page.url()}`);
+    // The account now exists and its password works: prove it end to end
+    // rather than trusting the redirect target alone.
+    await page.fill("input[name=email]", email);
+    await page.fill("input[name=password]", PASSWORD);
+    await page.click("button[type=submit]");
+    await page.waitForTimeout(1500);
+    assert.match(page.url(), /\/account/, `login after verifying landed on ${page.url()}`);
     await ctx.close();
   });
 
   await check("a verification link cannot be used twice", async () => {
     const { ctx, page } = await newPage();
     await go(page, verifyLink);
+    await page.click('button[type=submit]');
     await page.waitForTimeout(1500);
-    assert.ok(!/\/account/.test(page.url()), "a spent link still signed someone in");
+    assert.match(page.url(), /\/signup/, `a spent link did not report itself expired: ${page.url()}`);
     await ctx.close();
   });
 

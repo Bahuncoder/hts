@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "./store";
+import type { InStatement } from "@libsql/client";
 
 /** Single-use, expiring tokens for password reset and email verification.
  *
@@ -27,22 +28,23 @@ export async function issue(
   const token = crypto.randomBytes(32).toString("base64url");
   const now = Date.now();
   const c = await db();
+  const statements: InStatement[] = [];
 
   // A new token supersedes any outstanding one of the same kind, so a
   // forwarded older email cannot still be used.
   if (opts.accountId) {
-    await c.execute({
+    statements.push({
       sql: "DELETE FROM auth_token WHERE kind = ? AND account_id = ? AND used_at IS NULL",
       args: [kind, opts.accountId],
     });
   } else if (opts.email) {
-    await c.execute({
+    statements.push({
       sql: "DELETE FROM auth_token WHERE kind = ? AND email = ? AND used_at IS NULL",
       args: [kind, opts.email.toLowerCase()],
     });
   }
 
-  await c.execute({
+  statements.push({
     sql: `INSERT INTO auth_token(token_hash, kind, account_id, email, payload, expires_at, created_at)
           VALUES(?,?,?,?,?,?,?)`,
     args: [
@@ -53,6 +55,7 @@ export async function issue(
       new Date(now).toISOString(),
     ],
   });
+  await c.batch(statements, "write");
   return token;
 }
 

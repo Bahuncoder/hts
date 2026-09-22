@@ -10,6 +10,7 @@ import { DraftNotice, useSavedDraft } from "@/components/DraftNotice";
 import { clearDraft, countRows, writeDraft } from "@/lib/draft";
 import { EXPECTED_FORMAT, SAMPLE_CSV, TEMPLATE_CSV, parseCatalogue } from "@/lib/csvParse";
 import AuditResults, { type AuditSummary } from "./AuditResults";
+import { EMPTY_COSTS } from "@/lib/landedCost";
 
 type AuditResponse = {
   summary: AuditSummary;
@@ -69,6 +70,7 @@ export default function AuditClient({
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
+  const [landedCosts, setLandedCosts] = useState({ ...EMPTY_COSTS });
   const [attempted, setAttempted] = useState(false);
   const [entries, setEntries] = useState("1");
   const [transport, setTransport] = useState<"vessel" | "air">("vessel");
@@ -252,6 +254,7 @@ export default function AuditClient({
         signed_at: response.signed_at ?? "",
         proof: response.proof ?? null,
         inputs: run.inputs,
+        landedCosts,
       });
       if (res.error || !res.id) {
         setSaveError(res.error ?? "Could not save. Try again.");
@@ -513,6 +516,8 @@ export default function AuditClient({
           ) : null}
 
           <AuditResults
+            landedCosts={landedCosts}
+            onCostsChange={setLandedCosts}
             summary={run.response.summary}
             lines={run.response.lines}
             inputs={run.inputs}

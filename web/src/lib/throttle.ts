@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { db } from "./store";
+import { reserveAttempts, AUTH_LIMITS, attemptCutoff as cutoff } from "./attempts";
 
 /** Throttle for credential endpoints.
  *
@@ -7,24 +8,18 @@ import { db } from "./store";
  *  multiplied by the worker count — two workers give an attacker twice the
  *  configured budget — and is lost on every deploy.
  *
- *  Only FAILURES are recorded. An earlier version charged successful sign-ins
- *  too, which meant an office behind one NAT address could lock itself out on
- *  a busy morning: a denial of service against paying customers dressed up as
- *  a security control. Counting is per email *and* per client because either
- *  alone is sidestepped by rotating the other.
+ *  Attempts are reserved before credential or mail work begins. This prevents
+ *  concurrent guesses from all passing a check before failures are recorded.
+ *  A genuine sign-in clears the email bucket; the client request budget stays.
  */
 
-const WINDOW_MINUTES = 15;
+const WINDOW_MINUTES = AUTH_LIMITS.windowMinutes;
 
 // The per-email limit is what actually stops guessing at one account.
-const PER_EMAIL = 8;
+const PER_EMAIL = AUTH_LIMITS.perEmail;
 // Deliberately generous: a whole office shares one address behind NAT. This
 // only needs to catch spraying across many accounts.
-const PER_CLIENT = 60;
-
-function cutoff(): string {
-  return new Date(Date.now() - WINDOW_MINUTES * 60_000).toISOString();
-}
+const PER_CLIENT = AUTH_LIMITS.perClient;
 
 export async function clientId(): Promise<string> {
   const h = await headers();
@@ -35,7 +30,7 @@ export async function clientId(): Promise<string> {
     const fwd = h.get("x-forwarded-for");
     if (fwd) return fwd.split(",").pop()!.trim();
   }
-  return h.get("x-real-ip") ?? "local";
+  return "local";
 }
 
 async function overBy(scope: string, subject: string, limit: number): Promise<number | null> {
@@ -51,27 +46,14 @@ async function overBy(scope: string, subject: string, limit: number): Promise<nu
   return Math.max(1, Math.ceil(waitMs / 60_000));
 }
 
-/** Checked BEFORE authenticating. Returns minutes to wait when over. */
+/** Atomically reserves both buckets BEFORE work. Returns minutes to wait. */
 export async function checkThrottle(scope: string, email: string): Promise<number | null> {
   await sweep();
   const client = await clientId();
+  const reserved = await reserveAttempts(scope, email, client);
+  if (reserved) return null;
   return (await overBy(scope, `email:${email.toLowerCase()}`, PER_EMAIL))
-      ?? (await overBy(scope, `client:${client}`, PER_CLIENT));
-}
-
-/** Called only when an attempt FAILED. A success costs the caller nothing. */
-export async function recordFailure(scope: string, email: string): Promise<void> {
-  const now = new Date().toISOString();
-  const client = await clientId();
-  const c = await db();
-  await c.execute({
-    sql: "INSERT INTO auth_attempt(scope, subject, at) VALUES(?, ?, ?)",
-    args: [scope, `email:${email.toLowerCase()}`, now],
-  });
-  await c.execute({
-    sql: "INSERT INTO auth_attempt(scope, subject, at) VALUES(?, ?, ?)",
-    args: [scope, `client:${client}`, now],
-  });
+      ?? (await overBy(scope, `client:${client}`, PER_CLIENT)) ?? 1;
 }
 
 /** Clears an email's failures after a genuine sign-in, so someone mistyping

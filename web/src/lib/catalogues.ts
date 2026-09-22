@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
+import { EMPTY_COSTS, parseCosts, type LandedCostInputs } from "./landedCost";
+import { type EvidenceSnapshot } from "./evidence";
+import { ensureReviews } from "./review";
 import { db } from "./store";
-import { LIMITS } from "./plans";
+import { LIMITS, MAX_STANDALONE_WATCHES } from "./plans";
 import {
   PRICED_STATUSES, isPriced, totalsOf,
   type SavedLine, type SignedAudit, type Status,
@@ -17,6 +20,9 @@ export type CatalogueSummary = {
 };
 
 export type CatalogueItem = {
+  evidence_json: string | null;
+  review_status: "pending" | "approved" | "changes_requested" | "rejected";
+  review_version: number;
   id: string; row_number: number | null; sku: string | null; description: string;
   country: string; value: number; hts: string | null; digits: string | null;
   confidence: string | null; duty: number | null; effective_rate: number | null;
@@ -28,6 +34,7 @@ export type CatalogueItem = {
 };
 
 export type CatalogueMeta = {
+  landed_cost_json: string | null;
   id: string; name: string; created_at: string; updated_at: string;
   dataset_revision: string | null; assumptions: string[];
   /** null: saved before totals were labelled complete or partial. */
@@ -70,7 +77,7 @@ export class CatalogueLimitError extends Error {
  *  leaves any standalone ones alone.
  */
 export async function saveCatalogue(
-  accountId: string, name: string, audit: SignedAudit, inputs: number[] = [],
+  accountId: string, name: string, audit: SignedAudit, inputs: number[] = [], costs: LandedCostInputs = EMPTY_COSTS,
 ): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -91,10 +98,10 @@ export async function saveCatalogue(
 
     await tx.execute({
       sql: `INSERT INTO catalogue(id, account_id, name, created_at, updated_at,
-              dataset_revision, assumptions_json, totals_complete, calculated_at, mpf)
-            VALUES(?,?,?,?,?,?,?,?,?,?)`,
+              dataset_revision, assumptions_json, totals_complete, calculated_at, mpf, landed_cost_json)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
       args: [id, accountId, name, now, now, audit.dataset_revision,
-        JSON.stringify(audit.assumptions), complete ? 1 : 0, audit.at, audit.mpf],
+        JSON.stringify(audit.assumptions), complete ? 1 : 0, audit.at, audit.mpf, JSON.stringify(parseCosts(costs))],
     });
 
     for (const [n, it] of audit.lines.entries()) {
@@ -103,8 +110,8 @@ export async function saveCatalogue(
       await tx.execute({
         sql: `INSERT INTO catalogue_item(id, catalogue_id, sku, description, country, value,
                 hts, digits, confidence, duty, effective_rate, refundable, scope_unverified,
-                row_number, status, error, review_json, warnings_json, incomplete_json)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                row_number, status, error, review_json, warnings_json, incomplete_json, evidence_json)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         args: [
           crypto.randomUUID(), id, it.sku || null, it.description, it.country,
           it.entered_value ?? inputs[n] ?? 0,
@@ -113,6 +120,7 @@ export async function saveCatalogue(
           it.scope_unverified?.length ? 1 : 0,
           it.row, it.status, it.error ?? null,
           list(it.review_reasons), list(it.warnings), list(it.incomplete),
+          it.evidence ? JSON.stringify(it.evidence satisfies EvidenceSnapshot) : null,
         ],
       });
       if (isWatchable(it) && digits && it.hts) {
@@ -161,10 +169,10 @@ function jsonList(v: unknown): string[] {
 }
 
 export async function getCatalogue(accountId: string, id: string) {
-  const c = await db();
+  const c = await ensureReviews();
   const metaRs = await c.execute({
     sql: `SELECT id, name, created_at, updated_at, dataset_revision, assumptions_json,
-                 totals_complete, calculated_at, mpf
+                 totals_complete, calculated_at, mpf, landed_cost_json
             FROM catalogue WHERE id = ? AND account_id = ?`,
     args: [id, accountId],
   });
@@ -180,9 +188,10 @@ export async function getCatalogue(accountId: string, id: string) {
   });
   const items = (itemsRs.rows as unknown as
     (Omit<CatalogueItem, "review" | "warnings" | "incomplete"> &
-      { review_json: string | null; warnings_json: string | null; incomplete_json: string | null })[])
+      { review_json: string | null; warnings_json: string | null; incomplete_json: string | null; approval_status: CatalogueItem["review_status"] })[])
     .map(({ review_json, warnings_json, incomplete_json, ...it }) => ({
       ...it,
+      review_status: it.approval_status,
       review: jsonList(review_json),
       warnings: jsonList(warnings_json),
       incomplete: jsonList(incomplete_json),
@@ -239,10 +248,12 @@ export async function countCatalogueItems(accountId: string): Promise<number> {
 
 /** A code watched on its own, from a code page rather than a catalogue. */
 export async function watchCode(accountId: string, hts: string): Promise<void> {
+  const normalized = hts.trim().replace(/\./g, "");
+  if (!/^\d{4,10}$/.test(normalized)) return;
   await (await db()).execute({
     sql: `INSERT OR IGNORE INTO watched_code(account_id, digits, hts, catalogue_id, created_at)
-          VALUES(?,?,?,NULL,?)`,
-    args: [accountId, hts.replace(/\./g, ""), hts, new Date().toISOString()],
+          SELECT ?,?,?,NULL,? WHERE (SELECT count(*) FROM watched_code WHERE account_id = ? AND catalogue_id IS NULL) < ?`,
+    args: [accountId, normalized, hts.trim(), new Date().toISOString(), accountId, MAX_STANDALONE_WATCHES],
   });
 }
 

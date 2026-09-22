@@ -10,6 +10,8 @@
  *  they cannot overlap or fall short of the number submitted.
  */
 
+import { projectEvidence, type EvidenceSnapshot } from "./evidence";
+
 export const STATUSES = [
   "error", "unclassified", "not_processed",
   "incomplete", "scope_review", "suffix_review", "low_confidence",
@@ -57,6 +59,7 @@ export type Candidate = {
 export type Alternative = { hts: string; description?: string; general_rate?: string };
 
 export type AuditLine = {
+  evidence?: EvidenceSnapshot;
   row: number;
   sku: string;
   description: string;
@@ -180,6 +183,9 @@ export function projectLine(x: unknown): SavedLine | null {
   set("incomplete", strList(r.incomplete));
   set("review_reasons", strList(r.review_reasons));
   set("scope_unverified", strList(r.scope_unverified));
+  const snapshot = r.evidence ?? (Array.isArray(r.suggested)
+    ? r.suggested[0] ?? { source: "no_classifier_evidence" } : undefined);
+  set("evidence", projectEvidence(snapshot));
   return line;
 }
 

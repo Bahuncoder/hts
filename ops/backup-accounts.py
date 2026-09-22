@@ -30,7 +30,8 @@ def main() -> int:
         print(f"backup: no database at {DB}", file=sys.stderr)
         return 1
 
-    DEST.mkdir(parents=True, exist_ok=True)
+    DEST.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(DEST, 0o700)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     final = DEST / f"accounts-{stamp}.db.gz"
 
@@ -58,9 +59,14 @@ def main() -> int:
         # Write compressed to a temp name, then rename: a reader must never see
         # a half-written backup and take it for a good one.
         part = final.with_suffix(".part")
-        with open(raw, "rb") as fin, gzip.open(part, "wb") as fout:
-            shutil.copyfileobj(fin, fout)
+        # Do not let the process umask decide who can read account backups.
+        fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as fout, open(raw, "rb") as fin:
+            with gzip.GzipFile(fileobj=fout, mode="wb") as compressed:
+                shutil.copyfileobj(fin, compressed)
+        os.chmod(part, 0o600)
         part.replace(final)
+        os.chmod(final, 0o600)
 
     rotate()
     size = final.stat().st_size / 1024

@@ -12,6 +12,7 @@
  *  promises is what the server enforces. Limits may change during the beta.
  */
 export type Tier = "anonymous" | "account";
+export const MAX_STANDALONE_WATCHES = 200;
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

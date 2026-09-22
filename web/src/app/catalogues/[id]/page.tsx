@@ -1,4 +1,8 @@
 import Link from "next/link";
+import SavedCosts from "@/components/SavedCosts";
+import ReviewWorkspace from "@/components/ReviewWorkspace";
+import { listReviews } from "@/lib/reviews";
+import { EMPTY_COSTS, parseCosts } from "@/lib/landedCost";
 import { notFound, redirect } from "next/navigation";
 import { currentViewer } from "@/lib/auth";
 import {
@@ -72,6 +76,7 @@ export default async function CataloguePage({
   const sp = await searchParams;
   const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) notFound();
+  const history = await listReviews(viewer.account.id, cat.id);
 
   const legacy = cat.items.length > 0 && cat.items.every((i) => i.status === null);
   const totals = catalogueTotals(cat.items, cat.mpf);
@@ -130,8 +135,14 @@ export default async function CataloguePage({
         >
           Export CSV
         </a>
+        <a href={`/api/catalogues/evidence?id=${cat.id}`} className="px-4 py-2 text-[14px] font-medium border border-rule">
+          Evidence package
+        </a>
       </div>
 
+      <SavedCosts id={cat.id} initial={cat.landed_cost_json ? parseCosts(JSON.parse(cat.landed_cost_json)) : EMPTY_COSTS} goods={totals.value} duty={totals.duty} partial={cat.totals_complete !== 1} items={cat.items} mpf={cat.mpf} />
+      <ReviewWorkspace catalogueId={cat.id} items={cat.items} history={history} />
+      <Link className="btn btn-secondary" href={`/catalogues/${cat.id}/report`}>View printable evidence report</Link>
       {legacy ? (
         <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
           <strong>{LEGACY_LABEL}.</strong> This catalogue was saved when only priced lines were kept, so it

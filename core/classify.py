@@ -247,6 +247,7 @@ def retrieve(conn: sqlite3.Connection, query: str, *, limit: int = 8,
                         "ruling": row["ruling_number"], "subject": row["subject"],
                         "date": row["ruling_date"], "revoked": bool(row["revoked"]),
                         "url": row["url"],
+                        "excerpt": row["body_head"],
                     })
 
     if not head_votes:
