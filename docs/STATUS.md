@@ -187,13 +187,23 @@ before claiming anything for it.
   "for convenience" (the written scope decides), so a product an order covers
   but does not list is missed; an order whose scope lists no HTS number
   cannot be matched (counted per quote as unchecked); no scope rulings,
-  circumvention findings, exclusions or exporter rates are read. The
-  remaining 7 unresolved orders were individually checked, not just counted:
-  two are brand-new orders whose own scope-bearing notice was not found by
-  the case-number search (a combined multi-country notice that does exist
-  correctly excludes them — a different, order-specific notice needs a
-  targeted fix this pass did not reach); the rest were not further
-  diagnosed. The absence
+  circumvention findings, exclusions or exporter rates are read. A fourth
+  ranking bug (a genuine order notice with a compound title — "Termination
+  of Suspension Agreement, Rescission of Administrative Reviews, and
+  Imposition of an Antidumping Duty Order" — was misread as a review notice
+  over the bare word "review" appearing in an unrelated side-clause) is
+  also fixed, verified against a zero-regression rebuild, but resolved none
+  of the 7 by itself. Each of the 7 has now been individually diagnosed,
+  not just counted: Fresh Tomatoes From Mexico (A-201-820) — the real order
+  notice is now correctly found and read, but its scope lists a bare
+  4-digit heading ("0702.", no subheading digits), which no current pattern
+  in `scope_hts()` matches; extending it safely needs validation against
+  the whole corpus, not attempted yet. Cambodia's photovoltaic-cell CVD
+  order (C-555-003) — working as designed: the one notice found with a
+  matching HTS list is a combined multi-country order whose own header
+  correctly excludes this case's number (not a false exclusion); a
+  separate, case-specific notice exists but was not located by the
+  case-number search. The other 5 were not further diagnosed. The absence
   of a flag is not proof that no order applies.
 - MPF preference exemptions are not modelled; the assumptions list says so.
 - The IEEPA "refundable" figure is a scenario estimate for one entry at the
