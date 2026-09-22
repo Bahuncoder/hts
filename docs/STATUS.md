@@ -34,6 +34,9 @@ tables in an existing accounts database are left dormant, not dropped.
 | Public cost controls | request/item budgets per client or account, one audit in flight per caller, streamed body cap |
 | Sign-in | email/password, plus optional "Continue with Google" (authorization-code flow, state-cookie CSRF check, unverified emails refused) when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set; unset, the button does not render and the route 404s |
 | Accounts store | libSQL (Turso in production, embedded file in development) |
+| Landed cost | currency conversion for additional costs (goods and duty stay USD; a dated rate and source are recorded with the save, never a fetched live rate) and per-product allocation (by goods value or equally, largest-remainder cents so shares always sum exactly) |
+| Evidence package | JSON export and printable/PDF report both carry the classifier's supporting ruling snapshots (excerpt, subject, date, revoked, `rulings.cbp.gov` URL only) and the full reviewer/approval history, both bounded and projected before signing |
+| Auth race safety | credential-endpoint throttling, single-use reset/verify tokens, and a credential reset's session wipe are each one atomic SQL statement or transaction, not a check followed by a separate write; verified under genuine concurrency (`web/tests/auth-races.test.mjs`), including across independent database connections, not just one shared client |
 
 ## Test coverage
 
@@ -48,6 +51,7 @@ tables in an existing accounts database are left dormant, not dropped.
 | browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 67 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
 | browser suites (`make test-ui`, `test-draft`, `test-contrast`) | 42 | workspace UI and self-hosted fonts (10), audit-survives-sign-up draft and `?next=` allowlist (21), measured WCAG contrast in light/dark (11) |
 | `web` `npm run test:google` | 12 | Google sign-in against a fake Google: new/existing account, unverified email, cancelled consent, CSRF and single-use state, feature-off gating |
+| `web/tests/auth-races.test.mjs` (now part of `test:integration`) | 8 | throttling, token redemption and a credential reset under genuine `Promise.all` concurrency, including across independent DB connections, not sequential calls |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
 evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
@@ -159,12 +163,12 @@ before claiming anything for it.
   Administrative Review" notices (every order in effect, 713 of them, by
   country and case number) and searches each case's full notice history —
   not just its most recent notices — for whichever one states its scope's HTS
-  numbers most fully; 703 of 713 (98.6%) now resolve one, up from 683 (95.8%)
-  before two extraction bugs were fixed. A quote whose code and origin match
+  numbers most fully; 706 of 713 (99.0%) now resolve one, up from 683 (95.8%)
+  before three extraction bugs were fixed. A quote whose code and origin match
   an order is marked incomplete, names the case, and leaves out the cash
   deposit, which depends on the exporter.
-  Two correctness fixes matter here specifically because a wrong match would
-  be worse than a missed one: (1) a case number appearing anywhere in a
+  Three correctness fixes matter here specifically because a wrong match
+  would be worse than a missed one: (1) a case number appearing anywhere in a
   notice's text — a footnote citing a companion proceeding, a combined notice
   for several countries — does not mean the notice is about that case, so a
   candidate is only accepted when the case is one of the numbers the Federal
@@ -173,13 +177,23 @@ before claiming anything for it.
   an ordinary word can start a new line by chance mid-sentence ("the Final
   LTFV\nDetermination to reflect..."), which previously looked enough like a
   section heading to cut a scope's extraction short — a stop now requires the
-  phrase to sit alone on its own line. `tests/test_adcvd.py` pins both bugs
-  with fixtures reproducing them.
+  phrase to sit alone on its own line; (3) a correction notice or a
+  circumvention finding can contain the literal words "antidumping duty
+  order" or "final determination" without ever stating the scope, and was
+  able to outrank — so get tried before — the actual order, continuation or
+  suspension notice that carries it. `tests/test_adcvd.py` pins all three
+  bugs with fixtures reproducing them.
   Limits that remain, all stated by the product: Commerce lists HTS numbers
   "for convenience" (the written scope decides), so a product an order covers
   but does not list is missed; an order whose scope lists no HTS number
   cannot be matched (counted per quote as unchecked); no scope rulings,
-  circumvention findings, exclusions or exporter rates are read. The absence
+  circumvention findings, exclusions or exporter rates are read. The
+  remaining 7 unresolved orders were individually checked, not just counted:
+  two are brand-new orders whose own scope-bearing notice was not found by
+  the case-number search (a combined multi-country notice that does exist
+  correctly excludes them — a different, order-specific notice needs a
+  targeted fix this pass did not reach); the rest were not further
+  diagnosed. The absence
   of a flag is not proof that no order applies.
 - MPF preference exemptions are not modelled; the assumptions list says so.
 - The IEEPA "refundable" figure is a scenario estimate for one entry at the

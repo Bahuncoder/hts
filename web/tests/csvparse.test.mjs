@@ -189,7 +189,13 @@ await check("the export carries Row, Status and Review notes, and neutralises fo
 await check("projection keeps only signed fields and rejects a non-line", () => {
   const l = model.projectLine({ row: 1, sku: "A", description: "d", country: "C", hts: null, status: "ready",
     duty: 1, suggested: [{ hts: "x" }], evil: "x", warnings: ["w"] });
-  assert.deepEqual(Object.keys(l).sort(), ["country", "description", "duty", "hts", "row", "sku", "status", "warnings"]);
+  // "evil" is not a field projectLine knows about, so it must never appear —
+  // that is the actual point of a signed projection. "evidence" is a real,
+  // signed field (the classifier's top candidate, via projectEvidence),
+  // derived here from `suggested[0]`.
+  assert.deepEqual(Object.keys(l).sort(), ["country", "description", "duty", "evidence", "hts", "row", "sku", "status", "warnings"]);
+  assert.ok(!("evil" in l), "an unrecognised field leaked into the signed projection");
+  assert.equal(l.evidence.candidate_hts, "x");
   assert.equal(model.projectLine({ row: 1, status: "bogus" }), null);
   assert.equal(model.projectLine({ status: "ready" }), null);
   assert.equal(model.projectLine(null), null);
