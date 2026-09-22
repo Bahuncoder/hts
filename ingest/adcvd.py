@@ -195,7 +195,13 @@ def scope_hts(text: str) -> list[str]:
 
 def _rank(title: str) -> int:
     t = title.lower()
-    if t.startswith(MONTHLY_TITLE.lower()):
+    # The exact prefix match below misses at least one real notice with a
+    # typo in its own title ("Antidumping *of* Countervailing Duty Order,
+    # Finding, or Suspended Investigation" — 99-14629 — where the standard
+    # text says "or"); an "opportunity to request ... review" boilerplate
+    # notice never carries a scope regardless of how its title is spelled,
+    # so that phrase alone is exclusion enough on its own.
+    if t.startswith(MONTHLY_TITLE.lower()) or "opportunity to request" in t and "review" in t:
         return 9
     # A correction or a circumvention finding is a follow-on notice *about*
     # the order, not the order's own scope text — either can contain the
@@ -209,14 +215,24 @@ def _rank(title: str) -> int:
     # certification-only change) never mentions it, so it is worth trying
     # but not worth preferring over the order itself.
     followon = "correction" in t or "circumvention" in t
-    if not followon and (
+    # A notice ABOUT a review — its own preliminary/final results, or its own
+    # initiation — is not the order's scope text, even when it also happens
+    # to say "... Duty Order" (an order continued after a sunset review says
+    # exactly that). The earlier blanket "review" is not in t was too broad
+    # the other way: a title can mention a review only in passing while doing
+    # something else to the order itself ("Termination of Suspension
+    # Agreement, Rescission of Administrative Reviews, and Imposition of an
+    # Antidumping Duty Order" is the order notice, not a review notice, and
+    # was being wrongly demoted to the bottom tier by that blanket check).
+    is_review_notice = bool(re.search(r"results? of.{0,60}review|initiation of.{0,40}review", t))
+    if not followon and not is_review_notice and (
             "continuation of" in t
             # A suspension agreement is the order-equivalent document for a
             # case resolved that way (the monthly notice groups it with
             # "Order, Finding, or Suspended Investigation" for exactly this
             # reason); its own notice is where the scope was first stated.
             or re.search(r"suspension of (?:the )?(?:antidumping|countervailing) duty investigation", t)
-            or (re.search(r"(?:antidumping|countervailing) duty order", t) and "review" not in t)):
+            or re.search(r"(?:antidumping|countervailing) duty order", t)):
         return 0
     if not followon and (
             "clarification of the scope" in t

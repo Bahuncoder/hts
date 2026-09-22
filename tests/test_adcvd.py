@@ -296,6 +296,34 @@ def _():
     assert _rank("White Grape Juice Concentrate From Argentina: Suspension of Countervailing Duty Investigation") == 0
 
 
+@check("rank: an 'opportunity to request review' monthly notice is excluded even with a typo dodging the exact-prefix check")
+def _():
+    # A real Federal Register title (99-14629): "Antidumping *of* Countervailing
+    # Duty Order..." where the standard text says "or" — MONTHLY_TITLE's exact
+    # prefix match misses it, and unguarded it would satisfy the "duty order"
+    # phrase and get wrongly promoted to rank 0.
+    typo = "Antidumping of Countervailing Duty Order, Finding, or Suspended Investigation; Opportunity To Request Administrative Review"
+    assert _rank(typo) == 9, typo
+
+
+@check("rank: a title that only mentions a review in passing, while imposing or continuing the order itself, still ranks with the order")
+def _():
+    order = ("Fresh Tomatoes From Mexico: Termination of Suspension Agreement, Rescission of "
+              "Administrative Reviews, and Imposition of an Antidumping Duty Order")
+    assert _rank(order) == 0, order
+
+
+@check("rank: a notice that IS a review — its own preliminary/final results, or its own initiation — still never ranks with the order")
+def _():
+    for title in (
+        "Certain In-shell Pistachios from the Islamic Republic of Iran: Preliminary Results of Countervailing Duty Administrative Review",
+        "Twist Ties From People's Republic of China: Final Results of the Expedited First Sunset Review of the Countervailing Duty Order",
+        "Oil Country Tubular Goods From Ukraine: Preliminary Results of the First Five-Year Sunset Review of the Antidumping Duty Order",
+        "Initiation of Antidumping and Countervailing Duty Administrative Reviews",
+    ):
+        assert _rank(title) > 0, title
+
+
 @check("rank: a scope clarification is tried early even when its title omits the order's own phrasing")
 def _():
     # Most real clarification titles repeat "... Antidumping Duty Order" and
