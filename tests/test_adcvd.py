@@ -416,6 +416,16 @@ def _():
     assert any(o["case"] == "A-201-820" for o in r.adcvd), [o["case"] for o in r.adcvd]
 
 
+@real("real orders: twist ties and petroleum wax candles from China are matched — the product-name search fallback, end to end")
+def _():
+    code = next(l.hts for l in E.tree.leaves if l.hts.startswith("8309.90"))
+    r = E.quote(hts=code, country="China", value=10000)
+    assert any(o["case"] == "C-570-132" for o in r.adcvd), [o["case"] for o in r.adcvd]
+    code = next(l.hts for l in E.tree.leaves if l.hts.startswith("3406.00"))
+    r = E.quote(hts=code, country="China", value=10000)
+    assert any(o["case"] == "A-570-504" for o in r.adcvd), [o["case"] for o in r.adcvd]
+
+
 @real("real orders: an ordinary garment is not flagged, and every order carries an ISO country")
 def _():
     r = E.quote(hts="6109.10.00.12", country="China", value=10000)

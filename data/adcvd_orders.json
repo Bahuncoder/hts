@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-22",
+ "generated": "2026-09-23",
  "notices": [
   "2026-17810",
   "2026-15800",
@@ -1235,7 +1235,7 @@
    "source_date": "2026-08-10",
    "title": "Initiation of Antidumping and Countervailing Duty Administrative Reviews",
    "hts": [],
-   "fetched": "2026-09-22",
+   "fetched": "2026-09-23",
    "iso": "KH"
   },
   {
@@ -9650,7 +9650,7 @@
    "source": null,
    "source_date": null,
    "hts": [],
-   "fetched": "2026-09-22",
+   "fetched": "2026-09-23",
    "iso": "TR"
   },
   {
@@ -10136,7 +10136,7 @@
    "source_date": "2026-06-02",
    "title": "Initiation of Antidumping and Countervailing Duty Administrative Reviews",
    "hts": [],
-   "fetched": "2026-09-22",
+   "fetched": "2026-09-23",
    "iso": "TR"
   },
   {
@@ -10566,7 +10566,7 @@
    "source": null,
    "source_date": null,
    "hts": [],
-   "fetched": "2026-09-22",
+   "fetched": "2026-09-23",
    "iso": "RU"
   },
   {
@@ -15977,10 +15977,13 @@
    "product": "Petroleum Wax Candles",
    "case": "A-570-504",
    "listed_in": "2026-15800",
-   "source": null,
-   "source_date": null,
-   "hts": [],
-   "fetched": "2026-09-22",
+   "source": "2021-23560",
+   "source_date": "2021-10-29",
+   "title": "Petroleum Wax Candles From the People's Republic of China: Continuation of the Antidumping Duty Order",
+   "hts": [
+    "34060000"
+   ],
+   "fetched": "2026-09-23",
    "iso": "CN"
   },
   {
@@ -19356,11 +19359,25 @@
    "product": "Twist Ties",
    "case": "C-570-132",
    "listed_in": "2026-06418",
-   "source": "2026-12961",
-   "source_date": "2026-06-26",
-   "title": "Twist Ties From People's Republic of China: Final Results of the Expedited First Sunset Review of the Countervailing Duty Order",
-   "hts": [],
-   "fetched": "2026-09-22",
+   "source": "2021-07630",
+   "source_date": "2021-04-14",
+   "title": "Twist Ties From the People's Republic of China: Antidumping and Countervailing Duty Orders",
+   "hts": [
+    "39205150",
+    "3920515000",
+    "3923900080",
+    "3926909990",
+    "4811596000",
+    "4821102000",
+    "4821104000",
+    "4821902000",
+    "4821904000",
+    "4823908600",
+    "5609003000",
+    "83099000",
+    "8309900000"
+   ],
+   "fetched": "2026-09-23",
    "iso": "CN"
   },
   {

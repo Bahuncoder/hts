@@ -278,25 +278,14 @@ def _own_case(body: str, case: str) -> bool | None:
     return case in found
 
 
-def latest_scope(case: str) -> dict | None:
-    """HTS list from the best notice that quotes this case's scope: the order
-    or its continuation, else a preliminary or final review.
-
-    The case number ("A-533-877") is searched with its digit groups
-    space-separated rather than as a quoted, hyphenated phrase: the Federal
-    Register's search treats a quoted "A-533-877" as a single literal token
-    that many of a case's own notices do not match verbatim (a rendering
-    difference in how the case number is printed), which silently starved the
-    candidate pool. A 100-notice pool, not 30, matters for a case with decades
-    of administrative reviews: the original order notice — the one most likely
-    to carry the scope in full — sorts oldest within its rank and can fall
-    outside a smaller page."""
-    term = case.replace("-", " ")
-    d = _search(per_page=100, order="newest", **{
-        "conditions[term]": term,
-        "conditions[agencies][]": "international-trade-administration",
-        "conditions[type][]": "NOTICE",
-        "fields[]": ["title", "publication_date", "document_number", "raw_text_url"]})
+def _try_candidates(d: dict, case: str) -> dict | None:
+    """The shared part of a search: rank its results, then try each of the
+    top 8 in order, accepting a candidate's HTS list only once `_own_case`
+    has confirmed the notice is actually about this case — a search that
+    finds the right document by a wider net is exactly as safe as one that
+    finds it by the case number alone, since acceptance is still gated on
+    the same header-bracket check either way, not on how the candidate was
+    found."""
     cands = sorted((r for r in d.get("results", []) if _rank(r["title"]) < 9),
                    key=lambda r: (_rank(r["title"]), -int(r["publication_date"].replace("-", ""))))
     first = None
@@ -311,6 +300,45 @@ def latest_scope(case: str) -> dict | None:
         if hts:
             return got
     return first
+
+
+def latest_scope(case: str, product: str | None = None) -> dict | None:
+    """HTS list from the best notice that quotes this case's scope: the order
+    or its continuation, else a preliminary or final review.
+
+    The case number ("A-533-877") is searched with its digit groups
+    space-separated rather than as a quoted, hyphenated phrase: the Federal
+    Register's search treats a quoted "A-533-877" as a single literal token
+    that many of a case's own notices do not match verbatim (a rendering
+    difference in how the case number is printed), which silently starved the
+    candidate pool. A 100-notice pool, not 30, matters for a case with decades
+    of administrative reviews: the original order notice — the one most likely
+    to carry the scope in full — sorts oldest within its rank and can fall
+    outside a smaller page."""
+    def search(term: str) -> dict:
+        return _search(per_page=100, order="newest", **{
+            "conditions[term]": term,
+            "conditions[agencies][]": "international-trade-administration",
+            "conditions[type][]": "NOTICE",
+            "fields[]": ["title", "publication_date", "document_number", "raw_text_url"]})
+
+    got = _try_candidates(search(case.replace("-", " ")), case)
+    if got and got["hts"]:
+        return got
+    # The case-number term is precise but not always found: some of a case's
+    # notices sort behind hundreds of others that merely happen to contain
+    # the same bare digit groups (three digits each, common by chance), all
+    # ranked ahead of it by the Federal Register's own relevance scoring, so
+    # the real order never reaches the 100-result page fetched above. A
+    # product-name search widens the net — it is far more likely to surface
+    # the case's own family of notices by relevance — without weakening
+    # acceptance at all: `_try_candidates` still requires the exact same
+    # `_own_case` header-bracket match before trusting anything it finds.
+    if product:
+        by_product = _try_candidates(search(product), case)
+        if by_product and (not got or (by_product["hts"] and not got["hts"])):
+            return by_product
+    return got
 
 
 REUSE_DAYS = 180
@@ -337,7 +365,7 @@ def build(today: date | None = None, previous: dict | None = None) -> dict:
             o.update({k: old.get(k) for k in ("source", "source_date", "title", "hts", "fetched")})
             continue
         try:
-            scope = latest_scope(case)
+            scope = latest_scope(case, product=o.get("product"))
         except Exception as exc:                 # one bad case must not lose the rest
             scope = {"source": None, "source_date": None, "hts": [], "error": str(exc)[:120]}
         o.update(scope or {"source": None, "source_date": None, "hts": []})
