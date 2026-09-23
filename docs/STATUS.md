@@ -163,54 +163,76 @@ before claiming anything for it.
   Administrative Review" notices (every order in effect, 713 of them, by
   country and case number) and searches each case's full notice history —
   not just its most recent notices — for whichever one states its scope's HTS
-  numbers most fully; 707 of 713 (99.2%) now resolve one, up from 683 (95.8%)
-  before five extraction bugs were fixed. A quote whose code and origin match
+  numbers most fully; 709 of 713 (99.4%) now resolve one, up from 683 (95.8%)
+  before six extraction and search fixes. A quote whose code and origin match
   an order is marked incomplete, names the case, and leaves out the cash
   deposit, which depends on the exporter.
-  Five correctness fixes matter here specifically because a wrong match
-  would be worse than a missed one: (1) a case number appearing anywhere in a
-  notice's text — a footnote citing a companion proceeding, a combined notice
-  for several countries — does not mean the notice is about that case, so a
-  candidate is only accepted when the case is one of the numbers the Federal
-  Register brackets at the top of the notice, where it states which case(s)
-  it concerns; (2) the plain-text conversion wraps prose to a fixed width, so
-  an ordinary word can start a new line by chance mid-sentence ("the Final
-  LTFV\nDetermination to reflect..."), which previously looked enough like a
-  section heading to cut a scope's extraction short — a stop now requires the
-  phrase to sit alone on its own line; (3) a correction notice or a
-  circumvention finding can contain the literal words "antidumping duty
-  order" or "final determination" without ever stating the scope, and was
-  able to outrank — so get tried before — the actual order, continuation or
-  suspension notice that carries it; (4) a genuine order notice with a
-  compound title — "Termination of Suspension Agreement, Rescission of
-  Administrative Reviews, and Imposition of an Antidumping Duty Order" —
-  was misread as a review notice over the bare word "review" appearing in
-  an unrelated side-clause, and separately an old (1999) monthly notice
-  with a typo in its own title ("Antidumping *of* Countervailing Duty
-  Order" — the standard text says "or") needed its own exclusion once the
-  bare "review" check was narrowed; (5) a scope naming only a bare 4-digit
-  heading, no subheading digits at all ("... : 0702.", Fresh Tomatoes From
-  Mexico, A-201-820) matches neither the dotted-number pattern nor
-  "heading(s) NNNN" — read now, but only from immediately before Commerce's
-  own standard disclaimer sentence ("the HTSUS numbers are provided for
-  convenience ... the written description ... is dispositive"), never as a
-  general bare-number reader, which would start matching page numbers and
-  dollar figures elsewhere in the corpus. `tests/test_adcvd.py` pins all
-  five bugs with fixtures reproducing them, including an end-to-end real
-  quote for fresh tomatoes from Mexico.
+  Six correctness and coverage fixes matter here specifically because a
+  wrong match would be worse than a missed one: (1) a case number appearing
+  anywhere in a notice's text — a footnote citing a companion proceeding, a
+  combined notice for several countries — does not mean the notice is about
+  that case, so a candidate is only accepted when the case is one of the
+  numbers the Federal Register brackets at the top of the notice, where it
+  states which case(s) it concerns; (2) the plain-text conversion wraps
+  prose to a fixed width, so an ordinary word can start a new line by
+  chance mid-sentence ("the Final LTFV\nDetermination to reflect..."),
+  which previously looked enough like a section heading to cut a scope's
+  extraction short — a stop now requires the phrase to sit alone on its own
+  line; (3) a correction notice or a circumvention finding can contain the
+  literal words "antidumping duty order" or "final determination" without
+  ever stating the scope, and was able to outrank — so get tried before —
+  the actual order, continuation or suspension notice that carries it;
+  (4) a genuine order notice with a compound title — "Termination of
+  Suspension Agreement, Rescission of Administrative Reviews, and
+  Imposition of an Antidumping Duty Order" — was misread as a review
+  notice over the bare word "review" appearing in an unrelated side-clause,
+  and separately an old (1999) monthly notice with a typo in its own title
+  ("Antidumping *of* Countervailing Duty Order" — the standard text says
+  "or") needed its own exclusion once the bare "review" check was
+  narrowed; (5) a scope naming only a bare 4-digit heading, no subheading
+  digits at all ("... : 0702.", Fresh Tomatoes From Mexico, A-201-820)
+  matches neither the dotted-number pattern nor "heading(s) NNNN" — read
+  now, but only from immediately before Commerce's own standard disclaimer
+  sentence ("the HTSUS numbers are provided for convenience ... the
+  written description ... is dispositive"), never as a general bare-number
+  reader, which would start matching page numbers and dollar figures
+  elsewhere in the corpus; (6) the case-number search itself sometimes
+  never surfaces the real order at all — hundreds of unrelated documents
+  can contain the same three-digit groups by coincidence and outrank it in
+  Federal Register's own relevance ranking (Twist Ties From China,
+  C-570-132; Petroleum Wax Candles From China, A-570-504) — so a case's
+  order notice is now also searched for by its product name when the
+  case-number search alone comes up empty, still gated behind the same
+  header-bracket check before anything is trusted. `tests/test_adcvd.py`
+  pins all six with fixtures reproducing them, including end-to-end real
+  quotes for the three newly-resolved orders (fresh tomatoes, twist ties,
+  petroleum wax candles).
   Limits that remain, all stated by the product: Commerce lists HTS numbers
   "for convenience" (the written scope decides), so a product an order covers
   but does not list is missed; an order whose scope lists no HTS number
   cannot be matched (counted per quote as unchecked); no scope rulings,
-  circumvention findings, exclusions or exporter rates are read. Of the 6
-  still-unresolved orders, 1 has been individually diagnosed, not just
-  counted: Cambodia's photovoltaic-cell CVD order (C-555-003) is working
-  as designed — the one notice found with a matching HTS list is a combined
-  multi-country order whose own header correctly excludes this case's
-  number (not a false exclusion); a separate, case-specific notice exists
-  but was not located by the case-number search. The other 5 were not
-  further diagnosed. The absence of a flag is not proof that no order
-  applies.
+  circumvention findings, exclusions or exporter rates are read. All 4
+  still-unresolved orders have now been individually diagnosed, not just
+  counted. Three are not a gap in this codebase at all: A-583-839 and
+  C-583-840 (Common Alloy Aluminum Sheet From Türkiye) and C-821-824
+  (Phosphate Fertilizers From Russia) are the Federal Register's *own*
+  clerical typos, confirmed directly against the real orders' own header
+  brackets — the same one monthly notice (2026-06418) prints
+  "A-583-839" for a case whose real order is bracketed under "A-489-839"
+  (Taiwan's own "583" prefix, from the immediately preceding line in the
+  same wrapped listing, bled into Turkey's), and "C-821-824" for a case
+  bracketed under "C-821-825" (an off-by-one). The correctly-numbered
+  orders (A-489-839, C-489-840, and Morocco/Russia's C-714-001) already
+  exist in the dataset, already resolved — the coverage these typo'd
+  case numbers would add is not actually missing, only their own entries
+  read as "unresolved." No extraction logic fixes a wrong number in the
+  government's own source text. The fourth, Cambodia's photovoltaic-cell
+  CVD order (C-555-003), is a genuine remaining gap: working as designed,
+  not a false match — the one notice found with a matching HTS list is a
+  combined multi-country order whose own header correctly excludes this
+  case's number (not a false exclusion); a separate, case-specific notice
+  exists but was not located by either the case-number or the product-name
+  search. The absence of a flag is not proof that no order applies.
 - MPF preference exemptions are not modelled; the assumptions list says so.
 - The IEEPA "refundable" figure is a scenario estimate for one entry at the
   entered value. There is no entry date, paid duty or liquidation status, so it
