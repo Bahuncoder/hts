@@ -7,8 +7,8 @@ The stack, in order:
     2. Ch.99 overlays - Section 232 / 301 / country actions, additive or replacing
     3. user fees      - MPF (ad valorem, floored and capped) and HMF (vessel only)
 
-Fee figures are FY2026, effective 2025-10-01, per 19 CFR 24.22 / 24.24
-(published at 90 FR 35257, CBP Dec. 25-10). They are inflation-adjusted each
+Fee figures are FY2027, effective 2026-10-01, per 19 CFR 24.22 / 24.24
+(published at 91 FR 48398, CBP Dec. 26-14). They are inflation-adjusted each
 fiscal year, so they are declared here as dated constants rather than inlined.
 """
 from __future__ import annotations
@@ -26,10 +26,16 @@ from core.regimes import (COLUMN_2_COUNTRIES, IEEPA_PREFIXES, EntryFacts, normal
                           normalize_vehicle_use)
 from core.units import parse_specific, unit_of
 
-# --- FY2026 user fees (effective 2025-10-01) ---------------------------------
+# --- FY2027 user fees (effective 2026-10-01) ---------------------------------
+# CBP Dec. 26-14, "Customs User Fees To Be Adjusted for Inflation in Fiscal
+# Year 2027", 91 FR 48398 (2026-07-31): Table 2's Minimum/Maximum Merchandise
+# Processing Fee, $34.58/$670.86, both footnoted "Only the limitation is
+# increasing; the ad valorem rate of 0.3464 percent remains the same." HMF is
+# 26 U.S.C. 4461, not a COBRA fee at all, so this notice does not touch it —
+# it was last set in 26 U.S.C. 4461(b)(1) and does not move with inflation.
 MPF_RATE = Decimal("0.003464")
-MPF_MIN = Decimal("33.58")
-MPF_MAX = Decimal("651.50")
+MPF_MIN = Decimal("34.58")
+MPF_MAX = Decimal("670.86")
 HMF_RATE = Decimal("0.00125")
 
 # 19 CFR 24.22(k) requires CBP to re-adjust MPF's floor/cap for inflation each
@@ -37,7 +43,7 @@ HMF_RATE = Decimal("0.00125")
 # same clock, but all three get re-verified together every October. Past this
 # date the constants above are unconfirmed for the new fiscal year — compute()
 # surfaces that as a warning rather than silently serving stale figures.
-FEE_CONSTANTS_EFFECTIVE_THROUGH = date(2026, 9, 30)
+FEE_CONSTANTS_EFFECTIVE_THROUGH = date(2027, 9, 30)
 
 
 def fee_constants_stale(today: date | None = None) -> bool:
@@ -712,9 +718,13 @@ def compute(
 
     # --- 3. user fees --------------------------------------------------------
     if fee_constants_stale():
+        # The fiscal year name is derived from the constant above, not
+        # hardcoded here, so next year's update to FEE_CONSTANTS_EFFECTIVE_
+        # THROUGH cannot leave this warning naming the wrong (now two-year-
+        # stale) fiscal year the way a second hardcoded literal could.
         res.warnings.append(
-            f"MPF/HMF figures are FY2026 constants, unverified past "
-            f"{FEE_CONSTANTS_EFFECTIVE_THROUGH.isoformat()}; re-check 19 CFR "
+            f"MPF/HMF figures are FY{FEE_CONSTANTS_EFFECTIVE_THROUGH.year} constants, "
+            f"unverified past {FEE_CONSTANTS_EFFECTIVE_THROUGH.isoformat()}; re-check 19 CFR "
             "24.22/24.24 for the new fiscal year's amounts."
         )
     if is_formal_entry:

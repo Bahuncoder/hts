@@ -5,8 +5,9 @@ defects cannot come back: an unbounded audit request occupied a worker for
 fourteen minutes, unbounded `limit` parameters returned whole tables, and
 unhandled exceptions echoed Python type names to callers.
 
-Runs against a live API. Start one first:
-    HTSDESK_API_KEYS=testkey python3 -m uvicorn api.main:app --port 8099
+Runs against a live API. Start one first, with a key matching KEY below
+(or override KEY with HTSDESK_TEST_KEY to match a different one):
+    HTSDESK_API_KEYS=testkey123 python3 -m uvicorn api.main:app --port 8099
 """
 from __future__ import annotations
 
@@ -306,9 +307,9 @@ def _():
     rows = [{"sku": str(i), "description": "tee", "country": "Vietnam",
              "value": 100, "hts": "6109.10.00.12"} for i in range(10)]
     su = _audit(rows)["summary"]
-    assert su["mpf"] == 33.58, f"ten $100 lines on one entry pay one minimum, got {su['mpf']}"
+    assert su["mpf"] == 34.58, f"ten $100 lines on one entry pay one minimum, got {su['mpf']}"
     su5 = _audit(rows, entries=5)["summary"]
-    assert su5["mpf"] == round(5 * 33.58, 2), su5["mpf"]
+    assert su5["mpf"] == round(5 * 34.58, 2), su5["mpf"]
     assert any("entr" in a for a in su["assumptions"]), "the entry assumption must be stated"
 
 
