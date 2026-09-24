@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:integration": "node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/retired.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs && node tests/auth-races.test.mjs",
+    "test:integration": "node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/retired.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs && node tests/auth-races.test.mjs && node tests/verify.test.mjs",
     "test:review": "node tests/review.test.mjs",
     "test:ui": "node tests/ui-workspace.test.mjs",
     "test:draft": "node tests/draft.test.mjs",

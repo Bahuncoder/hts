@@ -5,6 +5,7 @@ import { acquireLease, AUDIT_BUDGETS, chargeAudit, type Tier } from "@/lib/budge
 import { LIMITS, windowLabel } from "@/lib/plans";
 import { clientId } from "@/lib/throttle";
 import { signAudit, signedBodyFromEngine, signingSecret, type EngineRequest } from "@/lib/auditProof";
+import { readCapped } from "@/lib/requestBody";
 
 /** Server-side proxy for the catalogue audit.
  *
@@ -22,26 +23,6 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_BODY = 2_000_000;
-
-/** Reads at most `cap` bytes. Returns null as soon as the body is known to be
- *  larger, rather than buffering all of it and checking afterwards. */
-async function readCapped(request: Request, cap: number): Promise<string | null> {
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > cap) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);

@@ -13,7 +13,7 @@ import { resetCredential } from "./credentialStore";
 import { audit } from "./audit";
 import { emailEnabled, send } from "./email";
 import { passwordResetEmail, verifyEmail } from "./emails/auth";
-import { consume, issue } from "./tokens";
+import { consume, issue, peek } from "./tokens";
 import { safeNext } from "./next";
 import { EMPTY_COSTS, parseCosts } from "./landedCost";
 
@@ -314,6 +314,20 @@ export async function completeResetAction(_prev: FormState, form: FormData): Pro
 
   const weak = passwordProblem(password);
   if (weak) return { error: weak };
+
+  // Checked before hashing, not after: hashPassword is a deliberately
+  // expensive, synchronous scrypt call (~60ms on this machine), and this
+  // action needs no session — an unauthenticated caller could otherwise
+  // spend that cost on every request just by posting a garbage token,
+  // burning CPU on the one thread Node runs everything else on. peek() is
+  // an indexed lookup, not a security decision on its own (resetCredential
+  // still re-checks the same conditions atomically, inside the transaction
+  // that actually consumes the token, so a token that expires or gets used
+  // in the gap between these two calls is still refused there) — it only
+  // lets an obviously-unusable token fail before paying for the hash.
+  if (!await peek("password_reset", token)) {
+    return { error: "That link has expired or has already been used. Ask for a new one." };
+  }
 
   const passwordHash = hashPassword(password);
   const accountId = await resetCredential(token, passwordHash);
