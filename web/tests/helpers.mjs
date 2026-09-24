@@ -54,7 +54,17 @@ export async function signUp(browser, tag, opts = {}) {
   if (!link) {
     throw new Error(`signup needed verification but no link reached ${MAILBOX}`);
   }
+  // /verify is deliberately GET-then-POST, not a one-step redirect: the GET
+  // only ever shows a confirm button (so a link preview, image fetch or
+  // cross-site navigation can't silently consume the token by visiting it),
+  // and the POST it submits verifies and lands on /login — never /account,
+  // never auto-signed-in. Confirming, then signing in, is the real flow.
   await go(page, link);
+  await page.click("button[type=submit]");
+  await page.waitForURL(/\/login/, { timeout: 20000 });
+  await page.fill("input[name=email]", email);
+  await page.fill("input[name=password]", PASSWORD);
+  await page.click("button[type=submit]");
   await page.waitForURL(/\/account/, { timeout: 20000 });
   return { ctx, page, email };
 }

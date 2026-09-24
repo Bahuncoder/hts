@@ -61,28 +61,38 @@ evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
 
 ## Classifier accuracy
 
-Measured 2026-09-19 with `tests/eval_classify.py`: 400 cases, retrieval only,
+Measured 2026-09-24 with `tests/eval_classify.py`: 400 cases, retrieval only,
 the held-out ruling **and every ruling with the same subject** removed before
-scoring, abstentions counted as misses.
+scoring, abstentions counted as misses. Corpus grew (routine ruling ingest)
+since the 2026-09-19 measurement below it; re-measure after any material
+ingest rather than assume these hold indefinitely.
 
-| Metric | Result |
-|---|---|
-| top-1 heading (4-digit) | 46.8% |
-| top-1 subheading (6-digit) | 34.8% |
-| top-1 8-digit | 29.0% |
-| **top-1 exact 10-digit line (what pricing uses)** | **15.0%** |
-| top-3 heading | 71.5% |
+| Metric | 2026-09-24 | 2026-09-19 |
+|---|---|---|
+| top-1 heading (4-digit) | 48.8% | 46.8% |
+| top-1 subheading (6-digit) | 37.0% | 34.8% |
+| top-1 8-digit | 30.8% | 29.0% |
+| **top-1 exact 10-digit line (what pricing uses)** | **15.5%** | 15.0% |
+| top-3 heading | 72.2% | 71.5% |
 
-The figures previously published here (58.2% / 46.2% / 83.0%) were **not**
-held-out measurements: the answer had already voted for itself before being
-filtered out. They are withdrawn.
+The figures previously published before 2026-09-19 (58.2% / 46.2% / 83.0%)
+were **not** held-out measurements: the answer had already voted for itself
+before being filtered out. They are withdrawn.
 
 What this means for the product: the classifier is a candidate generator with
 precedent, not a filing-ready code. The audit already flags classified codes
 whose sibling statistical lines carry different rates (`suffix_review`), and
-classified rows are never presented as decided. The reasoning layer (needs
-`ANTHROPIC_API_KEY`) is unmeasured; measure it with a separate, labelled run
-before claiming anything for it.
+classified rows are never presented as decided.
+
+**The reasoning layer is still unmeasured**, though `eval_classify.py` can now
+measure it: pass `--reasoning` (or `--reasoning=N` for the paid-call count,
+default 50) to run the same held-out cases with `use_reasoning=True` and
+report both numbers side by side from the same run, not compared against a
+figure from a different day. This has NOT been run — it needs
+`ANTHROPIC_API_KEY`, which is not set anywhere this has been worked on, and
+each case costs one real model call. The script refuses to run with
+`--reasoning` and no key, rather than silently measuring its own no-key
+fallback and reporting that as "reasoning."
 
 ## Known gaps
 
@@ -260,6 +270,9 @@ All must be true before launch:
       (`web/tests/review.test.mjs`, browser).
 - [x] Integration tests exercise production routes, over isolated databases.
 - [ ] Reasoning layer measured, or the product described without it.
+      `eval_classify.py --reasoning` can do this now (see "Classifier
+      accuracy" above); blocked on `ANTHROPIC_API_KEY` not being set
+      anywhere this has been worked on.
 - [x] AD/CVD flagged for affected origins (coverage limits above).
 - [x] FY2027 fee constants entered (MPF min $34.58, max $670.86, CBP Dec.
       26-14, 91 FR 48398; effective 2026-10-01).
