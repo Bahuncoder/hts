@@ -9,6 +9,17 @@ export default function CostInputs({ value, onChange }: { value: LandedCostInput
   // Node and the browser can ship different ICU currency lists. Render the
   // selected currency identically on both, then populate browser choices.
   const [currencies, setCurrencies] = useState(() => [...new Set(["USD", currency])]);
+  // The lint rule this line trips is right in general — most `setState` in
+  // an effect body should be data derived during render instead. This one
+  // can't be: which currencies exist is read from the running ICU build
+  // (Intl.supportedValuesOf), which server and browser do not agree on, so
+  // there is no value derivable at render time that is correct on both.
+  // First paint must render a list both agree on (the minimal set above);
+  // this effect is the one-time correction once the real browser list is
+  // available, exactly the "synchronize with an external system" case the
+  // rule's own guidance carves out — it reads external (ICU) state once at
+  // mount, it does not synchronize props back into state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setCurrencies(CURRENCIES), []);
   return <div className="grid gap-3 sm:grid-cols-2">
     <label>Additional-cost currency<select aria-label="Additional-cost currency" className="field-control w-full" value={currency} onChange={(e) => onChange({ ...value, currency: e.target.value, usdRate: e.target.value === "USD" ? 1 : undefined, rateDate: undefined, rateSource: undefined })}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label>
