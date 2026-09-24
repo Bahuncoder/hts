@@ -5,6 +5,7 @@ import { listReviews } from "@/lib/reviews";
 import { EMPTY_COSTS, parseCosts } from "@/lib/landedCost";
 import { notFound, redirect } from "next/navigation";
 import { currentViewer } from "@/lib/auth";
+import { repriceCatalogueAction } from "@/lib/actions";
 import {
   catalogueTotals, countCatalogueWatches, getCatalogue, itemUnresolved,
   type CatalogueItem,
@@ -68,7 +69,7 @@ export default async function CataloguePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ show?: string; page?: string }>;
+  searchParams: Promise<{ show?: string; page?: string; repriced?: string; changed?: string; unchanged?: string; repriceError?: string }>;
 }) {
   const viewer = await currentViewer();
   if (!viewer) redirect("/login");
@@ -138,7 +139,26 @@ export default async function CataloguePage({
         <a href={`/api/catalogues/evidence?id=${cat.id}`} className="px-4 py-2 text-[14px] font-medium border border-rule">
           Evidence package
         </a>
+        <form action={repriceCatalogueAction}>
+          <input type="hidden" name="id" value={cat.id} />
+          <button className="px-4 py-2 text-[14px] font-medium border border-rule">
+            Re-price with current rates
+          </button>
+        </form>
       </div>
+
+      {sp.repriced ? (
+        <p role="status" className="border-l-2 py-2 pl-3 text-[14px] border-accent bg-accent-soft text-accent">
+          Re-priced against today&rsquo;s reference data. {sp.changed} of{" "}
+          {Number(sp.changed || 0) + Number(sp.unchanged || 0)} lines changed
+          {Number(sp.changed) > 0 ? " — any that were approved and changed are back to pending review." : "."}
+        </p>
+      ) : null}
+      {sp.repriceError ? (
+        <p role="alert" className="border-l-2 py-2 pl-3 text-[14px] border-danger bg-caution-soft text-danger">
+          Could not re-price: {sp.repriceError}
+        </p>
+      ) : null}
 
       <SavedCosts id={cat.id} initial={cat.landed_cost_json ? parseCosts(JSON.parse(cat.landed_cost_json)) : EMPTY_COSTS} goods={totals.value} duty={totals.duty} partial={cat.totals_complete !== 1} items={cat.items} mpf={cat.mpf} />
       <ReviewWorkspace catalogueId={cat.id} items={cat.items} history={history} />

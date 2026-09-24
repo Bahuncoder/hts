@@ -115,6 +115,7 @@ import {
 import { projectLine, type SavedLine, type SignedAudit } from "./auditModel";
 import { PROOF_MAX_AGE_MS, signingSecret, verifyAudit } from "./auditProof";
 import { markAllRead } from "./diff";
+import { repriceCatalogue } from "./reprice";
 
 /** What the browser sends to save an audit. It is not trusted: every figure in
  *  it must be covered by the proof the audit proxy signed (lib/auditProof.ts),
@@ -127,6 +128,8 @@ export type SavePayload = {
   dataset_revision: string;
   assumptions: string[];
   mpf: number;
+  entries: number;
+  by_vessel: boolean;
   signed_at: string;
   proof: string | null | undefined;
   inputs?: number[];
@@ -169,13 +172,15 @@ export async function saveCatalogueAction(
     Array.isArray(v) && v.length <= 50 && v.every((x) => typeof x === "string");
   if (typeof p.dataset_revision !== "string" || !strings(p.assumptions)
       || typeof p.mpf !== "number" || !Number.isFinite(p.mpf)
+      || typeof p.entries !== "number" || !Number.isInteger(p.entries) || p.entries < 1
+      || typeof p.by_vessel !== "boolean"
       || typeof p.signed_at !== "string") {
     return { error: RERUN };
   }
 
   const body: SignedAudit = {
     v: 1, at: p.signed_at, dataset_revision: p.dataset_revision,
-    assumptions: p.assumptions, mpf: p.mpf, lines,
+    assumptions: p.assumptions, mpf: p.mpf, entries: p.entries, by_vessel: p.by_vessel, lines,
   };
   if (!verifyAudit(body, p.proof, secret)) {
     console.warn(`saveCatalogueAction: refused for account ${viewer.account.id}: ${
@@ -219,6 +224,30 @@ export async function deleteCatalogueAction(form: FormData): Promise<void> {
       email: viewer.account.email });
   }
   revalidatePath("/catalogues");
+}
+
+/** Re-runs the engine on a saved catalogue's own lines (their code, or their
+ *  description for one that never got one — never their entered value or
+ *  stated facts, which are resubmitted unchanged) against current rates, and
+ *  updates it in place. Redirects with the outcome in the query string
+ *  (matching the pattern already used for a verification notice) rather than
+ *  returning a value, since the page that reads it is not the one that
+ *  rendered the button — a saved catalogue's own page, not a form's caller. */
+export async function repriceCatalogueAction(form: FormData): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  const id = String(form.get("id") ?? "");
+  if (!id) return;
+  const path = `/catalogues/${encodeURIComponent(id)}`;
+  const result = await repriceCatalogue(viewer.account.id, id);
+  revalidatePath(path);
+  revalidatePath("/catalogues");
+  if (!result.ok) {
+    redirect(`${path}?repriceError=${encodeURIComponent(result.error)}`);
+  }
+  await audit("catalogue_repriced", { accountId: viewer.account.id, email: viewer.account.email,
+    detail: `${result.changed} of ${result.changed + result.unchanged} lines changed` });
+  redirect(`${path}?repriced=1&changed=${result.changed}&unchanged=${result.unchanged}`);
 }
 
 export async function watchCodeAction(form: FormData): Promise<void> {

@@ -37,6 +37,7 @@ tables in an existing accounts database are left dormant, not dropped.
 | Landed cost | currency conversion for additional costs (goods and duty stay USD; a dated rate and source are recorded with the save, never a fetched live rate) and per-product allocation (by goods value or equally, largest-remainder cents so shares always sum exactly) |
 | Evidence package | JSON export and printable/PDF report both carry the classifier's supporting ruling snapshots (excerpt, subject, date, revoked, `rulings.cbp.gov` URL only) and the full reviewer/approval history, both bounded and projected before signing |
 | Auth race safety | credential-endpoint throttling, single-use reset/verify tokens, and a credential reset's session wipe are each one atomic SQL statement or transaction, not a check followed by a separate write; verified under genuine concurrency (`web/tests/auth-races.test.mjs`), including across independent database connections, not just one shared client |
+| Re-price a saved catalogue | resubmits every line's own stored code (or description, for one never classified) and stated facts — quantity, preference program, end use, metal weight, vehicle use, entries, transport, none of which were persisted before this and would otherwise silently reset to "not claimed" on every re-price — to the engine again, and updates the catalogue in place. A line whose price or status changed reopens its approval (if it had one), with a system note naming the old and new figures; an unchanged line, and its approval, are left alone; a line that already had a code keeps its existing evidence rather than being overwritten with none. Metered as a normal audit (same per-account budget) |
 
 ## Test coverage
 
@@ -52,6 +53,7 @@ tables in an existing accounts database are left dormant, not dropped.
 | browser suites (`make test-ui`, `test-draft`, `test-contrast`) | 42 | workspace UI and self-hosted fonts (10), audit-survives-sign-up draft and `?next=` allowlist (21), measured WCAG contrast in light/dark (11) |
 | `web` `npm run test:google` | 12 | Google sign-in against a fake Google: new/existing account, unverified email, cancelled consent, CSRF and single-use state, feature-off gating |
 | `web/tests/auth-races.test.mjs` (now part of `test:integration`) | 8 | throttling, token redemption and a credential reset under genuine `Promise.all` concurrency, including across independent DB connections, not sequential calls |
+| `web` `npm run test:reprice` | 1 (end-to-end) | a real browser: audit with stated entries/transport, save, approve two lines, re-price against a fake engine whose second response deliberately differs — a rate move is picked up and reopens its approval, an unchanged line and its approval are untouched, a never-classified line is resolved with fresh evidence, an already-classified line keeps its existing evidence, entries/transport are resubmitted from what was saved rather than the audit form's defaults |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
 evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
@@ -240,7 +242,6 @@ before claiming anything for it.
 - The classifier's exact-line accuracy is low (above).
 - Alerts replay 7 days behind the cursor; a document ingested more than a week
   after its publication date is still missed.
-- Re-pricing a saved catalogue is not built.
 - Not built: entry-summary (CBP 7501) ingest, duty drawback, team seats, API
   access.
 - MPF/HMF constants are FY2026; `FEE_CONSTANTS_EFFECTIVE_THROUGH` warns from

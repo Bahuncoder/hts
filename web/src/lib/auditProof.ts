@@ -53,19 +53,42 @@ export function verifyAudit(
   return want.length === got.length && crypto.timingSafeEqual(want, got);
 }
 
+const FACT_KEYS = [
+  "quantity", "quantity_unit", "preference_program", "end_use", "metal_weight_pct", "vehicle_use",
+] as const;
+
+export type EngineRequest = { items?: unknown[]; entries?: unknown; by_vessel?: unknown };
+
 /** Builds the signed body from an engine response, or null when it is not one
- *  we can sign (a shape the engine contract does not allow). */
+ *  we can sign (a shape the engine contract does not allow).
+ *
+ *  `request`, when given, is the same request body the caller sent to the
+ *  engine. Two things the engine's own response never echoes back, only
+ *  their effect on the numbers, are read from it instead: a line's own
+ *  facts (merged in here by position — the engine returns exactly one line
+ *  per submitted item, in order, even for one it could not process in
+ *  time), and the two shipment-level inputs (`entries`, `by_vessel`) the
+ *  entry-level fee and the Harbor Maintenance Fee rest on. Without this a
+ *  re-price built from the saved catalogue would have nothing to resubmit
+ *  but the code, country and value, and would silently reprice every line
+ *  and every fee as if nothing had ever been claimed. */
 export function signedBodyFromEngine(
-  engine: unknown, at: string = new Date().toISOString(),
+  engine: unknown, request: EngineRequest = {}, at: string = new Date().toISOString(),
 ): SignedAudit | null {
   if (typeof engine !== "object" || engine === null) return null;
   const e = engine as { lines?: unknown; summary?: unknown };
   if (!Array.isArray(e.lines) || typeof e.summary !== "object" || e.summary === null) return null;
   const s = e.summary as Record<string, unknown>;
+  const requestItems = Array.isArray(request.items) ? request.items : [];
 
   const lines: SavedLine[] = [];
-  for (const raw of e.lines) {
-    const l = projectLine(raw);
+  for (const [i, raw] of e.lines.entries()) {
+    const item = requestItems[i];
+    const merged = (typeof raw === "object" && raw !== null && !Array.isArray(raw)
+        && typeof item === "object" && item !== null && !Array.isArray(item))
+      ? { ...Object.fromEntries(FACT_KEYS.map((k) => [k, (item as Record<string, unknown>)[k]])), ...raw }
+      : raw;
+    const l = projectLine(merged);
     if (!l) return null;
     lines.push(l);
   }
@@ -73,5 +96,8 @@ export function signedBodyFromEngine(
     ? (s.assumptions as string[]).map((a) => a.slice(0, 2000)) : [];
   const mpf = typeof s.mpf === "number" && Number.isFinite(s.mpf) ? s.mpf : 0;
   const rev = typeof s.dataset_revision === "string" ? s.dataset_revision.slice(0, 200) : "";
-  return { v: 1, at, dataset_revision: rev, assumptions, mpf, lines };
+  const entries = typeof request.entries === "number" && Number.isInteger(request.entries) && request.entries >= 1
+    ? request.entries : 1;
+  const by_vessel = request.by_vessel !== false;
+  return { v: 1, at, dataset_revision: rev, assumptions, mpf, entries, by_vessel, lines };
 }

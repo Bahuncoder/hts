@@ -251,6 +251,8 @@ export default function AuditClient({
         dataset_revision: response.summary.dataset_revision ?? "",
         assumptions: response.summary.assumptions ?? [],
         mpf: response.summary.mpf ?? 0,
+        entries: response.summary.entries ?? entryCount,
+        by_vessel: response.summary.by_vessel ?? (transport === "vessel"),
         signed_at: response.signed_at ?? "",
         proof: response.proof ?? null,
         inputs: run.inputs,

@@ -31,6 +31,11 @@ export type CatalogueItem = {
   status: Status | null;
   error: string | null;
   review: string[]; warnings: string[]; incomplete: string[];
+  /** The facts this line's price rested on. null for a row saved before
+   *  these were recorded. */
+  quantity: number | null; quantity_unit: string | null;
+  preference_program: string | null; end_use: string | null;
+  metal_weight_pct: number | null; vehicle_use: string | null;
 };
 
 export type CatalogueMeta = {
@@ -41,6 +46,11 @@ export type CatalogueMeta = {
   totals_complete: number | null;
   calculated_at: string | null;
   mpf: number | null;
+  /** The shipment terms mpf and the per-line Harbor Maintenance Fee rest on.
+   *  Rows saved before these were recorded default to 1/true, the audit
+   *  form's own defaults — which is what they were actually computed with. */
+  entries: number;
+  by_vessel: number;
 };
 
 const digitsOf = (hts?: string | null) => (hts ? hts.replace(/\./g, "") : null);
@@ -98,10 +108,12 @@ export async function saveCatalogue(
 
     await tx.execute({
       sql: `INSERT INTO catalogue(id, account_id, name, created_at, updated_at,
-              dataset_revision, assumptions_json, totals_complete, calculated_at, mpf, landed_cost_json)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+              dataset_revision, assumptions_json, totals_complete, calculated_at, mpf, landed_cost_json,
+              entries, by_vessel)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [id, accountId, name, now, now, audit.dataset_revision,
-        JSON.stringify(audit.assumptions), complete ? 1 : 0, audit.at, audit.mpf, JSON.stringify(parseCosts(costs))],
+        JSON.stringify(audit.assumptions), complete ? 1 : 0, audit.at, audit.mpf, JSON.stringify(parseCosts(costs)),
+        audit.entries, audit.by_vessel ? 1 : 0],
     });
 
     for (const [n, it] of audit.lines.entries()) {
@@ -110,8 +122,9 @@ export async function saveCatalogue(
       await tx.execute({
         sql: `INSERT INTO catalogue_item(id, catalogue_id, sku, description, country, value,
                 hts, digits, confidence, duty, effective_rate, refundable, scope_unverified,
-                row_number, status, error, review_json, warnings_json, incomplete_json, evidence_json)
-              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                row_number, status, error, review_json, warnings_json, incomplete_json, evidence_json,
+                quantity, quantity_unit, preference_program, end_use, metal_weight_pct, vehicle_use)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         args: [
           crypto.randomUUID(), id, it.sku || null, it.description, it.country,
           it.entered_value ?? inputs[n] ?? 0,
@@ -121,6 +134,8 @@ export async function saveCatalogue(
           it.row, it.status, it.error ?? null,
           list(it.review_reasons), list(it.warnings), list(it.incomplete),
           it.evidence ? JSON.stringify(it.evidence satisfies EvidenceSnapshot) : null,
+          it.quantity ?? null, it.quantity_unit ?? null, it.preference_program ?? null,
+          it.end_use ?? null, it.metal_weight_pct ?? null, it.vehicle_use ?? null,
         ],
       });
       if (isWatchable(it) && digits && it.hts) {
@@ -172,7 +187,7 @@ export async function getCatalogue(accountId: string, id: string) {
   const c = await ensureReviews();
   const metaRs = await c.execute({
     sql: `SELECT id, name, created_at, updated_at, dataset_revision, assumptions_json,
-                 totals_complete, calculated_at, mpf, landed_cost_json
+                 totals_complete, calculated_at, mpf, landed_cost_json, entries, by_vessel
             FROM catalogue WHERE id = ? AND account_id = ?`,
     args: [id, accountId],
   });

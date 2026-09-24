@@ -23,6 +23,7 @@ export type AuditEvent =
   | "email_verified"
   | "catalogue_saved"
   | "catalogue_deleted"
+  | "catalogue_repriced"
   | "catalogue_exported"
   | "catalogue_evidence_exported"
   | "alert_emails_changed";

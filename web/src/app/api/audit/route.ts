@@ -4,7 +4,7 @@ import { currentViewer } from "@/lib/auth";
 import { acquireLease, AUDIT_BUDGETS, chargeAudit, type Tier } from "@/lib/budget";
 import { LIMITS, windowLabel } from "@/lib/plans";
 import { clientId } from "@/lib/throttle";
-import { signAudit, signedBodyFromEngine, signingSecret } from "@/lib/auditProof";
+import { signAudit, signedBodyFromEngine, signingSecret, type EngineRequest } from "@/lib/auditProof";
 
 /** Server-side proxy for the catalogue audit.
  *
@@ -58,7 +58,7 @@ const tooLarge = () => NextResponse.json(
  *  Without a configured secret, production returns the audit unsigned rather
  *  than signing with a guessable constant: the customer still gets their
  *  numbers, and saving reports that it is unavailable. */
-function withProof(body: string): string {
+function withProof(body: string, request: EngineRequest): string {
   let parsed: unknown;
   try { parsed = JSON.parse(body); } catch { return body; }
 
@@ -70,13 +70,21 @@ function withProof(body: string): string {
     );
     return body;
   }
-  const signed = signedBodyFromEngine(parsed);
+  const signed = signedBodyFromEngine(parsed, request);
   if (!signed) {
     console.error("audit: the engine response is not in the expected shape; returning it unsigned");
     return body;
   }
   const proof = signAudit(signed, secret);
-  return JSON.stringify({ ...(parsed as object), proof, signed_at: signed.at });
+  // entries/by_vessel are not part of the engine's own summary — added here
+  // so the browser can echo them back at save time, the same way it already
+  // does for dataset_revision, assumptions and mpf, which ARE.
+  const engineResponse = parsed as { summary?: Record<string, unknown> };
+  if (engineResponse.summary) {
+    engineResponse.summary.entries = signed.entries;
+    engineResponse.summary.by_vessel = signed.by_vessel;
+  }
+  return JSON.stringify({ ...engineResponse, proof, signed_at: signed.at });
 }
 
 const bad = (detail: string) => NextResponse.json({ detail }, { status: 400 });
@@ -166,7 +174,7 @@ export async function POST(request: Request) {
       const body = await res.text();
       // The engine did no work for a failure on its side; do not bill for it.
       if (res.status >= 500) await charge.refund();
-      return new NextResponse(res.status === 200 ? withProof(body) : body, {
+      return new NextResponse(res.status === 200 ? withProof(body, parsed) : body, {
         status: res.status,
         headers: { "content-type": "application/json" },
       });

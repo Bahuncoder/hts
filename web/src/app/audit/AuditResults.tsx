@@ -21,6 +21,10 @@ export type AuditSummary = {
   potentially_refundable: number;
   assumptions: string[];
   dataset_revision: string;
+  /** Echoed back by the proxy (lib/auditProof.ts), not the engine itself, so
+   *  a save can record the shipment terms the fee figures rest on. */
+  entries?: number;
+  by_vessel?: boolean;
 };
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });

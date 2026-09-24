@@ -79,6 +79,19 @@ export type AuditLine = {
   scope_unverified?: string[];
   suggested?: Candidate[];
   alternatives?: Alternative[];
+  /** The facts a caller stated for this line (quantity for a per-unit duty,
+   *  the claimed preference program, Section 232 facts). The engine's own
+   *  response never echoes these back — it only returns what they produced
+   *  — so the proxy merges them in from the request before signing. Kept on
+   *  the saved line so a re-price can use the SAME stated facts against
+   *  current rates, rather than silently reverting every re-priced line to
+   *  "not claimed" and reporting that as a rate change. */
+  quantity?: number;
+  quantity_unit?: string;
+  preference_program?: string;
+  end_use?: string;
+  metal_weight_pct?: number;
+  vehicle_use?: string;
 };
 
 /** A line as it is signed and saved: everything except the classifier's
@@ -183,6 +196,12 @@ export function projectLine(x: unknown): SavedLine | null {
   set("incomplete", strList(r.incomplete));
   set("review_reasons", strList(r.review_reasons));
   set("scope_unverified", strList(r.scope_unverified));
+  set("quantity", num(r.quantity));
+  set("quantity_unit", str(r.quantity_unit, 32));
+  set("preference_program", str(r.preference_program, 8));
+  set("end_use", str(r.end_use, 32));
+  set("metal_weight_pct", num(r.metal_weight_pct));
+  set("vehicle_use", str(r.vehicle_use, 32));
   const snapshot = r.evidence ?? (Array.isArray(r.suggested)
     ? r.suggested[0] ?? { source: "no_classifier_evidence" } : undefined);
   set("evidence", projectEvidence(snapshot));
@@ -216,6 +235,14 @@ export type SignedAudit = {
   assumptions: string[];
   /** Entry-level Merchandise Processing Fee. Line duty excludes it. */
   mpf: number;
+  /** The two request-level inputs the entry-level fee and the Harbor
+   *  Maintenance Fee rest on. The engine's own response never echoes these
+   *  back (they only affect its output, via mpf/warnings), so — like a
+   *  line's own facts — the proxy merges them in from the request before
+   *  signing. Recorded so a re-price resubmits the same shipment terms
+   *  instead of silently defaulting back to one entry by vessel. */
+  entries: number;
+  by_vessel: boolean;
   lines: SavedLine[];
 };
 

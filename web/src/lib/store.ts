@@ -272,6 +272,19 @@ async function migrate(c: Client): Promise<void> {
     review_json: "TEXT",
     warnings_json: "TEXT",
     incomplete_json: "TEXT",
+    // The facts a line's price actually rested on. Without these, re-pricing
+    // it later against current rates would have nothing to resubmit but the
+    // code, country and value — every stated quantity, preference claim or
+    // Section 232 fact would silently revert to "not claimed", and the
+    // resulting change would read as a rate move rather than a lost fact.
+    // Rows saved before this exist have none of these; a re-price still
+    // works for them, it just cannot claim what was never recorded.
+    quantity: "REAL",
+    quantity_unit: "TEXT",
+    preference_program: "TEXT",
+    end_use: "TEXT",
+    metal_weight_pct: "REAL",
+    vehicle_use: "TEXT",
   });
   // What the whole audit rested on: the reference-data revision, the stated
   // assumptions, whether the totals were complete, and when the engine
@@ -285,6 +298,13 @@ async function migrate(c: Client): Promise<void> {
     // lib/catalogues.ts reads and writes this column; without it, saving or
     // opening any catalogue fails outright (SQLITE_ERROR: no such column).
     landed_cost_json: "TEXT",
+    // The two shipment-level inputs mpf and the Harbor Maintenance Fee (in
+    // every line's own warnings) rest on. A re-price resubmits these, not
+    // the entries=1/vessel=true the audit form happens to default to. Rows
+    // saved before this exist default to that same 1/vessel, which is what
+    // they were actually computed with (the audit form's own defaults).
+    entries: "INTEGER NOT NULL DEFAULT 1",
+    by_vessel: "INTEGER NOT NULL DEFAULT 1",
   });
 }
 

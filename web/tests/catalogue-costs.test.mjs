@@ -27,7 +27,7 @@ try {
   await store.createAccount("owner", "owner@example.test", "fixture");
   await store.createAccount("other", "other@example.test", "fixture");
   const costs = { freight: 10.25, insurance: 2, brokerage: 3, portFees: 4, other: 5 };
-  const audit = { v: 1, at: new Date().toISOString(), dataset_revision: "fixture", assumptions: ["fixture assumption"], mpf: 1, lines: [
+  const audit = { v: 1, at: new Date().toISOString(), dataset_revision: "fixture", assumptions: ["fixture assumption"], mpf: 1, entries: 1, by_vessel: true, lines: [
     { row: 1, sku: "one", description: "Fixture", country: "China", hts: "1234.56.78", status: "ready", entered_value: 100, duty: 10, refundable: 0 },
     { row: 2, sku: "two", description: "Unresolved", country: "China", hts: null, status: "unclassified" },
   ] };

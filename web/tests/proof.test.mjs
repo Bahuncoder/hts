@@ -47,10 +47,14 @@ async function audit(base = app.base, body = { items }) {
   return { status: res.status, body: await res.json().catch(() => null), res };
 }
 
-/** What the browser rebuilds from the response, as AuditClient does. */
+/** What the browser rebuilds from the response, as AuditClient does. entries
+ *  and by_vessel are not the engine's own fields — the proxy adds them to
+ *  the summary from the request, alongside dataset_revision/assumptions/mpf,
+ *  which ARE — so they round-trip the same way. */
 const signedFrom = (r) => ({
   v: 1, at: r.signed_at, dataset_revision: r.summary.dataset_revision,
   assumptions: r.summary.assumptions, mpf: r.summary.mpf,
+  entries: r.summary.entries, by_vessel: r.summary.by_vessel,
   lines: r.lines.map((l) => model.projectLine(l)),
 });
 
@@ -65,7 +69,11 @@ try {
     assert.ok(Number.isFinite(Date.parse(r.body.signed_at)));
     const direct = auditResponse({ items });
     assert.deepEqual(r.body.lines, direct.lines, "lines pass through unchanged");
-    assert.deepEqual(r.body.summary, direct.summary, "summary passes through unchanged");
+    // entries/by_vessel are added by the proxy (from the request, which
+    // named neither, so its own defaults: 1 and true) — everything else in
+    // the engine's own summary passes through untouched.
+    assert.deepEqual(r.body.summary, { ...direct.summary, entries: 1, by_vessel: true },
+      "summary passes through unchanged, plus the two request-level fields the proxy adds");
   });
 
   await check("the proof verifies with the configured secret (EMAIL over ADMIN)", async () => {
