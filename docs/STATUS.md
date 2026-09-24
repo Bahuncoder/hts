@@ -1,6 +1,7 @@
 # Build status
 
-Last updated 2026-09-19, after the independent audit in `PROJECT-AUDIT.md`.
+Last updated 2026-09-24. The independent audit in `PROJECT-AUDIT.md` (2026-09-19)
+is the last full audit; everything below it in this file reflects work done since.
 This is the single place readiness is stated; if it disagrees with another
 document, this one has been updated more recently or the other is wrong.
 
@@ -244,8 +245,6 @@ before claiming anything for it.
   after its publication date is still missed.
 - Not built: entry-summary (CBP 7501) ingest, duty drawback, team seats, API
   access.
-- MPF/HMF constants are FY2026; `FEE_CONSTANTS_EFFECTIVE_THROUGH` warns from
-  2026-10-01 but the FY2027 values must still be entered by a person.
 
 ## Release gate
 
@@ -262,7 +261,8 @@ All must be true before launch:
 - [x] Integration tests exercise production routes, over isolated databases.
 - [ ] Reasoning layer measured, or the product described without it.
 - [x] AD/CVD flagged for affected origins (coverage limits above).
-- [ ] FY2027 fee constants entered (due 2026-10-01).
+- [x] FY2027 fee constants entered (MPF min $34.58, max $670.86, CBP Dec.
+      26-14, 91 FR 48398; effective 2026-10-01).
 - [ ] Deployed to real Vercel/Turso/VPS with monitoring and offsite backups,
       and real email delivery exercised.
 - [ ] Terms, privacy and disclaimers reviewed by a customs attorney.
