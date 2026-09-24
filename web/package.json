@@ -13,7 +13,7 @@
     "test:draft": "node tests/draft.test.mjs",
     "test:contrast": "node tests/contrast.test.mjs",
     "test:google": "node tests/google-auth.test.mjs",
-    "test:reprice": "node tests/reprice.test.mjs"
+    "test:reprice": "node tests/reprice.test.mjs && node tests/reprice-review-races.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",

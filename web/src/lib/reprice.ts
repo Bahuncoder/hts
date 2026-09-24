@@ -19,13 +19,14 @@
  *  (the same engine call does that when hts is empty), and its fresh
  *  evidence, if any, is saved.
  */
+import crypto from "node:crypto";
 import { API_BASE } from "./api";
 import { acquireLease, chargeAudit, type Tier } from "./budget";
 import { getCatalogue, isWatchable, type CatalogueItem } from "./catalogues";
 import { signedBodyFromEngine, type EngineRequest } from "./auditProof";
 import type { SavedLine } from "./auditModel";
 import { db } from "./store";
-import { setApproval } from "./review";
+import { MAX_REVIEW_EVENTS } from "./reviewModel";
 
 export type RepriceOutcome =
   | { ok: true; changed: number; unchanged: number; totalsComplete: boolean }
@@ -106,6 +107,7 @@ export async function repriceCatalogue(accountId: string, catalogueId: string): 
     const c = await db();
     const now = new Date().toISOString();
     let changed = 0;
+    const reopened: { itemId: string; was: string; now: string }[] = [];
     const list = (v?: string[]) => (v?.length ? JSON.stringify(v) : null);
     const statements = signed.lines.map((line, i) => {
       const before = cat.items[i];
@@ -113,12 +115,33 @@ export async function repriceCatalogue(accountId: string, catalogueId: string): 
       const evidenceJson = hadCode
         ? before.evidence_json // already classified: keep the existing evidence, nothing fresh to replace it with
         : (line.evidence ? JSON.stringify(line.evidence) : null);
-      if (materiallyChanged(before, line)) changed += 1;
+      const isChanged = materiallyChanged(before, line);
+      if (isChanged) changed += 1;
+      // An approval asserted the OLD numbers were fine; a material change
+      // under it is not still asserted by anyone, so it is reopened here, in
+      // the SAME statement that changes the numbers — not a separate,
+      // best-effort call afterward, whose failure (the per-catalogue review-
+      // event cap, a dropped connection) would otherwise leave the screen
+      // reading "Approved" against figures that no longer exist with nothing
+      // to say so. review_version bumps on every material change regardless
+      // of approval state, not only a previously-approved one, so a stale
+      // review form open on ANY state (not just "approved") fails its own
+      // optimistic-concurrency check instead of silently landing against
+      // numbers it was never shown.
+      if (isChanged && before.review_status === "approved") {
+        reopened.push({
+          itemId: before.id,
+          was: before.duty === null ? "unpriced" : `$${before.duty.toFixed(2)}`,
+          now: line.duty === undefined ? "unpriced" : `$${line.duty.toFixed(2)}`,
+        });
+      }
       return {
         sql: `UPDATE catalogue_item SET
                 hts = ?, digits = ?, confidence = ?, duty = ?, effective_rate = ?, refundable = ?,
                 scope_unverified = ?, status = ?, error = ?, review_json = ?, warnings_json = ?,
-                incomplete_json = ?, evidence_json = ?
+                incomplete_json = ?, evidence_json = ?,
+                review_version = review_version + ?,
+                approval_status = CASE WHEN ? = 1 AND approval_status = 'approved' THEN 'pending' ELSE approval_status END
               WHERE id = ?`,
         args: [
           line.hts ?? null, digitsOf(line.hts), line.confidence ?? null,
@@ -127,6 +150,8 @@ export async function repriceCatalogue(accountId: string, catalogueId: string): 
           line.status, line.error ?? null,
           list(line.review_reasons), list(line.warnings), list(line.incomplete),
           evidenceJson,
+          isChanged ? 1 : 0,
+          isChanged ? 1 : 0,
           before.id,
         ],
       };
@@ -165,19 +190,26 @@ export async function repriceCatalogue(accountId: string, catalogueId: string): 
       }
     }
 
-    // An approval asserted the OLD numbers were fine; a material change
-    // under it is not still asserted by anyone, so it is reopened, with a
-    // system note explaining why, rather than left reading "Approved"
-    // against figures that no longer exist.
-    for (const [i, line] of signed.lines.entries()) {
-      const before = cat.items[i];
-      if (before.review_status !== "approved" || !materiallyChanged(before, line)) continue;
-      const was = before.duty === null ? "unpriced" : `$${before.duty.toFixed(2)}`;
-      const now2 = line.duty === undefined ? "unpriced" : `$${line.duty.toFixed(2)}`;
+    // The reopen itself already committed atomically with the price change,
+    // above — this is only the human-readable line in the history feed
+    // explaining why. It is genuinely best-effort (the per-catalogue
+    // MAX_REVIEW_EVENTS cap can refuse it, same as any other review event),
+    // and unlike before, that is safe to be best-effort now: the approval
+    // state itself does not depend on this succeeding.
+    for (const r of reopened) {
       try {
-        await setApproval(accountId, "Re-price (system)", before.id, "pending",
-          `Reopened: re-pricing changed this line (duty ${was} → ${now2}); review the new figures.`);
-      } catch { /* best-effort; the price itself is already saved */ }
+        await c.execute({
+          sql: `INSERT INTO catalogue_item_event(id,item_id,account_id,kind,actor,approval_status,assigned_to,comment,created_at,version)
+                SELECT ?,id,?,?,?,approval_status,assigned_to,?,?,review_version FROM catalogue_item
+                WHERE id = ? AND (SELECT count(*) FROM catalogue_item_event e JOIN catalogue_item i ON i.id = e.item_id
+                                    WHERE i.catalogue_id = catalogue_item.catalogue_id) < ?`,
+          args: [
+            crypto.randomUUID(), accountId, "approval", "Re-price (system)",
+            `Reopened: re-pricing changed this line (duty ${r.was} → ${r.now}); review the new figures.`,
+            now, r.itemId, MAX_REVIEW_EVENTS,
+          ],
+        });
+      } catch { /* best-effort: the approval state itself is already correct regardless */ }
     }
 
     return { ok: true, changed, unchanged: signed.lines.length - changed, totalsComplete: complete };
