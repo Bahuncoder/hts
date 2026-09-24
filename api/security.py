@@ -80,27 +80,41 @@ class RateLimiter:
         return self._conn
 
     def check(self, client: str, cls: str) -> None:
+        """Admits the hit, or refuses it — as one atomic statement, not a
+        count followed by a separate insert. self._lock only ever protected
+        two threads inside this one process; every worker uvicorn starts is
+        its own process with its own Lock() that knows nothing of the
+        others', so two requests landing on two different workers could
+        both read the same count and both be admitted, oversubscribing the
+        limit by exactly the concurrency of the race (reproduced: two
+        threads bypassing the lock, sharing a limit of 120, stored 121).
+        The INSERT ... SELECT ... WHERE below makes the admit decision and
+        the reservation one statement; SQLite serializes writers across
+        every connection to the same file regardless of process, which a
+        Python-level lock cannot do and was never going to."""
         limit, window = LIMITS[cls]
         now = time.time()
         with self._lock:
             db = self._db()
             self._sweep(db, now)
             cutoff = now - window
-            row = db.execute(
-                "SELECT count(*), min(at) FROM api_hit "
-                "WHERE client = ? AND cls = ? AND at >= ?",
-                (client, cls, cutoff),
-            ).fetchone()
-            count, oldest = row[0], row[1]
-            if count >= limit:
+            cur = db.execute(
+                "INSERT INTO api_hit(client, cls, at) "
+                "SELECT ?, ?, ? WHERE (SELECT count(*) FROM api_hit "
+                "WHERE client = ? AND cls = ? AND at >= ?) < ?",
+                (client, cls, now, client, cls, cutoff, limit),
+            )
+            db.commit()
+            if cur.rowcount == 0:
+                oldest = db.execute(
+                    "SELECT min(at) FROM api_hit WHERE client = ? AND cls = ? AND at >= ?",
+                    (client, cls, cutoff),
+                ).fetchone()[0] or now
                 retry = int(window - (now - oldest)) + 1
                 raise HTTPException(
                     429, f"Rate limit exceeded. Retry in {retry}s.",
                     headers={"Retry-After": str(retry)},
                 )
-            db.execute("INSERT INTO api_hit(client, cls, at) VALUES(?, ?, ?)",
-                       (client, cls, now))
-            db.commit()
 
     def _sweep(self, db: sqlite3.Connection, now: float) -> None:
         """Drop hits outside the longest window, at most once a minute."""
