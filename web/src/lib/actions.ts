@@ -255,13 +255,19 @@ export async function watchCodeAction(form: FormData): Promise<void> {
   if (!viewer) return;
   const hts = String(form.get("hts") ?? "").trim();
   if (!/^\d{4}(?:\.\d{2}){0,3}$/.test(hts)) return;
+  let watched = true;
   if (String(form.get("watched") ?? "") === "1") {
     await unwatchCode(viewer.account.id, hts);
   } else {
-    await watchCode(viewer.account.id, hts);
+    watched = await watchCode(viewer.account.id, hts);
   }
   revalidatePath(`/hts/${hts}`);
   revalidatePath("/alerts");
+  if (!watched) {
+    const country = String(form.get("country") ?? "").trim();
+    const q = country ? `?country=${encodeURIComponent(country)}&watchError=cap` : "?watchError=cap";
+    redirect(`/hts/${hts}${q}`);
+  }
 }
 
 export async function markAlertsReadAction(): Promise<void> {

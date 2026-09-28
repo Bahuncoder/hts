@@ -50,15 +50,27 @@ try {
   await page.getByText("Import costs saved. Exports now include these amounts.").waitFor();
   await page.reload({ waitUntil: "networkidle" });
   assert.equal(await page.getByLabel("Freight (EUR)", { exact: true }).inputValue(), "20");
-  await page.getByLabel("Review action", { exact: true }).selectOption("approve");
-  await page.getByLabel("Reason or comment").fill("Checked material and the saved ruling excerpt.");
-  await page.getByRole("button", { name: "Record review", exact: true }).click();
-  await page.getByText("Review recorded.", { exact: true }).waitFor();
-  await page.waitForFunction(() => document.body.textContent.includes("Checked material and the saved ruling excerpt."));
-  const stale = await page.request.post(app.base + "/api/catalogues/reviews", { headers: { origin: app.base }, data: { catalogueId: id, itemId: lines[0].id, version: 0, action: "approve", note: "stale decision" } });
-  assert.equal(stale.status(), 409);
+  // Human review lives entirely on the dedicated /review page now (the
+  // catalogue page's ReviewWorkspace is a status summary + link only). A
+  // second tab opened on the same item BEFORE this approval still carries
+  // the pre-approval review_version in its form, so submitting it afterward
+  // is a real, browser-driven version-conflict race, not a raw API poke.
+  const stalePage = await context.newPage();
+  await stalePage.goto(`${app.base}/catalogues/${id}/review?item=${lines[0].id}`, { waitUntil: "networkidle" });
   await page.goto(`${app.base}/catalogues/${id}/review?item=${lines[0].id}`, { waitUntil: "networkidle" });
+  await page.locator('select[name="approval_status"]').selectOption("approved");
+  await page.locator('input[name="note"]').fill("Checked material and the saved ruling excerpt.");
+  await page.getByRole("button", { name: "Record decision", exact: true }).click();
+  await page.waitForFunction(() => document.body.textContent.includes("Checked material and the saved ruling excerpt."));
   assert.match(await page.locator("body").innerText(), /Approved: 1/);
+
+  await stalePage.locator('select[name="approval_status"]').selectOption("approved");
+  await stalePage.locator('input[name="note"]').fill("stale decision");
+  await Promise.all([
+    stalePage.waitForURL(/notice=conflict/),
+    stalePage.getByRole("button", { name: "Record decision", exact: true }).click(),
+  ]);
+  await stalePage.close();
   await page.locator('input[name="assigned_to"]').fill("broker@example.test");
   await page.getByRole("button", { name: "Save assignment", exact: true }).click();
   await page.getByText("assigned it to broker@example.test", { exact: false }).waitFor();

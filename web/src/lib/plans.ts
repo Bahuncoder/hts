@@ -47,12 +47,13 @@ export const LIMITS: Record<Tier, Limits> = {
 };
 
 /** Roadmap: not built yet. Listed separately so nothing on a page implies it
- *  exists. */
+ *  exists. Re-pricing a saved catalogue shipped (lib/reprice.ts, `make
+ *  test-reprice`) and was removed from this list accordingly -- it must not
+ *  be listed as upcoming when a page already does it. */
 export const IN_BUILD = [
   "Savings analysis — FTA eligibility and alternate defensible codes",
   "Classification binder export for your reasonable-care file",
   "Team seats and shared catalogues",
-  "Re-price a saved catalogue and compare it with the last run",
   "Entry audit — upload CBP 7501s and compare declared against computed",
   "API access",
 ] as const;

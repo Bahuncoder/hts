@@ -16,6 +16,7 @@ import {
 } from "@/components/QuoteFigures";
 import { currentViewer } from "@/lib/auth";
 import { isWatched } from "@/lib/catalogues";
+import { MAX_STANDALONE_WATCHES } from "@/lib/plans";
 import { watchCodeAction } from "@/lib/actions";
 import { emailEnabled } from "@/lib/email";
 
@@ -26,7 +27,7 @@ const SCENARIO_VALUE = 10000;
 
 type Props = {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ country?: string | string[] }>;
+  searchParams: Promise<{ country?: string | string[]; watchError?: string | string[] }>;
 };
 
 const originOf = (v: string | string[] | undefined) =>
@@ -188,7 +189,9 @@ function RemedyList({ remedies, country }: { remedies: Remedy[]; country: string
 
 export default async function HtsPage({ params, searchParams }: Props) {
   const { code } = await params;
-  const country = originOf((await searchParams).country);
+  const sp = await searchParams;
+  const country = originOf(sp.country);
+  const watchError = Array.isArray(sp.watchError) ? sp.watchError[0] : sp.watchError;
   const res = await getHts(code, country, SCENARIO_VALUE);
 
   // Only a real 404 from the engine is "no such code". An outage, a rate
@@ -409,27 +412,27 @@ export default async function HtsPage({ params, searchParams }: Props) {
         <RemedyList remedies={d.trade_remedies} country={country} />
       ) : null}
 
+      {watchError === "cap" ? (
+        <Note role="alert">
+          You already watch {MAX_STANDALONE_WATCHES} codes on their own, the
+          most a free account carries outside a saved catalogue. Stop
+          watching one first, or save this product as part of a catalogue
+          from the audit tool instead.
+        </Note>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-4 border-t pt-5 border-border">
         {viewer ? (
           <form action={watchCodeAction}>
             <input type="hidden" name="hts" value={d.hts} />
+            <input type="hidden" name="country" value={country} />
             <input type="hidden" name="watched" value={watched ? "1" : "0"} />
-            <button
-              className="px-4 py-2 text-[14px] font-medium"
-              style={
-                watched
-                  ? { border: "1px solid var(--rule)", color: "var(--muted)" }
-                  : { background: "var(--accent)", color: "var(--on-accent)" }
-              }
-            >
+            <button className={watched ? "btn btn-secondary" : "btn btn-primary"}>
               {watched ? "Stop watching this code" : "Watch this code"}
             </button>
           </form>
         ) : (
-          <a
-            href="/signup"
-            className="px-4 py-2 text-[14px] font-medium bg-accent text-on-accent"
-          >
+          <a href="/signup" className="btn btn-primary">
             Watch this code
           </a>
         )}

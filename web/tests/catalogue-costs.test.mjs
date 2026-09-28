@@ -43,12 +43,13 @@ try {
   await cats.watchCode("owner", "1234.56.78");
   await cats.watchCode("owner", "1234.56.78");
   assert.equal((await client.execute("SELECT count(*) n FROM watched_code WHERE catalogue_id IS NULL")).rows[0].n, 1);
-  for (const mod of ["tokens", "credentialStore", "budget", "attempts", "reviews"]) emit(mod);
+  for (const mod of ["tokens", "credentialStore", "budget", "attempts", "reviews", "review"]) emit(mod);
   const tokens = await import(pathToFileURL(path.join(scratch, "tokens.mjs")));
   const credentials = await import(pathToFileURL(path.join(scratch, "credentialStore.mjs")));
   const budget = await import(pathToFileURL(path.join(scratch, "budget.mjs")));
   const attempts = await import(pathToFileURL(path.join(scratch, "attempts.mjs")));
   const reviews = await import(pathToFileURL(path.join(scratch, "reviews.mjs")));
+  const review = await import(pathToFileURL(path.join(scratch, "review.mjs")));
   const grants = await Promise.all(Array.from({ length: 30 }, () => budget.allow("classification", "fixture", { max: 5, windowMs: 60000 })));
   assert.equal(grants.filter((g) => g === null).length, 5, "classification budget cannot be oversubscribed");
   const guesses = await Promise.all(Array.from({ length: 20 }, () => attempts.reserveAttempts("login", "victim@example.test", "client")));
@@ -74,20 +75,26 @@ try {
   const currentHash = (await store.accountByEmail("owner@example.test")).password_hash;
   assert.equal(await credentials.insertSession("owner", currentHash, "fresh-login", "2099-01-01T00:00:00.000Z"), true);
 
+  // Review actions are recorded through lib/review.ts directly (the same
+  // functions the /review page's Server Actions call); lib/reviews.ts's
+  // listReviews() reads them back in the vocabulary the evidence export uses.
   const item = saved.items[0];
-  const review = { catalogueId: id, itemId: item.id, action: "approve", note: "Checked the product specification", version: 0 };
-  assert.equal(await reviews.recordReview("other", "other@example.test", review), false);
-  const approvals = await Promise.all([reviews.recordReview("owner", "owner@example.test", review), reviews.recordReview("owner", "owner@example.test", { ...review, action: "needs_review" })]);
+  const note = "Checked the product specification";
+  assert.equal(await review.setApproval("other", "other@example.test", item.id, "approved", note, 0), false);
+  const approvals = await Promise.all([
+    review.setApproval("owner", "owner@example.test", item.id, "approved", note, 0),
+    review.setApproval("owner", "owner@example.test", item.id, "changes_requested", note, 0),
+  ]);
   assert.equal(approvals.filter(Boolean).length, 1);
   let history = await reviews.listReviews("owner", id);
   assert.equal(history.length, 1);
   assert.equal(history[0].actor_email, "owner@example.test");
-  assert.equal(await reviews.recordReview("owner", "owner@example.test", { ...review, action: "comment", note: "Comment without changing decision", version: 1 }), true);
+  assert.equal(await review.addComment("owner", "owner@example.test", item.id, "Comment without changing decision", 1), true);
   history = await reviews.listReviews("owner", id);
   assert.equal(history[1].status, history[0].status);
-  assert.equal(await reviews.recordReview("owner", "owner@example.test", { ...review, action: "reopen", version: 2 }), true);
+  assert.equal(await review.setApproval("owner", "owner@example.test", item.id, "pending", note, 2), true);
   assert.equal((await cats.getCatalogue("owner", id)).items[0].review_status, "pending");
-  assert.equal(await reviews.recordReview("owner", "owner@example.test", { ...review, itemId: saved.items[1].id }), false, "unclassified lines cannot be approved");
+  assert.equal(await review.setApproval("owner", "owner@example.test", saved.items[1].id, "approved", note, 0), false, "unclassified lines cannot be approved");
   assert.deepEqual(await reviews.listReviews("other", id), []);
   console.log("Concurrent quota reservations, token supersession, reset rollback/replay, stale login rejection and review history checks passed.");
   console.log("Catalogue persistence, default costs, partial records, account isolation and watch deduplication passed.");

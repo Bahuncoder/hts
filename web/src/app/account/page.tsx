@@ -105,14 +105,7 @@ export default async function AccountPage() {
         </p>
         <form action={toggleAlertEmailsAction}>
           <input type="hidden" name="on" value={alertEmailsOn ? "1" : "0"} />
-          <button
-            className="px-4 py-2 text-[14px] font-medium"
-            style={
-              alertEmailsOn
-                ? { border: "1px solid var(--rule)", color: "var(--muted)" }
-                : { background: "var(--accent)", color: "var(--on-accent)" }
-            }
-          >
+          <button className={alertEmailsOn ? "btn btn-secondary" : "btn btn-primary"}>
             {alertEmailsOn ? "Turn alert emails off" : "Turn alert emails on"}
           </button>
         </form>

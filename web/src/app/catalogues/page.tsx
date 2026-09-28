@@ -54,12 +54,12 @@ export default async function CataloguesPage({
               <input type="hidden" name="id" value={doomed.id} />
               <button
                 autoFocus
-                className="px-4 py-2 text-[14px] font-medium bg-danger text-on-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
+                className="btn bg-danger text-on-accent hover:brightness-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
               >
                 Delete catalogue and stop watching its codes
               </button>
             </form>
-            <Link href="/catalogues" className="px-4 py-2 text-[14px] font-medium border border-rule">
+            <Link href="/catalogues" className="btn btn-secondary">
               Keep it
             </Link>
           </div>
@@ -122,7 +122,7 @@ export default async function CataloguesPage({
                   ) : null}
                   <Link
                     href={`/catalogues?delete=${c.id}`}
-                    className="px-2.5 py-1.5 text-[13px] border border-rule text-muted"
+                    className="rounded-(--radius-control) border border-rule px-2.5 py-1.5 text-[13px] text-muted transition-colors hover:border-faint hover:bg-sunk"
                   >
                     Delete<span className="sr-only"> {c.name}</span>
                   </Link>

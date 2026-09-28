@@ -261,15 +261,20 @@ export async function countCatalogueItems(accountId: string): Promise<number> {
   return (rs.rows[0] as unknown as { n: number }).n;
 }
 
-/** A code watched on its own, from a code page rather than a catalogue. */
-export async function watchCode(accountId: string, hts: string): Promise<void> {
+/** A code watched on its own, from a code page rather than a catalogue.
+ *  Returns false when the account is already at MAX_STANDALONE_WATCHES (the
+ *  insert is skipped, not an error) or the code was already watched, true on
+ *  a genuinely new watch -- the caller must surface false, not swallow it: a
+ *  click that silently does nothing is worse than one that is refused. */
+export async function watchCode(accountId: string, hts: string): Promise<boolean> {
   const normalized = hts.trim().replace(/\./g, "");
-  if (!/^\d{4,10}$/.test(normalized)) return;
-  await (await db()).execute({
+  if (!/^\d{4,10}$/.test(normalized)) return false;
+  const rs = await (await db()).execute({
     sql: `INSERT OR IGNORE INTO watched_code(account_id, digits, hts, catalogue_id, created_at)
           SELECT ?,?,?,NULL,? WHERE (SELECT count(*) FROM watched_code WHERE account_id = ? AND catalogue_id IS NULL) < ?`,
     args: [accountId, normalized, hts.trim(), new Date().toISOString(), accountId, MAX_STANDALONE_WATCHES],
   });
+  return rs.rowsAffected > 0;
 }
 
 export async function unwatchCode(accountId: string, hts: string): Promise<void> {

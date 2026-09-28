@@ -1,7 +1,6 @@
 import Link from "next/link";
 import SavedCosts from "@/components/SavedCosts";
 import ReviewWorkspace from "@/components/ReviewWorkspace";
-import { listReviews } from "@/lib/reviews";
 import { EMPTY_COSTS, parseCosts } from "@/lib/landedCost";
 import { notFound, redirect } from "next/navigation";
 import { currentViewer } from "@/lib/auth";
@@ -77,7 +76,6 @@ export default async function CataloguePage({
   const sp = await searchParams;
   const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) notFound();
-  const history = await listReviews(viewer.account.id, cat.id);
 
   const legacy = cat.items.length > 0 && cat.items.every((i) => i.status === null);
   const totals = catalogueTotals(cat.items, cat.mpf);
@@ -130,18 +128,15 @@ export default async function CataloguePage({
             {legacy ? "" : " · lines that could not be priced are kept here but not watched"}
           </p>
         </div>
-        <a
-          href={`/api/catalogues/export?id=${cat.id}`}
-          className="px-4 py-2 text-[14px] font-medium border border-rule"
-        >
+        <a href={`/api/catalogues/export?id=${cat.id}`} className="btn btn-secondary">
           Export CSV
         </a>
-        <a href={`/api/catalogues/evidence?id=${cat.id}`} className="px-4 py-2 text-[14px] font-medium border border-rule">
+        <a href={`/api/catalogues/evidence?id=${cat.id}`} className="btn btn-secondary">
           Evidence package
         </a>
         <form action={repriceCatalogueAction}>
           <input type="hidden" name="id" value={cat.id} />
-          <button className="px-4 py-2 text-[14px] font-medium border border-rule">
+          <button className="btn btn-secondary">
             Re-price with current rates
           </button>
         </form>
@@ -161,7 +156,7 @@ export default async function CataloguePage({
       ) : null}
 
       <SavedCosts id={cat.id} initial={cat.landed_cost_json ? parseCosts(JSON.parse(cat.landed_cost_json)) : EMPTY_COSTS} goods={totals.value} duty={totals.duty} partial={cat.totals_complete !== 1} items={cat.items} mpf={cat.mpf} />
-      <ReviewWorkspace catalogueId={cat.id} items={cat.items} history={history} />
+      <ReviewWorkspace catalogueId={cat.id} items={cat.items} />
       <Link className="btn btn-secondary" href={`/catalogues/${cat.id}/report`}>View printable evidence report</Link>
       {legacy ? (
         <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
