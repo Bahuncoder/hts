@@ -254,9 +254,11 @@ A materially lower count, or an incomplete index, means a build was interrupted
 outside the validated path (for example `cross.py` killed mid-reindex); re-run
 `make refresh`. `make preflight` checks the same things.
 
-`reasoning_enabled` reports whether `ANTHROPIC_API_KEY` is set. When false the
-classifier still runs on ruling precedent alone, at lower accuracy, and says
-so in its response notes.
+`reasoning_enabled` reports whether both `HTSDESK_ENABLE_REASONING=1` and
+`ANTHROPIC_API_KEY` are set -- an operator has to opt in explicitly; the key's
+presence alone is not enough, since the reasoning layer's accuracy is
+unmeasured (see `docs/STATUS.md`). When false the classifier still runs on
+ruling precedent alone, at lower accuracy, and says so in its response notes.
 
 ## Common problems
 

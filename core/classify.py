@@ -364,10 +364,12 @@ def _reason(query: str, cands: list[Candidate], api_key: str) -> tuple[list[Cand
 
 
 def classify(conn: sqlite3.Connection, query: str, *, limit: int = 8,
-             api_key: str | None = None, use_reasoning: bool = True,
+             api_key: str | None = None, use_reasoning: bool = False,
              exclude_rulings: frozenset[str] = frozenset()) -> Classification:
-    """Rank candidate codes. `use_reasoning=False` guarantees the paid model is
-    never called, even when ANTHROPIC_API_KEY is set in the environment."""
+    """Rank candidate codes. Reasoning is opt-in: a caller must pass
+    `use_reasoning=True` explicitly. The default is `False` so the paid model
+    is never called just because ANTHROPIC_API_KEY happens to be set in the
+    environment -- unmeasured behaviour must never turn on by itself."""
     cands = retrieve(conn, query, limit=limit, exclude_rulings=exclude_rulings)
     result = Classification(query=query, candidates=cands)
     if not cands:

@@ -76,7 +76,7 @@ def _():
     assert only_self[0].hts.startswith("6109") and only_self[0].ruling_support >= 1, only_self
 
 
-@check("use_reasoning=False never calls the model, even when a key is in the environment")
+@check("reasoning is opt-in: the default never calls the model, even when a key is in the environment")
 def _():
     import os
     import core.classify as cl
@@ -86,10 +86,12 @@ def _():
     cl._reason = lambda *a, **k: called.append(1) or ([], [])
     os.environ["ANTHROPIC_API_KEY"] = "sk-test"
     try:
+        res = classify(conn, subject, limit=3)
+        assert not called and not res.reasoned, "the default path ran the paid model"
         res = classify(conn, subject, limit=3, use_reasoning=False)
-        assert not called and not res.reasoned, "the paid path ran"
-        classify(conn, subject, limit=3)
-        assert called, "the default path should reach the model when a key is set"
+        assert not called and not res.reasoned, "an explicit False ran the paid model"
+        classify(conn, subject, limit=3, use_reasoning=True)
+        assert called, "an explicit True should reach the model when a key is set"
     finally:
         cl._reason = original
         os.environ.pop("ANTHROPIC_API_KEY", None)

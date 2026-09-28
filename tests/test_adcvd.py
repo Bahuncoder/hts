@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -16,7 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.adcvd import AdcvdIndex, Order  # noqa: E402
-from ingest.adcvd import _own_case, _rank, country_iso, parse_list, scope_hts  # noqa: E402
+import ingest.adcvd as adcvd_mod  # noqa: E402
+from ingest.adcvd import _own_case, _rank, _try_candidates, country_iso, parse_list, scope_hts  # noqa: E402
+from ingest.refresh import MIN_ADCVD_ORDERS, validate_adcvd  # noqa: E402
 
 _results: list[tuple[str, str, str]] = []
 
@@ -311,6 +314,48 @@ def _():
     assert _own_case(HEADER_MISSING, "A-351-860") is None
 
 
+NO_HEADER_WITH_SCOPE = (HEADER_MISSING +
+                        "\n\nScope of the Order\n\n    The products covered are steel "
+                        "widgets, classified under HTSUS subheading 7317.00.5502.\n")
+CONFIRMED_WITH_SCOPE = (HEADER_SHARED +
+                        "\n\nScope of the Order\n\n    The products covered are steel "
+                        "widgets, classified under HTSUS subheading 7317.00.5502.\n")
+
+
+@check("candidates: an unconfirmable header is never accepted on its scope text alone — a miss beats a wrong match")
+def _():
+    docs = {"unheaded": NO_HEADER_WITH_SCOPE}
+    original = adcvd_mod._get
+    adcvd_mod._get = lambda url, retries=3: docs[url]
+    try:
+        d = {"results": [{"title": "Antidumping Duty Order", "publication_date": "2020-01-01",
+                          "document_number": "1", "raw_text_url": "unheaded"}]}
+        # Rejected outright: a header-less notice must never be trusted on scope text alone,
+        # regardless of how confidently it matches -- fail closed, not a guess.
+        assert _try_candidates(d, "A-351-860") is None
+    finally:
+        adcvd_mod._get = original
+
+
+@check("candidates: a later, confirmed-header notice is used when an earlier unconfirmable one is skipped")
+def _():
+    docs = {"unheaded": NO_HEADER_WITH_SCOPE, "confirmed": CONFIRMED_WITH_SCOPE}
+    original = adcvd_mod._get
+    adcvd_mod._get = lambda url, retries=3: docs[url]
+    try:
+        d = {"results": [
+            {"title": "Antidumping Duty Order", "publication_date": "2020-01-01",
+             "document_number": "1", "raw_text_url": "unheaded"},
+            {"title": "Antidumping Duty Order", "publication_date": "2019-01-01",
+             "document_number": "2", "raw_text_url": "confirmed"},
+        ]}
+        got = _try_candidates(d, "A-351-860")
+        assert got is not None and got["source"] == "2", got
+        assert "7317005502" in got["hts"], got
+    finally:
+        adcvd_mod._get = original
+
+
 @check("rank: a correction notice never outranks the order it corrects, even reusing its exact phrase")
 def _():
     order = "Antidumping Duty Order on Hydrofluorocarbon Blends From the People's Republic of China"
@@ -435,6 +480,64 @@ def _():
     assert all(o.get("iso") for o in data["orders"]), [o["country"] for o in data["orders"] if not o.get("iso")]
     with_hts = sum(1 for o in data["orders"] if o["hts"])
     assert with_hts / len(data["orders"]) > 0.95, f"only {with_hts} of {len(data['orders'])} orders list HTS numbers"
+
+
+def _write(dir_, name, obj):
+    p = Path(dir_) / name
+    p.write_text(json.dumps(obj))
+    return p
+
+
+def _orders(n, with_hts_frac=1.0):
+    return {"orders": [{"case": f"A-000-{i:03d}", "country": "China",
+                        "hts": ["1234567890"] if i < n * with_hts_frac else []}
+                       for i in range(n)]}
+
+
+@check("refresh: an unreadable or empty AD/CVD output is rejected")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        bad = _write(d, "bad.json", {"orders": []})
+        assert validate_adcvd(bad, Path(d) / "missing.json") is not None
+        garbage = Path(d) / "garbage.json"
+        garbage.write_text("not json")
+        assert validate_adcvd(garbage, Path(d) / "missing.json") is not None
+
+
+@check("refresh: fewer orders than the floor is rejected, even with no previous file to compare")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        new = _write(d, "new.json", _orders(MIN_ADCVD_ORDERS - 1))
+        problem = validate_adcvd(new, Path(d) / "missing.json")
+        assert problem and str(MIN_ADCVD_ORDERS) in problem, problem
+
+
+@check("refresh: a collapsed HTS-resolution ratio is rejected even with enough orders")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        new = _write(d, "new.json", _orders(MIN_ADCVD_ORDERS + 100, with_hts_frac=0.5))
+        problem = validate_adcvd(new, Path(d) / "missing.json")
+        assert problem and "HTS list" in problem, problem
+
+
+@check("refresh: a real drop from the previous count is rejected; a good file with no previous is not")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        prev = _write(d, "prev.json", _orders(700))
+        shrunk = _write(d, "shrunk.json", _orders(500))          # < 90% of 700
+        assert validate_adcvd(shrunk, prev) is not None
+        steady = _write(d, "steady.json", _orders(650))          # >= 90% of 700
+        assert validate_adcvd(steady, prev) is None
+        assert validate_adcvd(prev, Path(d) / "missing.json") is None
+
+
+@check("refresh: a corrupt previous file cannot block a good new one")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        prev = Path(d) / "prev.json"
+        prev.write_text("not json")
+        new = _write(d, "new.json", _orders(MIN_ADCVD_ORDERS + 100))
+        assert validate_adcvd(new, prev) is None
 
 
 def main() -> int:

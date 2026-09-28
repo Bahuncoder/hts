@@ -391,6 +391,21 @@ def _():
     assert d["summary"]["totals_complete"] is True, d["summary"]
 
 
+@check("audit: a description-only line is never 'ready' on classifier confidence alone")
+def _():
+    # Confidence is an unvalidated retrieval heuristic (see eval_classify.py);
+    # a classifier-sourced code must always reach a person, medium/high bucket
+    # or not. Regression for the case where "high confidence" still lands on
+    # the wrong heading with no other trigger to catch it.
+    d = _audit([{"sku": "T", "description": "cotton knit t-shirt for men",
+                 "country": "Vietnam", "value": 10000}])
+    ln = d["lines"][0]
+    assert ln["hts"], "expected a classified code"
+    assert ln["confidence"] in ("high", "medium", "low"), ln["confidence"]
+    assert ln["status"] == "low_confidence", (ln["status"], ln["confidence"], ln["review_reasons"])
+    assert ln["confidence"].title() in ln["review_reasons"][0], ln["review_reasons"]
+
+
 @check("audit: metals and vehicles are never presented as ready")
 def _():
     d = _audit([{"sku": "S", "description": "bolt", "country": "China", "value": 1000, "hts": "7318.15.20.00"},

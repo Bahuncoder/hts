@@ -37,7 +37,11 @@ export const STATUS_LABEL: Record<Status, string> = {
   incomplete: "Incomplete",
   scope_review: "Scope review",
   suffix_review: "Confirm code",
-  low_confidence: "Low confidence",
+  // Fires for every classifier-sourced line regardless of confidence bucket
+  // (see api/main.py) -- "high" confidence is a retrieval heuristic, not a
+  // guarantee, so the label must not imply the code is only doubtful when
+  // the bucket happens to say "low".
+  low_confidence: "Unconfirmed classification",
   ready: "Ready",
 };
 

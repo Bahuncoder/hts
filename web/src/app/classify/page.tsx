@@ -113,15 +113,12 @@ export default async function ClassifyPage({
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[13px] text-muted">#{i + 1}</span>
               <HtsLink code={c.hts} />
-              <Badge
-                tone={
-                  c.confidence === "high"
-                    ? "good"
-                    : c.confidence === "medium"
-                      ? "warn"
-                      : "neutral"
-                }
-              >
+              {/* Never "good"/green: a candidate is never decided, at any
+                  confidence level (see docs/STATUS.md's accuracy figures and
+                  api/main.py's `low_confidence` gate, which the audit engine
+                  applies regardless of bucket) -- this page must not look
+                  more certain than that page does. */}
+              <Badge tone={c.confidence === "low" ? "neutral" : "warn"}>
                 {c.confidence} confidence
               </Badge>
               {c.ruling_support > 0 ? (

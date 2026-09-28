@@ -28,7 +28,22 @@ BINDS = [
 ]
 COUNTRY = re.compile(r"products? of ([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+){0,2})")
 EFFECTIVE = re.compile(r"on or after\s+([A-Z][a-z]+ \d{1,2},? \d{4})")
-EXCLUSION_REF = re.compile(r"granted an exclusion[^.]{0,4000}", re.S)
+# [^.] stops at ANY period, including the ones inside a dotted HTS code
+# ("9903.88.01") -- which is exactly the text this needs to capture, so it
+# always truncated right before the code it was looking for and never found
+# one. A real sentence end is a period followed by whitespace or the end of
+# the text (a period inside a code is followed by a digit, never that); a
+# clause can also end by introducing an enumerated list with a colon, which
+# must stop the match too, or the list's own codes get swept into the
+# exclusion reference and stripped out of the subdivision's actual scope.
+# "U.S." and "U.K." are the recurring abbreviations in this text whose own
+# internal period would otherwise look exactly like a sentence end -- the
+# real corpus's exclusion clauses are "... granted an exclusion by the U.S.
+# Trade Representative and provided for in: (1) heading 9903.88.05 and U.S.
+# note ...; (2) heading 9903.88.06 ...", so without this the match stopped
+# after the first "U.S." and still found nothing.
+EXCLUSION_REF = re.compile(
+    r"granted an exclusion(?:(?!(?<!U\.S)(?<!U\.K)\.(?:\s|$)|:\s*\n).){0,4000}", re.S)
 IN_EFFECT = re.compile(r"only subdivisions?\s+(.{0,200}?)\s*of this note", re.I)
 
 _NOISE = {"The", "United", "Notwithstanding", "For", "Any", "All", "Such",

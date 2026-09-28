@@ -398,6 +398,47 @@ def _():
     assert all(not h.startswith("9903.01") for h in r.scope_unverified), r.scope_unverified
 
 
+@real("a deal (threshold_pct) rule and a plain REPLACE rule never both apply to the same code and origin")
+def _():
+    """core/duty.py's compute() partitions Ch99Rule.applied into `deals`
+    (threshold_pct set) and `replacements` (Effect.REPLACE, no threshold) and
+    resolves each independently; the deal top-up is computed from the
+    pre-replacement base rate and is never reconciled against a REPLACE rule
+    that fires on the same line, so if both ever applied together the total
+    would double-count. Exhaustively checked once (2026-09-28, ~2.47M
+    (hts, country) pairs across every leaf code and every country named on any
+    Ch99 rule): zero co-occurrences on the real schedule. This regression
+    covers, fast, every plain-REPLACE rule whose own `base_refs` name specific
+    codes (the only codes it could ever fire on) against every deal country --
+    mathematically complete for those rules, not a sample. The remaining
+    plain-REPLACE rules resolve through RegimeIndex's own domain logic instead
+    of base_refs (no enumerable code list to check quickly); those were only
+    covered by the one-time exhaustive sweep, not by this fast regression --
+    re-run the sweep after a schedule edition that changes what those domains
+    cover, rather than assuming this test would catch it.
+    """
+    from core.ch99 import Effect
+    from core.duty import resolve_ch99
+    deal_countries = sorted({c for r in E.ch99 if r.threshold_pct is not None for c in r.countries})
+    assert deal_countries, "no deal rules found -- the schedule edition changed shape"
+    checked = 0
+    for rule in E.ch99:
+        if rule.effect is not Effect.REPLACE or rule.threshold_pct is not None or not rule.base_refs:
+            continue
+        codes = [ln.hts for ln in E.tree.leaves
+                 if any(ln.hts.replace(".", "").startswith(b.replace(".", "")) for b in rule.base_refs)]
+        for hts in codes:
+            for country in deal_countries:
+                res = resolve_ch99(E.ch99, hts, country, E.scopes, E.regimes, claim=None)
+                checked += 1
+                applied_deals = [r for r in res.applied if r.threshold_pct is not None]
+                applied_plain = [r for r in res.applied if r.effect is Effect.REPLACE and r.threshold_pct is None]
+                assert not (applied_deals and applied_plain), (
+                    f"{hts}/{country}: deal {[r.hts for r in applied_deals]} and "
+                    f"replacement {[r.hts for r in applied_plain]} both applied")
+    assert checked > 0, "no base_refs-enumerable REPLACE rule found to check -- the schedule edition changed shape"
+
+
 @real("resolution is fast enough for a 1,000-line audit (quotes under 20 ms)")
 def _():
     import time

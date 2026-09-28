@@ -291,8 +291,9 @@ def _try_candidates(d: dict, case: str) -> dict | None:
     first = None
     for r in cands[:8]:
         body = _plain(_get(r["raw_text_url"]))
-        if _own_case(body, case) is False:
-            continue                              # this notice is about a different case
+        if _own_case(body, case) is not True:
+            continue                              # a different case, or an unconfirmable header --
+                                                    # a wrong match is worse than a missed one
         hts = scope_hts(body)
         got = {"source": r["document_number"], "source_date": r["publication_date"],
                "title": r["title"][:140], "hts": hts}

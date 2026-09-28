@@ -43,6 +43,11 @@ AUDIT_BUDGET_SECONDS = float(os.environ.get("HTSDESK_AUDIT_BUDGET", "45"))
 # complete map of the surface — every path, every schema — handed to anyone who
 # asks. Useful in development, so it is opt-in rather than removed.
 _DOCS = os.environ.get("HTSDESK_ENABLE_DOCS") == "1"
+# The reasoning layer is unmeasured (see tests/eval_classify.py --reasoning):
+# it must never turn on just because ANTHROPIC_API_KEY happens to be present
+# in the environment. An operator has to opt in explicitly and separately.
+_REASONING = os.environ.get("HTSDESK_ENABLE_REASONING") == "1" and bool(
+    os.environ.get("ANTHROPIC_API_KEY"))
 
 app = FastAPI(
     title="HTSDesk API",
@@ -237,7 +242,7 @@ def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
         "counts": counts,
         "index": coverage,
         "index_complete": index_complete,
-        "reasoning_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "reasoning_enabled": _REASONING,
         "adcvd_orders": len(_engine.adcvd.orders) if _engine is not None and _engine.adcvd else 0,
         "adcvd_generated": (_engine.adcvd.generated if _engine is not None and _engine.adcvd else None),
         "fee_constants_stale": fee_constants_stale(),
@@ -339,7 +344,8 @@ def search(q: str = Query(..., min_length=2, max_length=MAX_TEXT),
 def classify_endpoint(q: str = Query(..., min_length=3, max_length=MAX_TEXT),
                       limit: int = Query(6, ge=1, le=20),
                       conn=Depends(db), _=Depends(guard("classify"))):
-    return run_classify(conn, clean_text(q, "q"), limit=limit).as_dict()
+    return run_classify(conn, clean_text(q, "q"), limit=limit,
+                       use_reasoning=_REASONING).as_dict()
 
 
 @app.post("/api/quote")
@@ -416,7 +422,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         if not item.description.strip():
             return refuse("unclassified", "no_description",
                           "No HTS code and no description to classify from.")
-        cls = run_classify(conn, item.description, limit=3)
+        cls = run_classify(conn, item.description, limit=3, use_reasoning=_REASONING)
         if not cls.candidates:
             return refuse("unclassified", "no_candidate",
                           "Could not classify this product from its description.")
@@ -475,8 +481,14 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         triggers.append(("suffix_review",
                          "Sibling statistical lines carry different rates; the "
                          "10-digit suffix was not determined."))
-    if confidence == "low":
-        triggers.append(("low_confidence", "Low-confidence classification."))
+    if top is not None:
+        # Confidence buckets ("high"/"medium"/"low") are a retrieval heuristic,
+        # never validated against measured accuracy (see eval_classify.py) --
+        # a classifier-sourced code is unconfirmed regardless of which bucket
+        # it lands in, so every one of them needs a person, not just "low".
+        triggers.append(("low_confidence",
+                         f"{confidence.title()}-confidence classification suggested by "
+                         "the tool; not yet confirmed by a person."))
 
     return {
         **base,
