@@ -4,18 +4,23 @@
  *  to be broken — server actions, cookies, redirects, form state — are exactly
  *  the parts an HTTP-level test cannot reach.
  *
- *  Start the API and web first, then: node tests/journey.test.mjs
+ *  Safety: this starts its OWN production server on a spare port with a
+ *  scratch accounts database (harness.mjs), never data/accounts.db — the
+ *  earlier version assumed a server already running on :3000 and used
+ *  whatever accounts database that server had, which reproduced the exact
+ *  incident that emptied the live diff cursor. HTSDESK_API is left at its
+ *  default (127.0.0.1:8099) so the real classifier/duty engine prices the
+ *  journey: start that separately first, then: node tests/journey.test.mjs
  */
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
-import { BASE, PASSWORD as SHARED_PW, go, inbox, newContext, signUp } from "./helpers.mjs";
+import { startApp } from "./harness.mjs";
 
-
-
-
-const TOKEN = process.env.HTSDESK_ADMIN_TOKEN ?? "admin-test-token";
-
-
+const app = await startApp({ port: 3485 });
+// helpers.mjs reads HTSDESK_TEST_WEB at import time, so this must be set
+// before it is first imported (dynamically, not statically, for that reason).
+process.env.HTSDESK_TEST_WEB = app.base;
+const { BASE, PASSWORD: SHARED_PW, go, inbox, newContext, signUp } = await import("./helpers.mjs");
 
 const results = [];
 let browser, page, account;
@@ -140,9 +145,7 @@ await step("saving a catalogue watches its codes", async () => {
 });
 
 await step("a published tariff action reaches the customer as an alert", async () => {
-  const res = await fetch(`${BASE}/api/admin/diff?since=2026-08-01`, {
-    method: "POST", headers: { "x-admin-token": TOKEN },
-  });
+  const res = await app.admin("/api/admin/diff?since=2026-08-01");
   const d = await res.json();
   assert.ok(d.ran, "diff did not run");
   await page.goto(`${BASE}/alerts`, { waitUntil: "networkidle" });
@@ -282,6 +285,7 @@ await step("the layout does not scroll sideways on a phone", async () => {
 });
 
 await browser.close();
+await app.stop();
 
 const failed = results.filter(([, e]) => e);
 const w = Math.max(...results.map(([n]) => n.length));

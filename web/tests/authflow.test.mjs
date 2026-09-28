@@ -2,18 +2,32 @@
  *
  *  Adapts to the server it is given. With a mail provider configured it
  *  exercises the real link flows; without one it checks the documented
- *  fallback. Run the full version against a local catcher:
+ *  fallback.
+ *
+ *  Safety: this starts its OWN production server on a spare port with a
+ *  scratch accounts database (harness.mjs), never data/accounts.db. The
+ *  earlier version assumed a server already running on :3000 and used
+ *  whatever accounts database that server had. To exercise the real link
+ *  flows, point it at a local mail catcher first:
  *
  *    node tests/mailcatch.mjs &
  *    RESEND_API_KEY=test RESEND_API_URL=http://127.0.0.1:4444/emails \
- *      SITE_URL=http://localhost:3000 npm run start
- *    node tests/authflow.test.mjs
+ *      node tests/authflow.test.mjs
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { chromium } from "playwright-core";
+import { startApp } from "./harness.mjs";
 
-const BASE = process.env.HTSDESK_TEST_WEB ?? "http://localhost:3000";
+const PORT = 3487;
+const app = await startApp({
+  port: PORT,
+  env: process.env.RESEND_API_KEY
+    ? { RESEND_API_KEY: process.env.RESEND_API_KEY, RESEND_API_URL: process.env.RESEND_API_URL,
+        SITE_URL: `http://127.0.0.1:${PORT}` }
+    : {},
+});
+const BASE = app.base;
 const MAILBOX = process.env.HTSDESK_MAILBOX ?? "/tmp/mailbox.jsonl";
 const PASSWORD = "a-perfectly-fine-passphrase";
 const results = [];
@@ -218,6 +232,7 @@ if (emailMode) {
 }
 
 await browser.close();
+await app.stop();
 
 const failed = results.filter(([, e]) => e);
 const w = Math.max(...results.map(([n]) => n.length));

@@ -3,11 +3,22 @@
  *  Every case here corresponds to something found by attacking a running
  *  instance. They exist so it cannot come back.
  *
- *  Needs the API and web app running: node tests/security.test.mjs
+ *  Safety: this starts its OWN production server on a spare port with a
+ *  scratch accounts database (harness.mjs), never data/accounts.db. The
+ *  earlier version assumed a server already running on :3000 and used
+ *  whatever accounts database that server had. HTSDESK_API is left at its
+ *  default (127.0.0.1:8099): start the real engine separately first, then:
+ *  node tests/security.test.mjs
  */
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
-import { BASE, newContext, signUp } from "./helpers.mjs";
+import { startApp } from "./harness.mjs";
+
+const app = await startApp({ port: 3486 });
+// helpers.mjs reads HTSDESK_TEST_WEB at import time, so this must be set
+// before it is first imported (dynamically, not statically, for that reason).
+process.env.HTSDESK_TEST_WEB = app.base;
+const { BASE, newContext, signUp } = await import("./helpers.mjs");
 
 /** Fonts are fetched from Google on every fresh context. They change nothing
  *  about behaviour and make navigation waits flaky when the network is slow,
@@ -203,6 +214,7 @@ await check("admin endpoints refuse a signed-in customer", async () => {
 });
 
 await browser.close();
+await app.stop();
 
 const failed = results.filter(([, e]) => e);
 const w = Math.max(...results.map(([n]) => n.length));

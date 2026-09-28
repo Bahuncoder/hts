@@ -77,8 +77,14 @@ test-math:
 test-adcvd:
 	@python3 tests/test_adcvd.py
 
+test-notes:
+	@python3 tests/test_notes.py
+
 test-rate-limiter:
 	@python3 tests/test_rate_limiter.py
+
+test-backup-security:
+	@python3 -m unittest tests.test_backup_security -v
 
 test-api:
 	@python3 tests/test_api.py
@@ -95,9 +101,9 @@ test-classify-eval:
 eval:
 	python3 tests/eval_classify.py 400
 
-check: build test-duty test-math test-adcvd test-rate-limiter test-classify-eval test-regimes test-refresh test-api test-email \
-       test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review \
-       test-ui test-draft test-contrast test-journey test-security test-authflow eval
+check: build test-duty test-math test-adcvd test-notes test-rate-limiter test-backup-security test-classify-eval test-regimes test-refresh test-api test-email \
+       test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-landed-cost test-evidence test-catalogue-costs test-review \
+       test-ui test-draft test-contrast test-journey test-security test-authflow test-auth-transaction test-feature-journey eval
 
 test-email:
 	@cd web && node tests/email.test.mjs
@@ -129,6 +135,22 @@ test-csvparse:
 test-proof:
 	@cd web && node tests/proof.test.mjs
 
+# Landed-cost rounding/allocation and evidence-proof tamper detection, straight
+# from src/lib (no server).
+test-landed-cost:
+	@cd web && node tests/landed-cost.test.mjs
+
+# Evidence export/report: cost saving, validation, CSRF, ownership, report
+# escaping. Own production server on a spare port, scratch database.
+test-evidence:
+	@cd web && node tests/evidence.test.mjs
+
+# Concurrent quota/token/session races plus the review workflow (ownership,
+# version conflicts, comment-without-changing-decision), against its own
+# scratch database (no server, no browser).
+test-catalogue-costs:
+	@cd web && node tests/catalogue-costs.test.mjs
+
 # The audit as a review workspace and honest saved catalogues, in a real
 # browser against its own production server (3311/3312) and a fake engine.
 test-review:
@@ -149,20 +171,35 @@ test-draft:
 test-contrast:
 	@cd web && node tests/contrast.test.mjs
 
-# Drives a real browser through the customer journey. Needs the API and web
-# app running, and a Chrome on the machine.
+# Drives a real browser through the customer journey. Starts its own
+# production server (port 3485) with a scratch accounts database, never
+# data/accounts.db; needs the real engine running separately (port 8099, for
+# real duty figures) and a Chrome on the machine.
 test-journey:
 	@cd web && node tests/journey.test.mjs
 
-# Attacks the running app: cross-account access, session flags, credential
-# throttling, CSV formula injection, admin gates.
+# Attacks its own production server (port 3486, scratch accounts database):
+# cross-account access, session flags, credential throttling, CSV formula
+# injection, admin gates. Needs the real engine running separately (port 8099).
 test-security:
 	@cd web && node tests/security.test.mjs
 
-# Password reset and email verification. Runs the link flows when a mail
-# provider is configured, the documented fallback when not.
+# Password reset and email verification, on its own production server (port
+# 3487, scratch accounts database). Runs the link flows when a mail provider
+# is configured (RESEND_API_KEY/RESEND_API_URL), the documented fallback when
+# not.
 test-authflow:
 	@cd web && node tests/authflow.test.mjs
+
+# Password reset, session revocation and single-use links end to end in a real
+# browser, own production server and fake mail/engine. Port 3484.
+test-auth-transaction:
+	@cd web && node tests/auth-transaction.test.mjs
+
+# Full browser workflow against production routes and a fake engine: audit,
+# FX landed cost, evidence save/export, approve, assign, PDF, mobile. Port 3482.
+test-feature-journey:
+	@cd web && node tests/feature-journey.test.mjs
 
 # Captures outbound email locally so the link flows can be exercised without
 # a provider account. Point RESEND_API_URL at it when starting the web app.

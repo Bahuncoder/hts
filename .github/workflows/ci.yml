@@ -16,10 +16,24 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
       - run: pip install -r requirements.txt
-      # These need no downloaded data. test_api, test_refresh and the
-      # classifier evaluation need the reference data in data/ and run on the
-      # release machine (`make check`).
+      # Mirrors `npm audit` below: catches a published advisory landing on a
+      # pinned version (this is how the idna/certifi/Pillow advisories and the
+      # 2026-09-27 anyio/click/starlette CVEs were found -- both times by
+      # manual review, not by anything automated, until now).
+      - run: pip install pip-audit && pip-audit -r requirements.txt
+      # These need no downloaded data (test_math and test_regimes' real-schedule
+      # cases run too, since data/'s reference JSON/text is committed and
+      # present after checkout; they degrade to their pure-unit cases only if
+      # it's ever removed from the repo). test_api and test_refresh need a
+      # live server or take longer than a merge gate should and still run on
+      # the release machine (`make check`).
       - run: python3 tests/test_duty.py
+      - run: python3 tests/test_math.py
+      - run: python3 tests/test_adcvd.py
+      - run: python3 tests/test_notes.py
+      - run: python3 tests/test_rate_limiter.py
+      - run: python3 -m unittest tests.test_backup_security
+      - run: python3 tests/test_regimes.py
       - run: python3 tests/test_classify_eval.py
 
   web:

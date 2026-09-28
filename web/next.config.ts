@@ -6,7 +6,20 @@ const nextConfig: NextConfig = {
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "X-Frame-Options", value: "DENY" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-      { key: "Content-Security-Policy", value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
+      // No script-src: the App Router's own hydration payload is a series of
+      // inline <script> tags with per-request content (verified against a
+      // real build), so 'self' alone blocks the app from rendering at all.
+      // The two real fixes both cost more than this is worth while there is
+      // no injection point to protect against: a nonce (Next's documented
+      // mechanism) forces every page to dynamic rendering, which would drop
+      // this app's static/ISR pages (including the sitemap); experimental
+      // Subresource Integrity was tried and confirmed NOT to cover this,
+      // since SRI only hashes external script files, not inline content.
+      // 'unsafe-inline' would satisfy the browser without stopping anything,
+      // which is worse than being honest that this directive is absent.
+      // Revisit if the app ever adds a real injection surface.
+      { key: "Content-Security-Policy",
+        value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
     ] }];
   },
