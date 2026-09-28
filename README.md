@@ -46,10 +46,11 @@ Extracted Section 301 list sizes against published USTR figures:
 
 - USITC HTS REST export — 19,949 leaf codes
 - USITC Chapter 99 PDF — the U.S. Notes
-- CBP CROSS — 221,616 classification rulings, HTS-tagged
+- CBP CROSS — 200,962 classification rulings, HTS-tagged (grows with routine ingest; re-check against `data/htsdesk.db` before quoting a figure)
 - Federal Register API — live tariff actions
 
 ## Fee constants
 
-FY2026, effective 2025-10-01: MPF 0.3464% (min $33.58, max $651.50), HMF 0.125%.
-Inflation-adjusted annually — re-verify each October.
+FY2027, effective 2026-10-01: MPF 0.3464% (min $34.58, max $670.86), HMF 0.125%.
+Inflation-adjusted annually — re-verify each October against `core/duty.py`'s
+`MPF_MIN`/`MPF_MAX`, the source of truth (CBP Dec. 26-14, 91 FR 48398).

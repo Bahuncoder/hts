@@ -57,7 +57,38 @@ tables in an existing accounts database are left dormant, not dropped.
 | `web` `npm run test:reprice` | 1 (end-to-end) | a real browser: audit with stated entries/transport, save, approve two lines, re-price against a fake engine whose second response deliberately differs — a rate move is picked up and reopens its approval, an unchanged line and its approval are untouched, a never-classified line is resolved with fresh evidence, an already-classified line keeps its existing evidence, entries/transport are resubmitted from what was saved rather than the audit form's defaults |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
-evaluation; `test_duty` and `test_classify_eval` run anywhere (CI runs those).
+evaluation; `test_duty`, `test_math`, `test_adcvd`, `test_rate_limiter`,
+`test_backup_security`, `test_regimes` and `test_classify_eval` run anywhere
+and are all in CI as of 2026-09-27 (previously only `test_duty` and
+`test_classify_eval` were — the rate-limiter regression test born from a real
+incident was, until this date, never run on a merge). `test_api` and
+`test_refresh` still need a live server or take too long for a merge gate and
+run on the release machine (`make check`).
+
+**`test-journey`, `test-security` and `test-authflow` (2026-09-27 fix):** these
+three used to assume a server was already running at `localhost:3000` and
+used whatever accounts database that server had — unlike every other web
+test, which refuses to run against an existing database file. Started
+normally (`make web`) that server uses `data/accounts.db`, so running these
+by hand reproduced the exact incident that once emptied the live diff cursor
+(`docs/PROJECT-AUDIT.md`). They now start their own production server on a
+dedicated port with a scratch accounts database (`web/tests/harness.mjs`),
+the same guarantee every other suite already had; `test-journey` and
+`test-security` still need the real engine running separately (port 8099) for
+real duty figures, `test-authflow` does not.
+
+**Test coverage table is known stale (2026-09-27 audit finding), not yet
+reconciled.** Since it was last written: `web/tests/watch.test.mjs`,
+`landed-cost.test.mjs`, `evidence.test.mjs` and `catalogue-costs.test.mjs`
+were added to (or, for the latter three, wired for the first time into)
+`npm run test:integration`; `auth-transaction.test.mjs` and
+`feature-journey.test.mjs` were wired into `make check` (`test-auth-transaction`,
+`test-feature-journey`); `ReviewWorkspace` (the "audit review workspace" this
+table's browser-suites row refers to) was rewritten from a second review form
+into a summary and a link, so its own coverage moved into `feature-journey`'s
+and `catalogue-costs`'s assertions rather than disappearing. Every count in
+this table should be treated as directional, not exact, until it is
+regenerated from the actual files.
 
 ## Classifier accuracy
 
@@ -82,17 +113,27 @@ before being filtered out. They are withdrawn.
 What this means for the product: the classifier is a candidate generator with
 precedent, not a filing-ready code. The audit already flags classified codes
 whose sibling statistical lines carry different rates (`suffix_review`), and
-classified rows are never presented as decided.
+(as of the 2026-09-27 audit) *every* classifier-sourced line, regardless of
+its confidence bucket, is flagged `low_confidence` and withheld from `ready`
+until a person confirms it — confidence is a retrieval heuristic never
+validated against the accuracy figures above, so it previously let
+"high"-confidence wrong headings through as decided (`api/main.py`,
+`tests/test_api.py`: "a description-only line is never 'ready' on classifier
+confidence alone"). Classified rows are never presented as decided.
 
-**The reasoning layer is still unmeasured**, though `eval_classify.py` can now
-measure it: pass `--reasoning` (or `--reasoning=N` for the paid-call count,
-default 50) to run the same held-out cases with `use_reasoning=True` and
-report both numbers side by side from the same run, not compared against a
-figure from a different day. This has NOT been run — it needs
-`ANTHROPIC_API_KEY`, which is not set anywhere this has been worked on, and
-each case costs one real model call. The script refuses to run with
-`--reasoning` and no key, rather than silently measuring its own no-key
-fallback and reporting that as "reasoning."
+**The reasoning layer is still unmeasured**, and (as of 2026-09-27) requires
+two separate opt-ins to run at all: `HTSDESK_ENABLE_REASONING=1` in addition
+to `ANTHROPIC_API_KEY`. Previously the key's mere presence in the environment
+was the only gate, which meant an unrelated process setting that key on the
+same host would have silently turned reasoning on in production with no
+deploy and no measurement. `eval_classify.py` can measure it: pass
+`--reasoning` (or `--reasoning=N` for the paid-call count, default 50) to run
+the same held-out cases with `use_reasoning=True` and report both numbers
+side by side from the same run, not compared against a figure from a
+different day. This has NOT been run — it needs `ANTHROPIC_API_KEY`, which is
+not set anywhere this has been worked on, and each case costs one real model
+call. The script refuses to run with `--reasoning` and no key, rather than
+silently measuring its own no-key fallback and reporting that as "reasoning."
 
 ## Known gaps
 
@@ -246,6 +287,17 @@ fallback and reporting that as "reasoning."
   case's number (not a false exclusion); a separate, case-specific notice
   exists but was not located by either the case-number or the product-name
   search. The absence of a flag is not proof that no order applies.
+  A seventh fix (2026-09-27): `_own_case`'s "header didn't parse" result
+  (`None`, distinct from a confirmed non-match) was being treated as
+  acceptable by its one caller, `_try_candidates` — a notice whose header
+  bracket cannot be read could be accepted on scope-text match alone, with no
+  case-identity confirmation at all. Old-format notices (no bracket) are
+  exactly the ones `latest_scope` prefers, since it tries the order and its
+  continuation first. Now a `None` is treated the same as a confirmed
+  non-match: skipped, tried again on the next candidate, and the case is left
+  unresolved (not guessed) if no candidate's header ever confirms it.
+  `tests/test_adcvd.py` pins this with a fixture notice that matches the
+  scope text but has no header at all.
 - MPF preference exemptions are not modelled; the assumptions list says so.
 - The IEEPA "refundable" figure is a scenario estimate for one entry at the
   entered value. There is no entry date, paid duty or liquidation status, so it
