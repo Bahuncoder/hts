@@ -37,7 +37,11 @@ apt-get install -y poppler-utils python3-pil   # pdftotext/pdftoppm and Pillow: 
 .venv/bin/python ingest/cross.py --skip-metadata --bodies 60000   # full text
 
 mkdir -p /etc/htsdesk
-printf 'ANTHROPIC_API_KEY=sk-ant-...\nHTSDESK_ADMIN_TOKEN=...\nHTSDESK_WEB_URL=https://yourdomain.com\n' > /etc/htsdesk/api.env
+# ANTHROPIC_API_KEY alone does nothing: the reasoning layer's accuracy is
+# unmeasured, so it also needs HTSDESK_ENABLE_REASONING=1 as an explicit,
+# separate opt-in (see docs/STATUS.md) -- leave both out to run classification
+# on ruling precedent alone, which is the current default recommendation.
+printf 'ANTHROPIC_API_KEY=sk-ant-...\nHTSDESK_ENABLE_REASONING=0\nHTSDESK_ADMIN_TOKEN=...\nHTSDESK_WEB_URL=https://yourdomain.com\n' > /etc/htsdesk/api.env
 chmod 600 /etc/htsdesk/api.env
 
 cp deploy/htsdesk-api.service /etc/systemd/system/

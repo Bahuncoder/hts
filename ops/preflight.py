@@ -85,8 +85,13 @@ token = env("HTSDESK_ADMIN_TOKEN")
 if token:
     check("HTSDESK_ADMIN_TOKEN is not trivially short", len(token) >= 24, f"{len(token)} characters")
 
-if env("ANTHROPIC_API_KEY"):
+if env("ANTHROPIC_API_KEY") and os.environ.get("HTSDESK_ENABLE_REASONING") == "1":
     check("reasoning layer enabled", True)
+elif env("ANTHROPIC_API_KEY"):
+    warn("reasoning layer enabled",
+         "ANTHROPIC_API_KEY is set but HTSDESK_ENABLE_REASONING is not \"1\" — "
+         "classification uses retrieval only, at lower accuracy (this is deliberate: "
+         "the reasoning layer's accuracy is unmeasured, see docs/STATUS.md)")
 else:
     warn("reasoning layer enabled",
          "classification falls back to retrieval only, at lower accuracy")

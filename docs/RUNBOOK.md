@@ -51,7 +51,7 @@ owes.
 | AD/CVD orders | with HTS | `make refresh` | orders that may apply to a code and origin |
 | Federal Register | daily | `make fedreg` | rate changes, new actions |
 | CROSS bodies | continuous | `make rulings` | classifier accuracy |
-| Watched-code diff | daily, 09:30 UTC | `make diff` | alerts customers to changes |
+| Watched-code diff | after each refresh succeeds (09:30 UTC fallback) | `make diff` | alerts customers to changes |
 
 `deploy/htsdesk-ingest.timer` runs the daily refresh at 09:00 UTC, ahead of
 the US business day.
@@ -107,8 +107,12 @@ records an alert when one lands.
 make diff                      # needs HTSDESK_ADMIN_TOKEN in the environment
 ```
 
-`deploy/htsdesk-diff.timer` runs it at 09:30 UTC, half an hour after the data
-refresh, so it reads that morning's documents rather than yesterday's.
+`deploy/htsdesk-ingest.service`'s `OnSuccess=` runs it right after a refresh
+actually completes, whatever that takes, and never after a failed one —
+`deploy/htsdesk-diff.timer`'s fixed 09:30 UTC run is a same-day fallback only,
+not the primary trigger (a fixed clock offset can't tell "refresh overran" or
+"refresh failed" from "refresh finished on time," which is why it used to run
+against yesterday's documents on a bad day without anyone noticing).
 
 Matching is by code prefix, and the direction matters: an action naming
 `2804.61` reaches a watched `2804.61.00.00`, so the mention is the prefix and

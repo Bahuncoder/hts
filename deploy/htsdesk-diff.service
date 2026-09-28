@@ -1,6 +1,7 @@
 [Unit]
 Description=HTSDesk change diff (match tariff actions against watched codes)
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
@@ -12,3 +13,19 @@ EnvironmentFile=/etc/htsdesk/api.env
 ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 120 \
     -X POST "${HTSDESK_WEB_URL}/api/admin/diff" \
     -H "x-admin-token: ${HTSDESK_ADMIN_TOKEN}"
+
+# This unit only ever makes one outbound HTTPS call; it touches no local
+# data, so it gets tighter sandboxing than ingest (no ReadWritePaths at all).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native

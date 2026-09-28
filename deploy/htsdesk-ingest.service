@@ -1,9 +1,45 @@
 [Unit]
 Description=HTSDesk data refresh (HTS, rulings, Federal Register)
-After=network.target
+After=network-online.target
+Wants=network-online.target
+# The diff timer used to fire on a fixed clock offset (09:30, "half an hour
+# after the data refresh") independent of whether the refresh actually
+# finished or even succeeded by then -- if it overran or failed, diff ran
+# anyway, silently, against yesterday's Federal Register documents. OnSuccess
+# fires diff immediately once a refresh genuinely completes, whatever that
+# takes, and never fires it at all after a failed one. (OnSuccess= only
+# triggers on clean completion, unlike After=/Wants=, which only orders units
+# started in the same transaction and does nothing for two independently
+# timer-triggered oneshot services hours apart.) htsdesk-diff.timer is kept
+# as a same-day fallback, not the primary trigger.
+OnSuccess=htsdesk-diff.service
 
 [Service]
 Type=oneshot
 User=htsdesk
 WorkingDirectory=/opt/htsdesk
 ExecStart=/opt/htsdesk/.venv/bin/python ingest/refresh.py
+
+# This is the unit with the least-trusted input (a PDF and a schedule feed
+# fetched fresh from the internet every day, run through pdftotext and a
+# Pillow-based shading pass), so it gets the API service's own hardening.
+# Verified empirically, not just by analogy: pdftotext, ingest.shading
+# (Pillow) and outbound HTTPS all run correctly under every one of these
+# restrictions (tested via `systemd-run --user` with the same flags against
+# the real chapter99.pdf and a live Federal Register request).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+# The release build (data/releases/<timestamp>/) and the reference database
+# it's promoted into are the only paths that must stay writable.
+ReadWritePaths=/opt/htsdesk/data

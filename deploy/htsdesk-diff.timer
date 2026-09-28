@@ -2,8 +2,11 @@
 Description=Match new tariff actions against watched codes
 
 [Timer]
-# Half an hour after the data refresh, so the diff reads that morning's
-# Federal Register documents rather than yesterday's.
+# Fallback only: htsdesk-ingest.service's OnSuccess= fires the diff promptly
+# right after a refresh actually completes, whatever that takes, and never
+# after a failed one. This fixed-clock run exists in case that chain is ever
+# interrupted (e.g. the host restarts between the two); running it twice on
+# an ordinary day is harmless (cursor-based, never advances on nothing new).
 OnCalendar=*-*-* 09:30:00 UTC
 Persistent=true
 

@@ -25,6 +25,13 @@ MISSING=""
 for cmd in python3 rsync openssl pdftotext; do
   command -v "$cmd" >/dev/null 2>&1 || MISSING="$MISSING $cmd"
 done
+# Debian/Ubuntu ship the venv module as the separate python3-venv package;
+# a minimal image can have python3 without it, which this loop's `command -v`
+# check cannot see (venv is a Python module, not its own binary). Caught here,
+# not at the "python3 -m venv" step 20 lines down, where it would still fail
+# safely (set -e) but with a raw Python traceback instead of this script's own
+# prerequisite message and remediation command.
+python3 -c "import venv" >/dev/null 2>&1 || MISSING="$MISSING python3-venv"
 if [ -n "$MISSING" ]; then
   echo "missing:$MISSING" >&2
   echo "on Debian/Ubuntu: apt-get install -y python3-venv rsync openssl poppler-utils" >&2
