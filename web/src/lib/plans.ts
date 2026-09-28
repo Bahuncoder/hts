@@ -20,6 +20,21 @@ const DAY = 24 * HOUR;
 
 export type Window = { max: number; windowMs: number };
 
+/** A plan's programmatic-API allowance. Disabled entirely for anonymous
+ *  visitors and the free plan -- API access is a paid capability. Where
+ *  enabled, `itemsPerDay` is deliberately HALF of the same plan's web
+ *  `itemsPerDay`, not equal to it: API traffic gets its own lease and its own
+ *  daily quota (a customer's automated integration must not be blocked by, or
+ *  share its budget with, their own team's manual web usage), but leaving the
+ *  ceilings equal would silently double an account's total worst-case engine
+ *  exposure for the same subscription price. `requests` (a per-minute rate)
+ *  is not halved -- it bounds burstiness, not aggregate daily engine cost.
+ *  `maxKeys` exists for rotation (mint a new key, migrate, revoke the old one)
+ *  as much as for running several integrations at once. */
+export type ApiLimits = { enabled: boolean; requests: Window; itemsPerDay: Window; maxKeys: number };
+
+const NO_API: ApiLimits = { enabled: false, requests: { max: 0, windowMs: MINUTE }, itemsPerDay: { max: 0, windowMs: DAY }, maxKeys: 0 };
+
 export type Limits = {
   /** Products in one audit request. */
   productsPerAudit: number;
@@ -29,6 +44,8 @@ export type Limits = {
   itemsPerDay: Window;
   /** Saved catalogues. Only accounts can save; 0 for an anonymous visitor. */
   savedCatalogues: number;
+  /** Programmatic API access. Disabled for anonymous and the free plan. */
+  api: ApiLimits;
 };
 
 export const LIMITS: Record<Tier, Limits> = {
@@ -37,12 +54,14 @@ export const LIMITS: Record<Tier, Limits> = {
     auditRequests: { max: 3, windowMs: 10 * MINUTE },
     itemsPerDay: { max: 150, windowMs: DAY },
     savedCatalogues: 0,
+    api: NO_API,
   },
   account: {
     productsPerAudit: 200,
     auditRequests: { max: 10, windowMs: HOUR },
     itemsPerDay: { max: 2000, windowMs: DAY },
     savedCatalogues: 20,
+    api: NO_API,
   },
 };
 
@@ -62,12 +81,18 @@ export const PLAN_LIMITS: Record<PlanId, Limits> = {
     auditRequests: { max: 20, windowMs: HOUR },
     itemsPerDay: { max: 5_000, windowMs: DAY },
     savedCatalogues: 75,
+    api: { enabled: true, requests: { max: 60, windowMs: MINUTE }, itemsPerDay: { max: 2_500, windowMs: DAY }, maxKeys: 3 },
   },
   growth: {
-    productsPerAudit: 2_000,
+    // 1,000, not 2,000: the engine hard-rejects any audit request over 1,000
+    // items outright (api/main.py's AuditRequest.items max_length), regardless
+    // of caller. 2,000 promised a ceiling the engine could never actually
+    // honor for a request between 1,001 and 2,000 items.
+    productsPerAudit: 1_000,
     auditRequests: { max: 60, windowMs: HOUR },
     itemsPerDay: { max: 25_000, windowMs: DAY },
     savedCatalogues: 500,
+    api: { enabled: true, requests: { max: 300, windowMs: MINUTE }, itemsPerDay: { max: 12_500, windowMs: DAY }, maxKeys: 10 },
   },
 };
 
@@ -99,6 +124,7 @@ export const PLAN_COPY: Record<PlanId, { name: string; blurb: string; features: 
       `${PLAN_LIMITS.starter.productsPerAudit.toLocaleString()} products per audit`,
       `${PLAN_LIMITS.starter.itemsPerDay.max.toLocaleString()} products a day`,
       `${PLAN_LIMITS.starter.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
+      `API access — ${PLAN_LIMITS.starter.api.itemsPerDay.max.toLocaleString()} products a day`,
       "Everything in Free",
     ],
   },
@@ -109,6 +135,7 @@ export const PLAN_COPY: Record<PlanId, { name: string; blurb: string; features: 
       `${PLAN_LIMITS.growth.productsPerAudit.toLocaleString()} products per audit`,
       `${PLAN_LIMITS.growth.itemsPerDay.max.toLocaleString()} products a day`,
       `${PLAN_LIMITS.growth.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
+      `API access — ${PLAN_LIMITS.growth.api.itemsPerDay.max.toLocaleString()} products a day`,
       "Everything in Starter",
     ],
   },
@@ -130,15 +157,15 @@ export function planForPriceId(priceId: string): PlanId | null {
 }
 
 /** Roadmap: not built yet. Listed separately so nothing on a page implies it
- *  exists. Re-pricing a saved catalogue shipped (lib/reprice.ts, `make
- *  test-reprice`) and was removed from this list accordingly -- it must not
- *  be listed as upcoming when a page already does it. */
+ *  exists. Re-pricing a saved catalogue and API access (starter/growth,
+ *  lib/apiKeys.ts, /account/api-keys) both shipped and were removed from this
+ *  list accordingly -- neither must be listed as upcoming when a page already
+ *  does it. */
 export const IN_BUILD = [
   "Savings analysis — FTA eligibility and alternate defensible codes",
   "Classification binder export for your reasonable-care file",
   "Team seats and shared catalogues",
   "Entry audit — upload CBP 7501s and compare declared against computed",
-  "API access",
 ] as const;
 
 /** "10 minutes", "hour", "day" for how a window reads in a sentence. */

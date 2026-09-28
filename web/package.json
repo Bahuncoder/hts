@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:integration": "node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs && node tests/auth-races.test.mjs && node tests/verify.test.mjs && node tests/watch.test.mjs && node tests/landed-cost.test.mjs && node tests/evidence.test.mjs && node tests/catalogue-costs.test.mjs",
+    "test:integration": "node tests/diff.test.mjs && node tests/outbox.test.mjs && node tests/audit.test.mjs && node tests/email.test.mjs && node tests/migrate.test.mjs && node tests/csvparse.test.mjs && node tests/proof.test.mjs && node tests/auth-races.test.mjs && node tests/verify.test.mjs && node tests/watch.test.mjs && node tests/landed-cost.test.mjs && node tests/evidence.test.mjs && node tests/catalogue-costs.test.mjs && node tests/apikeys.test.mjs",
     "test:review": "node tests/review.test.mjs",
     "test:ui": "node tests/ui-workspace.test.mjs",
     "test:draft": "node tests/draft.test.mjs",
@@ -15,6 +15,7 @@
     "test:google": "node tests/google-auth.test.mjs",
     "test:reprice": "node tests/reprice.test.mjs && node tests/reprice-review-races.test.mjs",
     "test:billing": "node tests/billing.test.mjs",
+    "test:apikeys": "node tests/apikeys.test.mjs",
     "test:auth-transaction": "node tests/auth-transaction.test.mjs",
     "test:feature-journey": "node tests/feature-journey.test.mjs"
   },

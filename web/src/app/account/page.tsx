@@ -28,6 +28,8 @@ const EVENT_LABEL: Record<string, string> = {
   catalogue_deleted: "Catalogue deleted",
   catalogue_exported: "Catalogue exported",
   alert_emails_changed: "Alert emails changed",
+  api_key_created: "API key created",
+  api_key_revoked: "API key revoked",
 };
 
 export default async function AccountPage() {
@@ -69,6 +71,17 @@ export default async function AccountPage() {
               {plan === "free" ? "See plans" : "Change plan"}
             </a>
           </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+          <p className="text-[13px] text-muted">
+            API access —{" "}
+            {limits.api.enabled
+              ? `${limits.api.itemsPerDay.max.toLocaleString()} products a day, ${limits.api.requests.max}/minute`
+              : "not included on this plan"}
+          </p>
+          <Link href={limits.api.enabled ? "/account/api-keys" : "/pricing"} className="text-[13px] font-medium text-accent hover:underline">
+            {limits.api.enabled ? "Manage API keys" : "See plans"}
+          </Link>
         </div>
       </div>
 

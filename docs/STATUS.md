@@ -5,16 +5,20 @@ is the last full audit; everything below it in this file reflects work done sinc
 This is the single place readiness is stated; if it disagrees with another
 document, this one has been updated more recently or the other is wrong.
 
-**Launching as a free product; nothing is sold.** The engine's calculation
-integrity, refresh pipeline and notification recovery were repaired after the
-audit (below). What remains before launch is measurement, coverage and
-operations work listed under "Release gate".
+**Freemium: a free plan, plus paid Starter/Growth plans.** The engine's
+calculation integrity, refresh pipeline and notification recovery were
+repaired after the audit (below). What remains before launch is measurement,
+coverage and operations work listed under "Release gate".
 
 On 2026-09-19 the paid model was removed on the owner's decision: no Stripe,
-checkout, billing portal, webhooks, subscriptions or pricing page. The durable
-webhook/ordering work built for it was deleted with it; it is still in git
-history (commit 8150908 and earlier). `subscription` and `webhook_event`
-tables in an existing accounts database are left dormant, not dropped.
+checkout, billing portal, webhooks, subscriptions or pricing page — that
+durable webhook/ordering work is still in git history (commit 8150908 and
+earlier) from before the deletion. It was rebuilt and re-shipped afterward
+(commit 443530c): Stripe subscriptions, `/pricing`, the billing portal, and a
+webhook handler that re-reads Stripe as the source of truth rather than
+trusting event order. A metered, per-account programmatic API (`/api/v1/audit`,
+`/account/api-keys`, `/docs/api`) shipped on top of it for the Starter/Growth
+plans specifically — see the new row below.
 
 ## Built and tested
 
@@ -30,7 +34,8 @@ tables in an existing accounts database are left dormant, not dropped.
 | Preferences | matched to a named program or the one program covering the origin; fixed-membership FTAs eligibility-checked, others flagged as asserted |
 | Refresh pipeline | one validated transaction, versioned release directories, indexes rebuilt inside it, engine reloads on revision change |
 | Audit API | every row returned with a status, reasons and its own row number; summary reconciles and says whether totals are complete |
-| Free model and limits | No payments. Anonymous: 25 products per audit, 3 audits per 10 minutes, 150 items per rolling 24 h. Signed-in account: 200 products per audit, 10 audits per hour, 2,000 items per rolling 24 h, 20 saved catalogues, alert emails on (opt-out). All numbers live in `web/src/lib/plans.ts` |
+| Plans and limits | Anonymous: 25 products per audit, 3 audits per 10 minutes, 150 items per rolling 24 h. Free account: 200 products per audit, 10 audits per hour, 2,000 items per rolling 24 h, 20 saved catalogues, alert emails on (opt-out). Starter/Growth (paid, Stripe): 500/1,000 products per audit, 5,000/25,000 items per day, 75/500 saved catalogues. All numbers live in `web/src/lib/plans.ts` |
+| Programmatic API (Starter/Growth) | Per-account bearer keys (`web/src/lib/apiKeys.ts`; secret shown once, only a sha256 hash stored), `POST /api/v1/audit` metered independently of web-UI usage (own `usage_event` scope, own lease) so an automated integration and manual web use never compete for the same budget. Per-request item ceiling matches the engine's real hard limit (1,000) on every plan. Key rotation via a per-plan key limit; revocation is immediate. Documented at `/docs/api` |
 | Alerts | outbox with exact-id claims, bounded retries, cursor paging with lookback, failures never advance the cursor |
 | Public cost controls | request/item budgets per client or account, one audit in flight per caller, streamed body cap |
 | Sign-in | email/password, plus optional "Continue with Google" (authorization-code flow, state-cookie CSRF check, unverified emails refused) when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set; unset, the button does not render and the route 404s |
@@ -88,7 +93,9 @@ table's browser-suites row refers to) was rewritten from a second review form
 into a summary and a link, so its own coverage moved into `feature-journey`'s
 and `catalogue-costs`'s assertions rather than disappearing. Every count in
 this table should be treated as directional, not exact, until it is
-regenerated from the actual files.
+regenerated from the actual files. `web/tests/billing.test.mjs` (15 checks,
+`make test-billing`) and `web/tests/apikeys.test.mjs` (14 checks, `make
+test-apikeys`) were added after this table and are likewise not yet folded in.
 
 ## Classifier accuracy
 

@@ -228,6 +228,23 @@ async function init(c: Client): Promise<void> {
       token      TEXT NOT NULL,
       expires_at TEXT NOT NULL
     );
+
+    -- A B2B customer's programmatic credential. Only its hash is stored --
+    -- the raw secret is shown once at creation and cannot be recovered.
+    -- prefix is enough to tell keys apart in the management UI without
+    -- re-exposing the secret. Revocation is a timestamp, not a delete, so a
+    -- revoked key's history (last_used_at) survives for support/debugging.
+    CREATE TABLE IF NOT EXISTS api_key (
+      id          TEXT PRIMARY KEY,
+      account_id  TEXT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      prefix      TEXT NOT NULL,
+      hash        TEXT NOT NULL UNIQUE,
+      created_at  TEXT NOT NULL,
+      last_used_at TEXT,
+      revoked_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS api_key_account_idx ON api_key(account_id);
   `);
   await migrate(c);
 
@@ -598,6 +615,54 @@ export async function claimWebhookEvent(id: string, type: string): Promise<Webho
   const rs = await run("SELECT status FROM webhook_event WHERE id = ?", [id]);
   return (rs.rows[0] as unknown as { status: string } | undefined)?.status === "succeeded"
     ? "duplicate" : "in_progress";
+}
+
+export type ApiKey = {
+  id: string; account_id: string; name: string; prefix: string; hash: string;
+  created_at: string; last_used_at: string | null; revoked_at: string | null;
+};
+
+export async function insertApiKey(row: {
+  id: string; account_id: string; name: string; prefix: string; hash: string; created_at: string;
+}): Promise<void> {
+  await run(
+    "INSERT INTO api_key(id, account_id, name, prefix, hash, created_at) VALUES(?,?,?,?,?,?)",
+    [row.id, row.account_id, row.name, row.prefix, row.hash, row.created_at],
+  );
+}
+
+export async function apiKeyByHash(hash: string): Promise<ApiKey | undefined> {
+  const rs = await run("SELECT * FROM api_key WHERE hash = ?", [hash]);
+  return rs.rows[0] as unknown as ApiKey | undefined;
+}
+
+export async function apiKeysForAccount(accountId: string): Promise<ApiKey[]> {
+  const rs = await run(
+    "SELECT * FROM api_key WHERE account_id = ? ORDER BY created_at DESC", [accountId],
+  );
+  return rs.rows as unknown as ApiKey[];
+}
+
+const LAST_USED_STALE_MS = 5 * 60_000;
+
+/** Best-effort, and deliberately coarse: writing this on every authenticated
+ *  request would mean one write per API call. A key's last-used time only
+ *  needs to be accurate to within a few minutes for support/debugging. */
+export async function touchApiKeyLastUsed(id: string, lastKnown: string | null): Promise<void> {
+  if (lastKnown && Date.now() - new Date(lastKnown).getTime() < LAST_USED_STALE_MS) return;
+  await run("UPDATE api_key SET last_used_at = ? WHERE id = ?", [new Date().toISOString(), id]);
+}
+
+/** Revocation, not deletion: a revoked key's `last_used_at` and creation date
+ *  stay visible for support/debugging. Scoped to the account so one customer
+ *  cannot revoke another's key by guessing an id. Returns whether a row
+ *  actually matched. */
+export async function revokeApiKeyRow(accountId: string, id: string): Promise<boolean> {
+  const res = await run(
+    "UPDATE api_key SET revoked_at = ? WHERE id = ? AND account_id = ? AND revoked_at IS NULL",
+    [new Date().toISOString(), id, accountId],
+  );
+  return res.rowsAffected > 0;
 }
 
 export async function finishWebhookEvent(id: string, error?: string): Promise<void> {

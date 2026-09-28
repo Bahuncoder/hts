@@ -25,6 +25,15 @@ export const CLASSIFY_LIMIT: Limit = { max: 30, windowMs: MINUTE };
 const REQUESTS = "audit_requests";
 const ITEMS = "audit_items";
 
+// A separate scope, not a parameter on chargeAudit: an account's programmatic
+// API usage and its interactive web-UI usage are metered independently, so a
+// customer's automated integration cannot exhaust (or be exhausted by) their
+// own team's manual web usage. Kept as a sibling function rather than
+// generalising chargeAudit's signature, to avoid touching its two already-
+// stable, tested call sites (api/audit/route.ts, reprice.ts).
+const API_REQUESTS = "api_requests";
+const API_ITEMS = "api_items";
+
 /** Seconds until `cost` more work fits inside `limit`, or 0 if it fits now.
  *  Infinity when `cost` alone exceeds the whole allowance. */
 async function waitFor(scope: string, subject: string, limit: Limit, cost: number): Promise<number> {
@@ -84,6 +93,34 @@ export async function chargeAudit(subject: string, budget: AuditBudget, items: n
       await (await db()).execute({
         sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
         args: [subject, at, REQUESTS, ITEMS],
+      });
+    },
+  };
+}
+
+/** Same shape as chargeAudit, for the programmatic API (lib/apiKeys.ts,
+ *  app/api/v1/audit). Its own scope constants (API_REQUESTS/API_ITEMS) keep
+ *  this budget independent of the web UI's -- see the constants' own comment
+ *  for why. */
+export async function chargeApi(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
+  await sweep();
+  const requestWait = await waitFor(API_REQUESTS, subject, budget.requests, 1);
+  const itemWait = await waitFor(API_ITEMS, subject, budget.items, items);
+  if (requestWait || itemWait) {
+    const over = itemWait >= requestWait && itemWait ? "items" : "requests";
+    const wait = Math.max(requestWait, itemWait);
+    return { ok: false, over, tooLarge: !Number.isFinite(wait),
+             retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
+  }
+  const at = new Date().toISOString();
+  await record(API_REQUESTS, subject, at, 1);
+  await record(API_ITEMS, subject, at, items);
+  return {
+    ok: true,
+    refund: async () => {
+      await (await db()).execute({
+        sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
+        args: [subject, at, API_REQUESTS, API_ITEMS],
       });
     },
   };

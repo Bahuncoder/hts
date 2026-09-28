@@ -40,9 +40,9 @@ async function post(body, { ip = newIp(), cookie, raw } = {}) {
   return { status: res.status, headers: res.headers, body: parsed, text };
 }
 
-async function signedIn() {
+async function signedIn(plan = "free") {
   const id = `acct-${++ipSeq}`;
-  await seedAccount(db, { id });
+  await seedAccount(db, { id, plan });
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({
     sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
@@ -257,6 +257,17 @@ try {
     assert.equal((await post({ items: items(200) }, { cookie: a.cookie })).status, 200);
     assert.equal(engine.state.auditCalls - calls, 2, "over-ceiling requests never reach the engine");
     assert.equal(await used(a.subject, "audit_items"), 200, "the refused 201 was not charged");
+  });
+
+  await check("a growth-plan account's per-request ceiling never exceeds what the engine accepts", async () => {
+    // The engine hard-rejects any audit request over 1,000 items outright
+    // (api/main.py's AuditRequest.items max_length), regardless of caller.
+    // Growth must never promise, or forward, more than that in one request.
+    const g = await signedIn("growth");
+    const over = await post({ items: items(1001) }, { cookie: g.cookie });
+    assert.equal(over.status, 413);
+    assert.match(over.body.detail, /1001 products exceeds the 1,000 allowed in one audit/);
+    assert.equal((await post({ items: items(1000) }, { cookie: g.cookie })).status, 200);
   });
 
   await check("the server-rendered classify path is limited to 30 searches a minute", async () => {

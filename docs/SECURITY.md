@@ -316,8 +316,15 @@ Accepted for now, listed so they are not forgotten.
    fix depends on email being configured. Until a key is set, the fallback is
    throttled but visible.
 2. **Engine API keys are a static allowlist** in an environment variable — no
-   per-customer key, rotation or usage metering. Customer-facing traffic goes
-   through the web app's session, so this affects only direct engine access.
+   per-customer key, rotation or usage metering. This remains true of the
+   engine itself; it is not something a caller should ever reach directly.
+   Customer-facing traffic (browser session, or the versioned B2B API at
+   `/api/v1/audit`) goes through the web app, which now has real per-customer
+   keys, rotation and independent metering (`web/src/lib/apiKeys.ts`,
+   `web/src/lib/budget.ts`'s `chargeApi`) in front of the engine's own single
+   shared secret — so this gap is fully mitigated for every caller that
+   matters, and closing it in the engine itself would only be needed if
+   something other than this web app were ever allowed to call it directly.
 3. **The reasoning layer's accuracy is unmeasured.** The code path itself has
    now been exercised against a stub: with a key set the model reorders
    candidates, attaches reasoning and surfaces missing facts. A deliberately

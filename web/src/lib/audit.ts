@@ -26,7 +26,9 @@ export type AuditEvent =
   | "catalogue_repriced"
   | "catalogue_exported"
   | "catalogue_evidence_exported"
-  | "alert_emails_changed";
+  | "alert_emails_changed"
+  | "api_key_created"
+  | "api_key_revoked";
 
 export async function audit(
   event: AuditEvent,

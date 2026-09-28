@@ -378,3 +378,40 @@ export async function completeVerifyAction(token: string): Promise<
   await audit("signup", { accountId: id, email: claim.email, detail: "email verified" });
   return { ok: true };
 }
+
+// --- API keys -----------------------------------------------------------------
+
+import { createApiKey, listApiKeys, revokeApiKeyForAccount } from "./apiKeys";
+
+/** A one-time secret reveal is a different shape than FormState's
+ *  error/notice: `created` is only ever set on the single response that
+ *  follows a successful creation, never recoverable afterward. */
+export type ApiKeyFormState = { error?: string; created?: { id: string; secret: string; prefix: string } };
+
+export async function createApiKeyAction(_prev: ApiKeyFormState, form: FormData): Promise<ApiKeyFormState> {
+  const viewer = await currentViewer();
+  if (!viewer) return { error: "Sign in first." };
+  if (!viewer.limits.api.enabled) {
+    return { error: "API access is not included on your plan. See /pricing to upgrade." };
+  }
+  const name = String(form.get("name") ?? "").trim().slice(0, 100) || "Unnamed key";
+  const active = (await listApiKeys(viewer.account.id)).filter((k) => !k.revoked_at).length;
+  if (active >= viewer.limits.api.maxKeys) {
+    return { error: `You have reached the maximum of ${viewer.limits.api.maxKeys} keys. Revoke one before creating another.` };
+  }
+  const created = await createApiKey(viewer.account.id, name);
+  await audit("api_key_created", { accountId: viewer.account.id, email: viewer.account.email, detail: name });
+  revalidatePath("/account/api-keys");
+  return { created };
+}
+
+export async function revokeApiKeyAction(form: FormData): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  const id = String(form.get("id") ?? "");
+  if (!id) return;
+  if (await revokeApiKeyForAccount(viewer.account.id, id)) {
+    await audit("api_key_revoked", { accountId: viewer.account.id, email: viewer.account.email, detail: id });
+  }
+  revalidatePath("/account/api-keys");
+}

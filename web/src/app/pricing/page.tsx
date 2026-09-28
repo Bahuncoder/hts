@@ -105,6 +105,11 @@ export default async function PricingPage() {
       </div>
 
       <div className="flex flex-wrap items-baseline gap-2 text-[14px] text-muted">
+        <span>Starter and Growth include API access — call the duty engine from your own backend.</span>
+        <a href="/docs/api" className="font-medium text-accent hover:underline">Read the API docs</a>
+      </div>
+
+      <div className="flex flex-wrap items-baseline gap-2 text-[14px] text-muted">
         <span>Bigger catalogue than Growth covers, or several importers under one login?</span>
         <a href="mailto:hello@htsdesk.com" className="font-medium text-accent hover:underline">
           Tell us what you need
