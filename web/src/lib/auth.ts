@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import { accountById, accountByEmail, createAccount, db, type Account } from "./store";
-import { LIMITS, type Limits } from "./plans";
+import { accountById, accountByEmail, createAccount, db, planFor, type Account } from "./store";
+import type { Limits, PlanId } from "./plans";
 import { insertSession } from "./credentialStore";
 
 const COOKIE = "htsdesk_session";
@@ -111,8 +111,12 @@ export async function endSession(): Promise<void> {
   jar.delete(COOKIE);
 }
 
-/** A signed-in account and the limits that apply to it. */
-export type Viewer = { account: Account; limits: Limits };
+/** A signed-in account, its resolved plan, and the limits that apply to it.
+ *  Deliberately lean: it carries the resolved outcome (plan, limits), not
+ *  Stripe/billing internals like a customer or subscription id -- callers
+ *  that need those (the billing portal route) load the subscription row
+ *  directly instead of reaching through Viewer for it. */
+export type Viewer = { account: Account; limits: Limits; plan: PlanId };
 
 export async function currentViewer(): Promise<Viewer | null> {
   const token = (await cookies()).get(COOKIE)?.value;
@@ -130,5 +134,6 @@ export async function currentViewer(): Promise<Viewer | null> {
   }
   const account = await accountById(row.account_id);
   if (!account) return null;
-  return { account, limits: LIMITS.account };
+  const { plan, limits } = await planFor(account.id);
+  return { account, plan, limits };
 }

@@ -62,11 +62,14 @@ function downloadCsv(lines: AuditLine[]) {
 }
 
 export default function AuditClient({
-  signedIn, maxRows,
+  signedIn, maxRows, maxSavedCatalogues,
 }: {
   signedIn: boolean;
   /** Products per audit for this visitor. The server enforces it. */
   maxRows: number;
+  /** Saved catalogues this account's plan allows. Only meaningful when
+   *  signedIn; the server enforces it regardless of what this displays. */
+  maxSavedCatalogues: number;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -587,7 +590,7 @@ export default function AuditClient({
             <p className="text-[12px] text-faint">
               Every line is saved, including the ones that could not be priced, so nothing drops off your
               review list. Only priced lines with a real code are watched. You can keep up to{" "}
-              {LIMITS.account.savedCatalogues} saved catalogues.
+              {maxSavedCatalogues} saved catalogues.
             </p>
           ) : null}
 

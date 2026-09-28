@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { db } from "./store";
-import { LIMITS, type Tier, type Window } from "./plans";
+import type { Window } from "./plans";
 
 /** Work budgets for the public proxies.
  *
@@ -14,14 +14,8 @@ const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 
 type Limit = Window;
-export type { Tier };
 
-/** `requests` bounds how often a caller may start an audit, `items` how much
- *  work they may submit in total. The numbers live in lib/plans.ts. */
-export const AUDIT_BUDGETS: Record<Tier, { requests: Limit; items: Limit }> = {
-  anonymous: { requests: LIMITS.anonymous.auditRequests, items: LIMITS.anonymous.itemsPerDay },
-  account: { requests: LIMITS.account.auditRequests, items: LIMITS.account.itemsPerDay },
-};
+export type AuditBudget = { requests: Limit; items: Limit };
 
 export const AUDIT_LEASE_MS = 60_000;
 
@@ -65,10 +59,14 @@ export type Charge =
 
 /** Checks both budgets and, if the call fits, charges it: one request and
  *  `items` items. A refused call is not charged. Call while holding the
- *  subject's lease so two calls cannot both pass the check. */
-export async function chargeAudit(subject: string, tier: Tier, items: number): Promise<Charge> {
+ *  subject's lease so two calls cannot both pass the check.
+ *
+ *  Takes the resolved budget directly, not a Tier: a signed-in caller's real
+ *  ceiling depends on their plan (lib/plans.ts's PLAN_LIMITS), which a static
+ *  Record<Tier, ...> cannot express -- only the caller (which already knows
+ *  the viewer's resolved limits) can build the right budget. */
+export async function chargeAudit(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
   await sweep();
-  const budget = AUDIT_BUDGETS[tier];
   const requestWait = await waitFor(REQUESTS, subject, budget.requests, 1);
   const itemWait = await waitFor(ITEMS, subject, budget.items, items);
   if (requestWait || itemWait) {

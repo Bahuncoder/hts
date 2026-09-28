@@ -257,9 +257,16 @@ export async function fakeEngine(port) {
   return { state, close: server.close };
 }
 
-export async function seedAccount(db, { id, alertEmails = 1 }) {
+export async function seedAccount(db, { id, alertEmails = 1, plan = "free", status = "active",
+                                        customer = null, subscription = null }) {
+  const now = new Date().toISOString();
   await db.execute({
     sql: "INSERT INTO account(id,email,password_hash,created_at,alert_emails) VALUES(?,?,?,?,?)",
-    args: [id, `${id}@example.test`, "scrypt$0$0", new Date().toISOString(), alertEmails],
+    args: [id, `${id}@example.test`, "scrypt$0$0", now, alertEmails],
+  });
+  await db.execute({
+    sql: `INSERT INTO subscription(account_id,stripe_customer_id,stripe_subscription_id,plan,status,updated_at)
+          VALUES(?,?,?,?,?,?)`,
+    args: [id, customer, subscription, plan, status, now],
   });
 }

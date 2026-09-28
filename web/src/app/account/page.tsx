@@ -7,7 +7,10 @@ import { emailEnabled } from "@/lib/email";
 import { listWatched } from "@/lib/catalogues";
 import { recentForAccount } from "@/lib/audit";
 import { Card } from "@/components/ui";
-import { windowLabel } from "@/lib/plans";
+import { PLAN_COPY, PLAN_PRICE_MONTHLY, windowLabel } from "@/lib/plans";
+import { billingEnabled } from "@/lib/stripe";
+import { subscriptionFor } from "@/lib/store";
+import { PortalButton } from "@/components/BillingButtons";
 
 export const metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
@@ -30,10 +33,11 @@ const EVENT_LABEL: Record<string, string> = {
 export default async function AccountPage() {
   const viewer = await currentViewer();
   if (!viewer) redirect("/login");
-  const { account, limits } = viewer;
+  const { account, limits, plan } = viewer;
   const alertEmailsOn = account.alert_emails !== 0;
   const watchedCount = (await listWatched(account.id)).length;
   const activity = await recentForAccount(account.id, 10);
+  const hasCustomer = billingEnabled() && Boolean((await subscriptionFor(account.id)).stripe_customer_id);
 
   return (
     <div className="space-y-8">
@@ -47,12 +51,33 @@ export default async function AccountPage() {
 
       <AccountDraftBanner />
 
+      <div className="space-y-3 border-b border-border pb-6">
+        <h2 className="text-[15px] font-semibold">Plan</h2>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-[14px]">
+              <span className="font-medium">{PLAN_COPY[plan].name}</span>
+              {PLAN_PRICE_MONTHLY[plan] > 0
+                ? ` — $${PLAN_PRICE_MONTHLY[plan].toLocaleString()}/month`
+                : ""}
+            </p>
+            <p className="mt-1 text-[13px] text-muted">{PLAN_COPY[plan].blurb}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {hasCustomer ? <PortalButton /> : null}
+            <a href="/pricing" className="btn btn-secondary">
+              {plan === "free" ? "See plans" : "Change plan"}
+            </a>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-3">
         <div>
           <h2 className="text-[15px] font-semibold">Your allowance</h2>
           <p className="mt-1 text-[14px] text-muted">
-            HTSDesk is free while it is in beta. These limits keep it fast for
-            everyone, and they may change.
+            These limits keep {plan === "free" ? "the free plan" : "your plan"}{" "}
+            fast for everyone, and they may change.
           </p>
         </div>
         <div className="grid gap-5 sm:grid-cols-2 md:grid-cols-4">

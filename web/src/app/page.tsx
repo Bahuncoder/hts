@@ -35,9 +35,9 @@ export default async function Home() {
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link href="/audit" className="btn btn-primary">Audit your catalogue <span aria-hidden="true">→</span></Link>
             <Link href="/classify" className="btn btn-secondary">Classify one product</Link>
-            <span className="inline-flex min-h-[44px] items-center rounded-full border border-border bg-accent-soft px-4 text-[14px] font-medium text-accent">Free while in beta</span>
+            <Link href="/pricing" className="inline-flex min-h-[44px] items-center rounded-full border border-border bg-accent-soft px-4 text-[14px] font-medium text-accent">Free to start</Link>
           </div>
-          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Try the tools without an account; a free account saves your catalogues and watches your codes.</p>
+          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Try the tools without an account; a free account saves your catalogues and watches your codes. <Link href="/pricing" className="font-medium text-accent hover:underline">See plans</Link>.</p>
         </div>
         <div className="hero-example" aria-label="Illustrative duty breakdown, not a live quote">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">

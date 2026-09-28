@@ -116,16 +116,17 @@ try {
 
   // Approve the line that is about to change, so the test can check it gets
   // reopened — and the one that will NOT change, so the test can check it
-  // does not. The review workspace lives on the catalogue page itself, with
-  // a "Product line" selector for which line the form below it acts on.
-  await page.goto(`${app.base}/catalogues/${id}`, { waitUntil: "networkidle" });
+  // does not. Human review lives on the catalogue's own /review page (the
+  // catalogue detail page's ReviewWorkspace is a status summary + link only).
   for (const it of [changedItem, stableItem]) {
-    await page.getByLabel("Product line", { exact: true }).selectOption(it.id);
-    await page.getByLabel("Review action", { exact: true }).selectOption("approve");
-    await page.getByLabel("Reason or comment").fill(`Approved ${it.sku} before re-price.`);
-    await page.getByRole("button", { name: "Record review", exact: true }).click();
-    await page.getByText("Review recorded.", { exact: true }).waitFor();
+    await page.goto(`${app.base}/catalogues/${id}/review?item=${it.id}`, { waitUntil: "networkidle" });
+    await page.locator('select[name="approval_status"]').selectOption("approved");
+    await page.locator('input[name="note"]').fill(`Approved ${it.sku} before re-price.`);
+    await page.getByRole("button", { name: "Record decision", exact: true }).click();
+    await page.waitForFunction(
+      (sku) => document.body.textContent.includes(`Approved ${sku} before re-price.`), it.sku);
   }
+  await page.goto(`${app.base}/catalogues/${id}`, { waitUntil: "networkidle" });
 
   assert.equal(auditCalls, 1, "sanity: only the original audit has run so far");
   await page.getByRole("button", { name: "Re-price with current rates", exact: true }).click();

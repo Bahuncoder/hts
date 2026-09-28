@@ -1,6 +1,6 @@
 .PHONY: help data refresh rulings fedreg api web build test test-duty test-api eval check \
         preflight backup restore install mailcatch diff email-preview \
-        test-ui test-draft test-contrast
+        test-ui test-draft test-contrast test-billing
 
 help:
 	@echo "Data"
@@ -17,7 +17,7 @@ help:
 	@echo "  make test       duty unit tests + API security regressions"
 	@echo "  make test-duty  duty engine only (no server needed)"
 	@echo "  make test-api   API contract + security (needs a running API)"
-	@echo "  make test-diff / test-outbox / test-audit / test-migrate / test-retired"
+	@echo "  make test-diff / test-outbox / test-audit / test-migrate / test-billing"
 	@echo "  make test-csvparse / test-proof / test-review / test-ui / test-draft / test-contrast"
 	@echo "                  catalogue reader, audit proofs, review workspace (test-review needs Chrome)"
 	@echo "                  integration tests against a scratch production server"
@@ -65,7 +65,7 @@ build:
 
 # --- verify -----------------------------------------------------------------
 test: test-duty test-math test-adcvd test-rate-limiter test-classify-eval test-regimes test-refresh test-api test-email test-diff \
-      test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-review \
+      test-outbox test-audit test-migrate test-csvparse test-proof test-review \
       test-ui test-draft test-contrast
 
 test-duty:
@@ -102,7 +102,7 @@ eval:
 	python3 tests/eval_classify.py 400
 
 check: build test-duty test-math test-adcvd test-notes test-rate-limiter test-backup-security test-classify-eval test-regimes test-refresh test-api test-email \
-       test-diff test-outbox test-audit test-migrate test-retired test-csvparse test-proof test-landed-cost test-evidence test-catalogue-costs test-review \
+       test-diff test-outbox test-audit test-migrate test-billing test-csvparse test-proof test-landed-cost test-evidence test-catalogue-costs test-review \
        test-ui test-draft test-contrast test-journey test-security test-authflow test-auth-transaction test-feature-journey eval
 
 test-email:
@@ -123,9 +123,11 @@ test-audit:
 test-migrate:
 	@cd web && node tests/migrate.test.mjs
 
-# /pricing redirects home; the billing and webhook routes are gone.
-test-retired:
-	@cd web && node tests/retired.test.mjs
+# Stripe webhook idempotency/reconciliation, driven through the real route
+# against a fake local Stripe HTTP server with correctly-signed events. Own
+# production server (port 3200), scratch accounts database.
+test-billing:
+	@cd web && node tests/billing.test.mjs
 
 # The catalogue reader and shared row model, straight from src/lib (no server).
 test-csvparse:

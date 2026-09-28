@@ -203,7 +203,7 @@ export async function saveCatalogueAction(
     let costs;
     try { costs = parseCosts(p.landedCosts ?? EMPTY_COSTS); }
     catch (error) { return { error: (error as Error).message }; }
-    id = await saveCatalogue(viewer.account.id, clean, body, inputs, costs);
+    id = await saveCatalogue(viewer.account.id, clean, body, inputs, costs, viewer.limits.savedCatalogues);
   } catch (err) {
     // Raised inside the save's own transaction, so it holds under concurrency.
     if (err instanceof CatalogueLimitError) return { error: err.message };

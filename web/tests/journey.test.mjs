@@ -52,7 +52,7 @@ await step("landing page states the offer and offers a way in", async () => {
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   const body = await text();
   assert.match(body, /Know the code\.\s+Understand the cost/i);
-  assert.match(body, /Free while in beta/i, "the free beta must be stated, not implied");
+  assert.match(body, /Free to start/i, "the free tier must be stated, not implied");
   assert.ok(await page.locator('a[href="/signup"]').count() > 0, "no signup route in");
 });
 
@@ -93,9 +93,8 @@ await step("signup creates an account and lands on it", async () => {
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const body = await text();
   assert.match(body, /Your allowance/, "a new account sees its allowance");
-  assert.match(body, /free while it is in beta/i);
-  assert.doesNotMatch(body, /Stripe|billing portal|Change plan|Upgrade|Starter|Growth/i,
-    "nothing on the account page refers to buying anything");
+  assert.match(body, /\bFree\b/, "a new account is shown on the Free plan");
+  assert.match(body, /See plans/i, "a free account is offered a way to see paid plans");
 });
 
 await step("signing up again while signed in does not create a second account", async () => {
@@ -260,11 +259,14 @@ await step("the page has no console errors during the journey", async () => {
   assert.deepEqual(real, [], `console errors: ${real.slice(0, 3).join(" | ")}`);
 });
 
-await step("the old /pricing URL lands on the home page", async () => {
+await step("/pricing is a real page with the three plans", async () => {
   const probe = await ctx.newPage();
   await probe.goto(`${BASE}/pricing`, { waitUntil: "domcontentloaded" });
-  assert.equal(new URL(probe.url()).pathname, "/");
-  assert.equal(await probe.getByRole("link", { name: "Pricing" }).count(), 0, "no Pricing link in the navigation");
+  assert.equal(new URL(probe.url()).pathname, "/pricing");
+  await probe.getByRole("heading", { name: /Plans by scale/ }).waitFor();
+  for (const name of ["Free", "Starter", "Growth"]) {
+    assert.equal(await probe.getByText(name, { exact: true }).count() > 0, true, `${name} plan card is shown`);
+  }
   await probe.close();
 });
 

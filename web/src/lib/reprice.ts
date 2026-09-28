@@ -21,11 +21,11 @@
  */
 import crypto from "node:crypto";
 import { API_BASE } from "./api";
-import { acquireLease, chargeAudit, type Tier } from "./budget";
+import { acquireLease, chargeAudit } from "./budget";
 import { getCatalogue, isWatchable, type CatalogueItem } from "./catalogues";
 import { signedBodyFromEngine, type EngineRequest } from "./auditProof";
 import type { SavedLine } from "./auditModel";
-import { db } from "./store";
+import { db, planFor } from "./store";
 import { MAX_REVIEW_EVENTS } from "./reviewModel";
 
 export type RepriceOutcome =
@@ -67,12 +67,17 @@ export async function repriceCatalogue(accountId: string, catalogueId: string): 
   }));
   const request = { items, entries: cat.entries, by_vessel: !!cat.by_vessel, formal_entry: true };
 
-  const tier: Tier = "account";
   const subject = `account:${accountId}`;
   const release = await acquireLease(subject);
   if (!release) return { ok: false, error: "An audit is already running for this account. Try again shortly.", retryAfter: 5 };
   try {
-    const charge = await chargeAudit(subject, tier, items.length);
+    // The account's real plan budget, not a flat free-tier one -- a
+    // starter/growth account repricing a large catalogue was previously
+    // charged (and could be refused) against the free ceiling regardless of
+    // what it actually pays for.
+    const { limits } = await planFor(accountId);
+    const budget = { requests: limits.auditRequests, items: limits.itemsPerDay };
+    const charge = await chargeAudit(subject, budget, items.length);
     if (!charge.ok) {
       return {
         ok: false, retryAfter: charge.retryAfter,

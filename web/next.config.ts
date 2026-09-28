@@ -28,11 +28,9 @@ const nextConfig: NextConfig = {
     // 1 MB cap is under what a full catalogue serialises to.
     serverActions: { bodySizeLimit: "4mb" },
   },
-  // The pricing page is gone: HTSDesk is free. Old links and bookmarks land
-  // on the home page instead of a 404.
-  async redirects() {
-    return [{ source: "/pricing", destination: "/", permanent: true }];
-  },
+  // The old permanent redirect from /pricing to / (from when the pricing page
+  // was removed) is gone now that billing is being reintroduced -- a real
+  // /pricing page is coming back (see the billing-rebuild plan).
 };
 
 export default nextConfig;

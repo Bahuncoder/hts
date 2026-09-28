@@ -46,6 +46,89 @@ export const LIMITS: Record<Tier, Limits> = {
   },
 };
 
+/** Paid plans, on top of the free/`account` baseline above. `Tier` (anonymous
+ *  vs. account) is a separate, unrelated axis -- whether a caller is signed
+ *  in at all -- and stays exactly as it is; `PlanId` only ever varies the
+ *  ceiling a signed-in account gets. */
+export type PlanId = "free" | "starter" | "growth";
+
+/** `free` is `LIMITS.account` itself, not a duplicate literal: relaunch must
+ *  not change anything for an existing free account, and there must only ever
+ *  be one place that states the free numbers. */
+export const PLAN_LIMITS: Record<PlanId, Limits> = {
+  free: LIMITS.account,
+  starter: {
+    productsPerAudit: 500,
+    auditRequests: { max: 20, windowMs: HOUR },
+    itemsPerDay: { max: 5_000, windowMs: DAY },
+    savedCatalogues: 75,
+  },
+  growth: {
+    productsPerAudit: 2_000,
+    auditRequests: { max: 60, windowMs: HOUR },
+    itemsPerDay: { max: 25_000, windowMs: DAY },
+    savedCatalogues: 500,
+  },
+};
+
+/** Proposed starting prices -- a business decision, not an engineering one;
+ *  change freely, it is only ever read from here. */
+export const PLAN_PRICE_MONTHLY: Record<PlanId, number> = {
+  free: 0, starter: 99, growth: 499,
+};
+export const PAID_PLANS: readonly PlanId[] = ["starter", "growth"];
+
+/** Display copy for the pricing page. Numbers below are derived from
+ *  `PLAN_LIMITS`/`PLAN_PRICE_MONTHLY` rather than repeated, so a limit change
+ *  cannot leave the page's own copy of the same number stale. */
+export const PLAN_COPY: Record<PlanId, { name: string; blurb: string; features: string[] }> = {
+  free: {
+    name: "Free",
+    blurb: "For a first catalogue, or a small, steady one.",
+    features: [
+      `${PLAN_LIMITS.free.productsPerAudit.toLocaleString()} products per audit`,
+      `${PLAN_LIMITS.free.itemsPerDay.max.toLocaleString()} products a day`,
+      `${PLAN_LIMITS.free.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
+      "Duty engine, classifier and evidence, in full",
+    ],
+  },
+  starter: {
+    name: "Starter",
+    blurb: "For a growing catalogue that outran the free ceiling.",
+    features: [
+      `${PLAN_LIMITS.starter.productsPerAudit.toLocaleString()} products per audit`,
+      `${PLAN_LIMITS.starter.itemsPerDay.max.toLocaleString()} products a day`,
+      `${PLAN_LIMITS.starter.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
+      "Everything in Free",
+    ],
+  },
+  growth: {
+    name: "Growth",
+    blurb: "For a full import program across many SKUs.",
+    features: [
+      `${PLAN_LIMITS.growth.productsPerAudit.toLocaleString()} products per audit`,
+      `${PLAN_LIMITS.growth.itemsPerDay.max.toLocaleString()} products a day`,
+      `${PLAN_LIMITS.growth.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
+      "Everything in Starter",
+    ],
+  },
+};
+
+/** The Stripe price id a paid plan checks out with, from its own env var
+ *  (STRIPE_PRICE_STARTER / STRIPE_PRICE_GROWTH) rather than a literal, since
+ *  a Stripe price id is an environment-specific (test vs. live) secret-ish
+ *  value, not something to hardcode. */
+export function priceIdFor(plan: PlanId): string | undefined {
+  if (plan === "starter") return process.env.STRIPE_PRICE_STARTER;
+  if (plan === "growth") return process.env.STRIPE_PRICE_GROWTH;
+  return undefined;
+}
+
+export function planForPriceId(priceId: string): PlanId | null {
+  for (const plan of PAID_PLANS) if (priceIdFor(plan) === priceId) return plan;
+  return null;
+}
+
 /** Roadmap: not built yet. Listed separately so nothing on a page implies it
  *  exists. Re-pricing a saved catalogue shipped (lib/reprice.ts, `make
  *  test-reprice`) and was removed from this list accordingly -- it must not

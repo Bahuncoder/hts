@@ -50,8 +50,8 @@ try {
     await page.getByRole("heading", { name: /Know the code/ }).waitFor();
     assert.equal(await page.getByRole("link", { name: /^Audit your catalogue/ }).getAttribute("href"), "/audit");
     assert.match(await page.locator("main").innerText(), /Illustration only/);
-    // "Free while in beta" is a readable pill beside the buttons, not fine print.
-    const beta = page.getByText("Free while in beta", { exact: true });
+    // "Free to start" is a readable pill beside the buttons, not fine print.
+    const beta = page.getByText("Free to start", { exact: true });
     await beta.waitFor();
     assert.ok(parseFloat(await beta.evaluate((el) => getComputedStyle(el).fontSize)) >= 14, "at least 14px");
     const [b, primary] = await Promise.all([beta.boundingBox(), page.getByRole("link", { name: /^Audit your catalogue/ }).boundingBox()]);

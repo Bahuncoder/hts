@@ -72,13 +72,22 @@ export default function TermsPage() {
         </p>
       </Section>
 
-      <Section title="5. Free during beta, and limits">
+      <Section title="5. Plans, billing and limits">
         <p>
-          HTSDesk is free to use during its beta. Usage limits apply, such as
-          the number of products in one audit, how many audits you can run in a
-          period and how many catalogues you can save. The limits are shown in
-          the app and may change. Paid plans may be introduced later; if they
-          are, we will give notice to account holders.
+          HTSDesk has a free plan and paid plans; the current plans and their
+          limits are shown on our pricing page and in your account. Usage
+          limits apply on every plan, such as the number of products in one
+          audit, how many audits you can run in a period and how many
+          catalogues you can save. Limits may change; if a change affects a
+          paid plan, we will give notice to account holders.
+        </p>
+        <p>
+          A paid plan bills monthly in advance through our payment processor,
+          Stripe, and renews automatically until cancelled. You can cancel or
+          change plans at any time from the billing portal linked in your
+          account; cancelling stops future renewal but does not refund the
+          current billing period, and access continues until it ends. We do
+          not store your card details ourselves.
         </p>
       </Section>
 

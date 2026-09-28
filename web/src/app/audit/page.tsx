@@ -16,7 +16,11 @@ export default async function AuditPage() {
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Your import workspace" title="Catalogue audit" description="Turn your product list into a clear picture of duty exposure. Import a CSV, review the estimates, then save the codes you want to monitor." />
-      <AuditClient signedIn={Boolean(viewer)} maxRows={(viewer ? LIMITS.account : LIMITS.anonymous).productsPerAudit} />
+      <AuditClient
+        signedIn={Boolean(viewer)}
+        maxRows={(viewer ? viewer.limits : LIMITS.anonymous).productsPerAudit}
+        maxSavedCatalogues={viewer ? viewer.limits.savedCatalogues : 0}
+      />
     </div>
   );
 }

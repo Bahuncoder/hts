@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { API_BASE } from "@/lib/api";
 import { currentViewer } from "@/lib/auth";
-import { acquireLease, AUDIT_BUDGETS, chargeAudit, type Tier } from "@/lib/budget";
+import { acquireLease, chargeAudit } from "@/lib/budget";
 import { LIMITS, windowLabel } from "@/lib/plans";
 import { clientId } from "@/lib/throttle";
 import { signAudit, signedBodyFromEngine, signingSecret, type EngineRequest } from "@/lib/auditProof";
@@ -102,8 +102,9 @@ export async function POST(request: Request) {
   if (!parsed.items.length) return bad("Add at least one product to audit.");
 
   const viewer = await currentViewer();
-  const tier: Tier = viewer ? "account" : "anonymous";
-  const limits = LIMITS[tier];
+  // A signed-in caller's real limits (plan-aware, once billing resolves it),
+  // not a flat "every account is the same" ceiling.
+  const limits = viewer ? viewer.limits : LIMITS.anonymous;
   const count = parsed.items.length;
 
   if (count > limits.productsPerAudit) {
@@ -128,15 +129,15 @@ export async function POST(request: Request) {
     return throttled(5, "An audit is already running for you. Wait for it to finish, then submit the next one.");
   }
 
+  const budget = { requests: limits.auditRequests, items: limits.itemsPerDay };
   try {
-    const charge = await chargeAudit(subject, tier, count);
+    const charge = await chargeAudit(subject, budget, count);
     if (!charge.ok) {
-      const limit = AUDIT_BUDGETS[tier];
       const detail = charge.tooLarge
-        ? `This run is larger than the ${limit.items.max.toLocaleString()}-product daily allowance.${hint}`
+        ? `This run is larger than the ${budget.items.max.toLocaleString()}-product daily allowance.${hint}`
         : charge.over === "requests"
-          ? `You have reached the limit of ${limit.requests.max} audits per ${windowLabel(limit.requests.windowMs)}. Try again in ${waitText(charge.retryAfter)}.${hint}`
-          : `This run would exceed your daily allowance of ${limit.items.max.toLocaleString()} products. More becomes available in ${waitText(charge.retryAfter)}.${hint}`;
+          ? `You have reached the limit of ${budget.requests.max} audits per ${windowLabel(budget.requests.windowMs)}. Try again in ${waitText(charge.retryAfter)}.${hint}`
+          : `This run would exceed your daily allowance of ${budget.items.max.toLocaleString()} products. More becomes available in ${waitText(charge.retryAfter)}.${hint}`;
       return throttled(charge.retryAfter, detail);
     }
 

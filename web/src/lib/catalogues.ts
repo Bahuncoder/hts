@@ -88,6 +88,10 @@ export class CatalogueLimitError extends Error {
  */
 export async function saveCatalogue(
   accountId: string, name: string, audit: SignedAudit, inputs: number[] = [], costs: LandedCostInputs = EMPTY_COSTS,
+  // The caller's own resolved plan limit (Viewer.limits.savedCatalogues), not
+  // a flat "every account is the same" ceiling -- defaults to the free
+  // allowance for callers (tests, mainly) that have no plan to resolve.
+  maxSavedCatalogues: number = LIMITS.account.savedCatalogues,
 ): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -102,8 +106,8 @@ export async function saveCatalogue(
       sql: "SELECT count(*) AS n FROM catalogue WHERE account_id = ?",
       args: [accountId],
     });
-    if ((held.rows[0] as unknown as { n: number }).n >= LIMITS.account.savedCatalogues) {
-      throw new CatalogueLimitError(LIMITS.account.savedCatalogues);
+    if ((held.rows[0] as unknown as { n: number }).n >= maxSavedCatalogues) {
+      throw new CatalogueLimitError(maxSavedCatalogues);
     }
 
     await tx.execute({
