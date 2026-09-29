@@ -6,8 +6,9 @@ import { audit } from "@/lib/audit";
 /** Same shape as api/catalogues/evidence/route.ts: auth check, build a plain
  *  object, log, download as JSON. No classifier-evidence projection here --
  *  unlike a catalogue line, a refund-check item never carries ruling
- *  snapshots (3a never re-classifies against a declared entry_hts; that
- *  comparison is explicitly deferred), so there is nothing to sanitize. */
+ *  snapshots; the optional classifier comparison (3b) only ever persists a
+ *  single suggested code and confidence, not full candidate/reasoning data,
+ *  so there is nothing further to sanitize. */
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
     limitations: [
       "Struck-down-duty figures reflect the IEEPA ruling and today's Chapter 99 schedule, not an independent verification of your entry.",
       "Timing (Post Summary Correction / protest) is estimated from standard statutory deadlines, not confirmed against CBP's record of this entry.",
+      "Where present, classifier_suggested_hts compares the product description alone against today's classifier -- it is not a re-audit of the entry and not a finding that the declared code was incorrect.",
       "This is not legal advice, a claim amount, or a promise of recovery. Confirm with CBP or a licensed customs broker before relying on it for a filing.",
     ],
     refund_check: { id: check.id, name: check.name, created_at: check.created_at, updated_at: check.updated_at },
@@ -34,6 +36,7 @@ export async function GET(request: Request) {
       psc_eligible: it.psc_eligible, psc_detail: it.psc_detail,
       protest_deadline: it.protest_deadline, protest_detail: it.protest_detail,
       disclaimer: it.disclaimer, status: it.status,
+      classifier_suggested_hts: it.classifier_suggested_hts, classifier_confidence: it.classifier_confidence,
     })),
   };
   await audit("refund_check_evidence_exported", {

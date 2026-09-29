@@ -91,6 +91,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: "Send a JSON object with a name and an items array." }, { status: 400 });
   }
   const name = parsed.name.trim().slice(0, 200) || "Untitled refund check";
+  const checkClassification = parsed.checkClassification === true;
   if (!parsed.items.length) return NextResponse.json({ detail: "Add at least one entry." }, { status: 400 });
   if (parsed.items.length > limits.productsPerAudit) {
     return NextResponse.json(
@@ -112,7 +113,7 @@ export async function POST(request: Request) {
 
   const budget = { requests: limits.refundCheck.requests, items: limits.refundCheck.itemsPerDay };
   try {
-    const result = await runRefundCheck(viewer.account.id, name, valid, budget, limits.refundCheck.maxChecks);
+    const result = await runRefundCheck(viewer.account.id, name, valid, budget, limits.refundCheck.maxChecks, checkClassification);
     await audit("refund_check_run", { accountId: viewer.account.id, email: viewer.account.email,
       detail: `${valid.length} entries` });
     return NextResponse.json({ id: result.id, items: result.items, rejected });

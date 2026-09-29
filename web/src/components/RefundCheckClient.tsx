@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   EXPECTED_FORMAT, TEMPLATE_CSV, parseRefundCheckCsv, type RefundCheckRow,
@@ -16,6 +16,7 @@ type ItemResult = {
   dutyPaid: number; liquidationDate: string | null; computedHts: string | null; computedDuty: number | null;
   struckDownRefundable: number; pscEligible: string; pscDetail: string;
   protestDeadline: string; protestDetail: string; disclaimer: string; status: string;
+  classifierSuggestedHts: string | null; classifierConfidence: string | null;
 };
 
 type RunResult = { id: string; items: ItemResult[]; rejected: { row: number; reason: string }[] };
@@ -26,6 +27,7 @@ export default function RefundCheckClient({ maxRows }: { maxRows: number }) {
   const router = useRouter();
   const [text, setText] = useState("");
   const [name, setName] = useState("");
+  const [checkClassification, setCheckClassification] = useState(false);
   const [fileNote, setFileNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export default function RefundCheckClient({ maxRows }: { maxRows: number }) {
             entryHts: it.entryHts, entryDate: it.entryDate, dutyPaid: it.dutyPaid,
             liquidationDate: it.liquidationDate,
           })),
+          checkClassification,
         }),
       });
       const body = await res.json().catch(() => null);
@@ -129,6 +132,14 @@ export default function RefundCheckClient({ maxRows }: { maxRows: number }) {
           </Note>
         ) : null}
         {error ? <p role="alert" className="text-[13px] text-danger">{error}</p> : null}
+        <label className="flex items-start gap-2 text-[13px] text-muted">
+          <input
+            type="checkbox" checked={checkClassification}
+            onChange={(e) => setCheckClassification(e.target.checked)}
+            className="mt-0.5"
+          />
+          Also compare against today&rsquo;s classifier suggestion (uses additional allowance)
+        </label>
         <button
           type="button" onClick={run}
           disabled={!parsed?.ok || overLimit || busy}
@@ -181,23 +192,59 @@ function RefundCheckResults({ result }: { result: RunResult }) {
           </thead>
           <tbody>
             {result.items.map((it) => (
-              <tr key={it.row} className="border-b border-hair align-top">
-                <td className="py-2 pr-4">{it.description}<div className="text-faint">{it.country}</div></td>
-                <td className="mono py-2 pr-4">{it.entryDate}</td>
-                <td className="mono py-2 pr-4">{money2(it.dutyPaid)}</td>
-                <td className="mono py-2 pr-4">
-                  {it.struckDownRefundable > 0
-                    ? <span style={{ color: "var(--recover)" }}>{money2(it.struckDownRefundable)}</span>
-                    : "—"}
-                </td>
-                <td className="py-2 pr-4"><Badge tone={it.pscEligible === "may be available" ? "good" : "neutral"}>{it.pscEligible}</Badge></td>
-                <td className="py-2">{it.protestDeadline}</td>
-              </tr>
+              <Fragment key={it.row}>
+                <tr className="border-b border-hair align-top">
+                  <td className="py-2 pr-4">{it.description}<div className="text-faint">{it.country}</div></td>
+                  <td className="mono py-2 pr-4">{it.entryDate}</td>
+                  <td className="mono py-2 pr-4">{money2(it.dutyPaid)}</td>
+                  <td className="mono py-2 pr-4">
+                    {it.struckDownRefundable > 0
+                      ? <span style={{ color: "var(--recover)" }}>{money2(it.struckDownRefundable)}</span>
+                      : "—"}
+                  </td>
+                  <td className="py-2 pr-4"><Badge tone={it.pscEligible === "may be available" ? "good" : "neutral"}>{it.pscEligible}</Badge></td>
+                  <td className="py-2">{it.protestDeadline}</td>
+                </tr>
+                {it.classifierSuggestedHts ? (
+                  <tr className="border-b border-hair">
+                    <td colSpan={6} className="pb-3">
+                      <ClassifierNote item={it} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
       <p className="text-[12px] text-faint">{result.items[0]?.disclaimer}</p>
     </div>
+  );
+}
+
+/** Collapsed by default, on purpose: this is a data-quality note about the
+ *  product description, never a finding about the declared code or a
+ *  suggestion tied to the refundable figure above -- keeping it out of the
+ *  main table and requiring a deliberate click keeps the two claims from
+ *  sharing a scan path. Badge tone is always neutral, matching /classify's
+ *  own rule that a suggestion is never decided at any confidence level. */
+function ClassifierNote({ item }: { item: ItemResult }) {
+  return (
+    <details className="rounded border border-rule bg-surface px-3 py-2 text-[13px]">
+      <summary className="cursor-pointer font-medium text-muted">
+        Classifier read this description differently
+      </summary>
+      <div className="mt-2 flex items-start gap-2">
+        <Badge tone="neutral">{item.classifierConfidence} confidence</Badge>
+        <p className="text-muted">
+          For reference only: entering just this product description into our classifier today returns{" "}
+          <span className="mono font-medium text-ink">{item.classifierSuggestedHts}</span>, a different code
+          than the <span className="mono font-medium text-ink">{item.entryHts}</span> on this entry. This is
+          not a classification of your entry and not a finding that {item.entryHts} was wrong — a short text
+          description often can&rsquo;t capture the construction, composition or use facts that decide between
+          similar codes. It has no effect on the figures above.
+        </p>
+      </div>
+    </details>
   );
 }

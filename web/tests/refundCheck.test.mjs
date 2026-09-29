@@ -17,7 +17,13 @@ import { fakeServer, json, seedAccount, startApp, suite } from "./harness.mjs";
 const DAY = 86_400_000;
 const isoDaysAgo = (n) => new Date(Date.now() - n * DAY).toISOString().slice(0, 10);
 
-const engineState = { refundable: 0, duty: 100, status: "ready", fail: false };
+const engineState = {
+  refundable: 0, duty: 100, status: "ready", fail: false,
+  // Controls the classify-only branch (a request line with no hts): up to 3
+  // {hts, confidence} candidates, matching core/classify.py's Candidate shape.
+  suggested: [{ hts: "9999.99.99.99", confidence: "high" }],
+  classifyCalls: 0,
+};
 
 const engine = await fakeServer(3237, async (req, res) => {
   if (req.method !== "POST" || !req.url.startsWith("/api/audit")) return json(res, 404, { detail: "not found" });
@@ -25,9 +31,14 @@ const engine = await fakeServer(3237, async (req, res) => {
   const chunks = [];
   for await (const c of req) chunks.push(c);
   const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const classifying = body.items.every((it) => !it.hts);
+  if (classifying) engineState.classifyCalls += 1;
   const lines = body.items.map((it) => ({
     row: it.row, sku: it.sku ?? "", description: it.description, country: it.country,
-    hts: it.hts ?? "9999.99.99.99", confidence: it.hts ? null : "high", status: engineState.status,
+    hts: it.hts || engineState.suggested[0]?.hts || "9999.99.99.99",
+    confidence: it.hts ? null : (engineState.suggested[0]?.confidence ?? "high"),
+    suggested: it.hts ? [] : engineState.suggested,
+    status: engineState.status,
     duty: engineState.duty, effective_rate_pct: 10, refundable: engineState.refundable,
     scope_unverified: [], error: null, review_reasons: [], warnings: [], incomplete: [],
   }));
@@ -276,6 +287,108 @@ try {
       headers: { cookie: b.cookie },
     });
     assert.equal(res.status, 404);
+  });
+
+  // --- 3b: the opt-in classification-delta comparison -----------------------
+
+  await check("checkClassification defaults to off: no extra engine call, no extra charge, fields stay null", async () => {
+    const a = await accountWithSession("starter");
+    const subject = `account:${a.id}`;
+    const callsBefore = engineState.classifyCalls;
+    const r = await post(a.cookie, { name: "x", items: [row()] });
+    assert.equal(r.status, 200);
+    assert.equal(engineState.classifyCalls, callsBefore, "no classify-only call was made");
+    assert.equal(r.body.items[0].classifierSuggestedHts, null);
+    assert.equal(r.body.items[0].classifierConfidence, null);
+    assert.equal(await used(subject, "refund_check_items"), 1, "no extra charge for the skipped comparison");
+  });
+
+  await check("a genuine delta is surfaced and persisted, with the extra charge applied", async () => {
+    engineState.suggested = [{ hts: "6110.20.20.79", confidence: "high" }];
+    const a = await accountWithSession("starter");
+    const subject = `account:${a.id}`;
+    const r = await post(a.cookie, { name: "x", items: [row({ entryHts: "6109.10.00.12" })], checkClassification: true });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.items[0].classifierSuggestedHts, "6110.20.20.79");
+    assert.equal(r.body.items[0].classifierConfidence, "high");
+    assert.equal(await used(subject, "refund_check_items"), 2, "1 item + 1 eligible-for-classify item");
+    const saved = (await db.execute({
+      sql: "SELECT classifier_suggested_hts, classifier_confidence FROM refund_check_item WHERE refund_check_id = ?",
+      args: [r.body.id],
+    })).rows[0];
+    assert.equal(saved.classifier_suggested_hts, "6110.20.20.79");
+    assert.equal(saved.classifier_confidence, "high");
+  });
+
+  await check("the declared code matching any of up to 3 candidates suppresses the note", async () => {
+    engineState.suggested = [
+      { hts: "6110.20.20.79", confidence: "high" },
+      { hts: "6109.10.00.12", confidence: "medium" }, // matches entryHts below
+      { hts: "6106.10.00.10", confidence: "low" },
+    ];
+    const a = await accountWithSession("starter");
+    const r = await post(a.cookie, { name: "x", items: [row({ entryHts: "6109.10.00.12" })], checkClassification: true });
+    assert.equal(r.body.items[0].classifierSuggestedHts, null, "the 2nd candidate matched what was declared");
+  });
+
+  await check("a low-confidence top candidate suppresses the note regardless of mismatch", async () => {
+    engineState.suggested = [{ hts: "6110.20.20.79", confidence: "low" }];
+    const a = await accountWithSession("starter");
+    const r = await post(a.cookie, { name: "x", items: [row({ entryHts: "6109.10.00.12" })], checkClassification: true });
+    assert.equal(r.body.items[0].classifierSuggestedHts, null);
+  });
+
+  await check("digit-length normalization: a 6-digit declared code matching a 10-digit suggestion shows no delta", async () => {
+    engineState.suggested = [{ hts: "6109.10.00.12", confidence: "high" }];
+    const a = await accountWithSession("starter");
+    const r = await post(a.cookie, { name: "x", items: [row({ entryHts: "6109.10" })], checkClassification: true });
+    assert.equal(r.body.items[0].classifierSuggestedHts, null, "6109.10 agrees with 6109.10.00.12 on the first 6 digits");
+  });
+
+  await check("an item with no declared entry_hts never triggers a SECOND call or extra charge", async () => {
+    // With no entry_hts, the FIRST/pricing call is itself classify-shaped
+    // (hts omitted) -- that's expected and already free (no extra charge).
+    // What must NOT happen is an additional, second call on top of it.
+    engineState.suggested = [{ hts: "6110.20.20.79", confidence: "high" }];
+    const a = await accountWithSession("starter");
+    const subject = `account:${a.id}`;
+    const callsBefore = engineState.classifyCalls;
+    const r = await post(a.cookie, { name: "x", items: [row({ entryHts: null })], checkClassification: true });
+    assert.equal(r.status, 200);
+    assert.equal(engineState.classifyCalls, callsBefore + 1, "only the first call classified; no redundant 2nd call");
+    assert.equal(r.body.items[0].classifierSuggestedHts, null, "nothing declared to compare the classifier's own read against");
+    assert.equal(await used(subject, "refund_check_items"), 1, "no extra charge for an item that was never eligible");
+  });
+
+  await check("the extra charge only counts items with a declared entry_hts, not every item", async () => {
+    engineState.suggested = [{ hts: "9999.99.99.99", confidence: "high" }];
+    const a = await accountWithSession("starter");
+    const subject = `account:${a.id}`;
+    const r = await post(a.cookie, {
+      name: "x",
+      items: [row({ entryHts: "6109.10.00.12" }), row({ entryHts: null }), row({ entryHts: "6110.20.20.79" })],
+      checkClassification: true,
+    });
+    assert.equal(r.status, 200);
+    // 3 items + 2 with a declared entry_hts = 5, not 3*2 = 6.
+    assert.equal(await used(subject, "refund_check_items"), 5);
+    engineState.suggested = [{ hts: "9999.99.99.99", confidence: "high" }];
+  });
+
+  await check("evidence export carries the classifier comparison fields", async () => {
+    engineState.suggested = [{ hts: "6110.20.20.79", confidence: "high" }];
+    const a = await accountWithSession("starter");
+    const created = await post(a.cookie, {
+      name: "with delta", items: [row({ entryHts: "6109.10.00.12" })], checkClassification: true,
+    });
+    assert.equal(created.status, 200);
+    const res = await fetch(`${app.base}/api/refund-checks/evidence?id=${created.body.id}`, {
+      headers: { cookie: a.cookie },
+    });
+    const body = await res.json();
+    assert.equal(body.items[0].classifier_suggested_hts, "6110.20.20.79");
+    assert.equal(body.items[0].classifier_confidence, "high");
+    engineState.suggested = [{ hts: "9999.99.99.99", confidence: "high" }];
   });
 } finally {
   db.close();

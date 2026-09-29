@@ -73,6 +73,15 @@ export default function TermsPage() {
           promise of recovery; confirm with CBP or a licensed customs broker
           before relying on either for a filing.
         </p>
+        <p>
+          Entry Refund Check can also compare the product description you
+          gave against what our classifier suggests today, if you ask it to.
+          That comparison looks only at the description text, on its own; it
+          is not a re-audit of your entry and not a finding that the code you
+          declared was incorrect. A short text description often cannot
+          capture the construction, composition or use facts that decide
+          between similar codes.
+        </p>
       </Section>
 
       <Section title="4. Accounts">

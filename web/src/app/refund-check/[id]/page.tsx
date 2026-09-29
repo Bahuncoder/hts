@@ -66,6 +66,24 @@ export default async function RefundCheckDetailPage({ params }: { params: Promis
                 <p className="mt-1.5 text-muted">{it.protest_detail}</p>
               </div>
             </div>
+            {it.classifier_suggested_hts ? (
+              <details className="rounded border border-rule bg-surface px-3 py-2 text-[13px]">
+                <summary className="cursor-pointer font-medium text-muted">
+                  Classifier read this description differently
+                </summary>
+                <div className="mt-2 flex items-start gap-2">
+                  <Badge tone="neutral">{it.classifier_confidence} confidence</Badge>
+                  <p className="text-muted">
+                    For reference only: entering just this product description into our classifier today returns{" "}
+                    <span className="mono font-medium text-ink">{it.classifier_suggested_hts}</span>, a different
+                    code than the <span className="mono font-medium text-ink">{it.entry_hts}</span> on this entry.
+                    This is not a classification of your entry and not a finding that {it.entry_hts} was wrong — a
+                    short text description often can&rsquo;t capture the construction, composition or use facts
+                    that decide between similar codes. It has no effect on the figures above.
+                  </p>
+                </div>
+              </details>
+            ) : null}
           </Card>
         ))}
       </div>

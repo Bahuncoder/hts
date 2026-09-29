@@ -283,7 +283,13 @@ async function init(c: Client): Promise<void> {
       protest_deadline TEXT,
       protest_detail   TEXT,
       disclaimer       TEXT,
-      status           TEXT NOT NULL
+      status           TEXT NOT NULL,
+      -- Both null unless the opt-in classifier comparison ran and a delta
+      -- survived its confidence/candidate-match gates (lib/refundCheck.ts's
+      -- classificationDelta()). Computed once at creation, never recomputed
+      -- on a later view.
+      classifier_suggested_hts TEXT,
+      classifier_confidence    TEXT
     );
     CREATE INDEX IF NOT EXISTS refund_check_item_parent_idx ON refund_check_item(refund_check_id);
   `);

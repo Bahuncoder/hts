@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { API_BASE, engineHeaders } from "./api";
 import { acquireLease, chargeRefundCheck, type AuditBudget } from "./budget";
 import { computeRefundTiming } from "./refundTiming";
+import { isPriced, type Status } from "./auditModel";
 import type { RefundCheckRow } from "./refundCheckCsv";
 import { db } from "./store";
 
@@ -15,11 +16,13 @@ import { db } from "./store";
  *  lib/refundTiming.ts for the PSC/protest/liquidation timing logic.
  *
  *  Deliberately does NOT diff duty_paid against the engine's freshly
- *  computed total, or flag a classification difference from what was
- *  declared: either invites reading an unconfirmed comparison as HTSDesk
- *  asserting a legal overpayment finding, exactly what `terms/page.tsx` §3
- *  disclaims. 3a stays to the one figure with a clean, entry-independent
- *  legal basis. */
+ *  computed total: a rate or classification change since entry could
+ *  explain part of any gap, and presenting that diff as a number invites
+ *  reading it as HTSDesk asserting a legal overpayment finding, exactly
+ *  what `terms/page.tsx` §3 disclaims. 3a's refundable figure stays to the
+ *  one number with a clean, entry-independent legal basis (struck-down
+ *  IEEPA duty); the optional classifier comparison (3b, `checkClassification`)
+ *  is kept deliberately separate from it -- see `classificationDelta()`. */
 
 export type RefundCheckItemResult = {
   row: number; sku: string; description: string; country: string; value: number;
@@ -27,6 +30,11 @@ export type RefundCheckItemResult = {
   computedHts: string | null; computedDuty: number | null; struckDownRefundable: number;
   pscEligible: string; pscDetail: string; protestDeadline: string; protestDetail: string;
   disclaimer: string; status: string;
+  /** Set only when checkClassification was requested AND a delta survived
+   *  classificationDelta()'s gates. Never a finding that entryHts was wrong
+   *  -- see the copy this is rendered with in RefundCheckClient.tsx. */
+  classifierSuggestedHts: string | null;
+  classifierConfidence: string | null;
 };
 
 export class RefundCheckLimitError extends Error {
@@ -45,7 +53,8 @@ export class RefundCheckBudgetError extends Error {
 }
 
 type EngineLine = {
-  hts?: string | null; duty?: number; refundable?: number; status: string;
+  row: number; hts?: string | null; duty?: number; refundable?: number; status: string;
+  confidence?: string; suggested?: { hts: string; confidence: string }[];
 };
 
 /** A row the caller has already validated has a real entry date -- the
@@ -55,14 +64,8 @@ type EngineLine = {
  *  is complete enough to price and persist. */
 export type ValidRefundCheckRow = RefundCheckRow & { entryDate: string };
 
-async function callEngine(items: ValidRefundCheckRow[]): Promise<EngineLine[]> {
-  const request = {
-    items: items.map((it) => ({
-      row: it.row, sku: it.sku || undefined, description: it.description,
-      country: it.country, value: it.value, hts: it.entryHts || undefined,
-    })),
-    entries: 1, by_vessel: true, formal_entry: true,
-  };
+async function postAudit(items: { row: number; sku?: string; description: string; country: string; value: number; hts?: string }[]): Promise<EngineLine[]> {
+  const request = { items, entries: 1, by_vessel: true, formal_entry: true };
   const res = await fetch(`${API_BASE}/api/audit`, {
     method: "POST",
     headers: { "content-type": "application/json", ...engineHeaders() },
@@ -75,17 +78,81 @@ async function callEngine(items: ValidRefundCheckRow[]): Promise<EngineLine[]> {
   return body.lines;
 }
 
+async function callEngine(items: ValidRefundCheckRow[]): Promise<EngineLine[]> {
+  return postAudit(items.map((it) => ({
+    row: it.row, sku: it.sku || undefined, description: it.description,
+    country: it.country, value: it.value, hts: it.entryHts || undefined,
+  })));
+}
+
+/** One batched call (not one per item) with `hts` omitted, so the engine
+ *  classifies fresh -- the only way to get an independent read for an item
+ *  whose price came from a declared code (api/main.py's _audit_line skips
+ *  classification whenever hts is given). Only called for items that HAVE a
+ *  declared entry_hts and were successfully priced by the main call --
+ *  nothing else has a code to compare against, or anything priced to trust. */
+async function callEngineClassifyOnly(
+  items: { row: number; sku: string; description: string; country: string; value: number }[],
+): Promise<EngineLine[]> {
+  return postAudit(items.map((it) => ({
+    row: it.row, sku: it.sku || undefined, description: it.description,
+    country: it.country, value: it.value,
+  })));
+}
+
+const digitsOf = (hts: string) => hts.replace(/\./g, "");
+
+/** Whether the classifier's top candidate for this description is worth
+ *  showing as a data point against the declared code -- and if so, what to
+ *  show. Never a finding that the declared code was wrong; see the copy
+ *  this feeds in RefundCheckClient.tsx.
+ *
+ *  Suppressed entirely when the top candidate's own confidence is "low": a
+ *  low-confidence read is the classifier itself saying it isn't sure, so
+ *  presenting it as "the classifier suggests X" would overstate it.
+ *  Suppressed when the declared code matches ANY of up to 3 candidates
+ *  (normalized to the declared code's own digit length, so a 6-digit
+ *  declared code is not spuriously "different" from a 10-digit candidate
+ *  that agrees on those first 6 digits) -- the classifier itself already
+ *  surfaced that code as plausible, so there is nothing to note. */
+export function classificationDelta(
+  entryHts: string, line: Pick<EngineLine, "confidence" | "suggested">,
+): { suggestedHts: string; confidence: string } | null {
+  const top = line.suggested?.[0];
+  if (!top || top.confidence === "low") return null;
+  const declared = digitsOf(entryHts);
+  const matches = (candidate: string) => digitsOf(candidate).slice(0, declared.length) === declared;
+  if ((line.suggested ?? []).some((c) => matches(c.hts))) return null;
+  return { suggestedHts: top.hts, confidence: top.confidence };
+}
+
 /** Runs the engine over every item, computes the struck-down-refundable
  *  attribution and timing flags, and saves the result. Throws
- *  RefundCheckLimitError when the account is already at its plan's cap. */
+ *  RefundCheckLimitError when the account is already at its plan's cap.
+ *
+ *  `checkClassification`: opt-in (see lib/refundTiming.ts's sibling doc on
+ *  classificationDelta() for why). Costs real, roughly-doubled engine time
+ *  for items with a declared entry_hts (classification is skipped when hts
+ *  is given, so an independent read needs a second call) -- charged
+ *  up front as items.length + (items with a declared entry_hts).length, a
+ *  safe upper bound computed before any engine call runs, matching every
+ *  other budget check in this codebase charging before work rather than
+ *  after. The second call itself is sent only for the subset that also
+ *  priced successfully in the first call -- an item the engine could not
+ *  price has nothing to compare a classifier read against -- so the actual
+ *  engine work done can be slightly less than what was charged; this is a
+ *  deliberate, safe simplification, not a bug. */
 export async function runRefundCheck(
   accountId: string, name: string, items: ValidRefundCheckRow[], budget: AuditBudget, maxChecks: number,
+  checkClassification = false,
 ): Promise<{ id: string; items: RefundCheckItemResult[] }> {
   const subject = `account:${accountId}`;
   const release = await acquireLease(`refund-check:${accountId}`);
   if (!release) throw new Error("A refund check is already running for this account.");
   try {
-    const charge = await chargeRefundCheck(subject, budget, items.length);
+    const declaredCount = items.filter((it) => it.entryHts).length;
+    const cost = items.length + (checkClassification ? declaredCount : 0);
+    const charge = await chargeRefundCheck(subject, budget, cost);
     if (!charge.ok) throw new RefundCheckBudgetError(charge.retryAfter, charge.over, charge.tooLarge);
 
     let lines: EngineLine[];
@@ -100,12 +167,37 @@ export async function runRefundCheck(
       throw new Error("engine returned a different number of lines than were submitted");
     }
 
+    let classifyLines: Map<number, EngineLine> | null = null;
+    if (checkClassification) {
+      const eligible = items
+        .map((item, i) => ({ item, line: lines[i] }))
+        .filter(({ item, line }) => item.entryHts && isPriced(line.status as Status));
+      if (eligible.length) {
+        try {
+          const results = await callEngineClassifyOnly(
+            eligible.map(({ item }) => ({
+              row: item.row, sku: item.sku, description: item.description,
+              country: item.country, value: item.value,
+            })),
+          );
+          classifyLines = new Map(results.map((r) => [r.row, r]));
+        } catch {
+          // Best-effort: a failed classify-only pass loses only the delta
+          // note, not the struck-down-refundable figure or timing, which
+          // already committed to `lines` above and matter more.
+          classifyLines = null;
+        }
+      }
+    }
+
     const now = new Date().toISOString();
     const results: RefundCheckItemResult[] = items.map((item, i) => {
       const line = lines[i];
       const timing = computeRefundTiming(
         new Date(item.entryDate), item.liquidationDate ? new Date(item.liquidationDate) : null,
       );
+      const classifyLine = classifyLines?.get(item.row);
+      const delta = item.entryHts && classifyLine ? classificationDelta(item.entryHts, classifyLine) : null;
       return {
         row: item.row, sku: item.sku, description: item.description, country: item.country, value: item.value,
         entryHts: item.entryHts, entryDate: item.entryDate, dutyPaid: item.dutyPaid,
@@ -115,6 +207,8 @@ export async function runRefundCheck(
         pscEligible: timing.pscEligible, pscDetail: timing.pscDetail,
         protestDeadline: timing.protestDeadline, protestDetail: timing.protestDetail,
         disclaimer: timing.disclaimer, status: line.status,
+        classifierSuggestedHts: delta?.suggestedHts ?? null,
+        classifierConfidence: delta?.confidence ?? null,
       };
     });
 
@@ -137,13 +231,13 @@ export async function runRefundCheck(
           sql: `INSERT INTO refund_check_item(id, refund_check_id, row, sku, description, country, value,
                   entry_hts, entry_date, duty_paid, liquidation_date, computed_hts, computed_duty,
                   struck_down_refundable, psc_eligible, psc_detail, protest_deadline, protest_detail,
-                  disclaimer, status)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  disclaimer, status, classifier_suggested_hts, classifier_confidence)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
             crypto.randomUUID(), id, r.row, r.sku || null, r.description, r.country, r.value,
             r.entryHts, r.entryDate, r.dutyPaid, r.liquidationDate, r.computedHts, r.computedDuty,
             r.struckDownRefundable, r.pscEligible, r.pscDetail, r.protestDeadline, r.protestDetail,
-            r.disclaimer, r.status,
+            r.disclaimer, r.status, r.classifierSuggestedHts, r.classifierConfidence,
           ],
         });
       }
@@ -183,6 +277,7 @@ export type RefundCheckItemRow = {
   liquidation_date: string | null; computed_hts: string | null; computed_duty: number | null;
   struck_down_refundable: number; psc_eligible: string | null; psc_detail: string | null;
   protest_deadline: string | null; protest_detail: string | null; disclaimer: string | null; status: string;
+  classifier_suggested_hts: string | null; classifier_confidence: string | null;
 };
 
 export async function getRefundCheck(accountId: string, id: string) {
