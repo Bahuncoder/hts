@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { currentViewer } from "@/lib/auth";
 import { IN_BUILD, PLAN_COPY, PLAN_PRICE_MONTHLY, type PlanId } from "@/lib/plans";
 import { billingEnabled } from "@/lib/stripe";
@@ -107,6 +108,11 @@ export default async function PricingPage() {
       <div className="flex flex-wrap items-baseline gap-2 text-[14px] text-muted">
         <span>Starter and Growth include API access — call the duty engine from your own backend.</span>
         <a href="/docs/api" className="font-medium text-accent hover:underline">Read the API docs</a>
+      </div>
+
+      <div className="flex flex-wrap items-baseline gap-2 text-[14px] text-muted">
+        <span>Starter and Growth also include Entry Refund Check — check entries you already filed for struck-down duty and CBP timing windows.</span>
+        <Link href="/refund-check" className="font-medium text-accent hover:underline">Try it</Link>
       </div>
 
       <div className="flex flex-wrap items-baseline gap-2 text-[14px] text-muted">

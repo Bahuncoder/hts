@@ -1,6 +1,6 @@
 .PHONY: help data refresh rulings fedreg api web build test test-duty test-api eval check \
         preflight backup restore install mailcatch diff email-preview \
-        test-ui test-draft test-contrast test-billing test-apikeys
+        test-ui test-draft test-contrast test-billing test-apikeys test-refund-check
 
 help:
 	@echo "Data"
@@ -17,7 +17,7 @@ help:
 	@echo "  make test       duty unit tests + API security regressions"
 	@echo "  make test-duty  duty engine only (no server needed)"
 	@echo "  make test-api   API contract + security (needs a running API)"
-	@echo "  make test-diff / test-outbox / test-audit / test-migrate / test-billing / test-apikeys"
+	@echo "  make test-diff / test-outbox / test-audit / test-migrate / test-billing / test-apikeys / test-refund-check"
 	@echo "  make test-csvparse / test-proof / test-review / test-ui / test-draft / test-contrast"
 	@echo "                  catalogue reader, audit proofs, review workspace (test-review needs Chrome)"
 	@echo "                  integration tests against a scratch production server"
@@ -102,7 +102,7 @@ eval:
 	python3 tests/eval_classify.py 400
 
 check: build test-duty test-math test-adcvd test-notes test-rate-limiter test-backup-security test-classify-eval test-regimes test-refresh test-api test-email \
-       test-diff test-outbox test-audit test-migrate test-billing test-apikeys test-csvparse test-proof test-landed-cost test-evidence test-catalogue-costs test-review \
+       test-diff test-outbox test-audit test-migrate test-billing test-apikeys test-refund-check test-csvparse test-proof test-landed-cost test-evidence test-catalogue-costs test-review \
        test-ui test-draft test-contrast test-journey test-security test-authflow test-auth-transaction test-feature-journey eval
 
 test-email:
@@ -134,6 +134,14 @@ test-billing:
 # against a fake engine. Own production server (port 3206), scratch database.
 test-apikeys:
 	@cd web && node tests/apikeys.test.mjs
+
+# Entry Refund Check: struck-down-IEEPA duty attributed against a stated
+# duty paid, PSC/protest/liquidation timing windows, metering independent of
+# ordinary audit usage. Own production server (port 3207), scratch database,
+# a bespoke fake engine (not harness.mjs's fakeEngine -- this suite needs a
+# controllable per-line refundable/duty/hts in the real response shape).
+test-refund-check:
+	@cd web && node tests/refundCheck.test.mjs
 
 # The catalogue reader and shared row model, straight from src/lib (no server).
 test-csvparse:

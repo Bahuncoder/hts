@@ -34,6 +34,12 @@ const ITEMS = "audit_items";
 const API_REQUESTS = "api_requests";
 const API_ITEMS = "api_items";
 
+// Same reasoning again: Entry Refund Check is a distinct usage pattern
+// (reviewing filed entries) from an interactive audit, so it gets its own
+// scope rather than sharing -- or being capped by -- the audit budget.
+const REFUND_CHECK_REQUESTS = "refund_check_requests";
+const REFUND_CHECK_ITEMS = "refund_check_items";
+
 /** Seconds until `cost` more work fits inside `limit`, or 0 if it fits now.
  *  Infinity when `cost` alone exceeds the whole allowance. */
 async function waitFor(scope: string, subject: string, limit: Limit, cost: number): Promise<number> {
@@ -121,6 +127,31 @@ export async function chargeApi(subject: string, budget: AuditBudget, items: num
       await (await db()).execute({
         sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
         args: [subject, at, API_REQUESTS, API_ITEMS],
+      });
+    },
+  };
+}
+
+/** Same shape again, for Entry Refund Check (lib/refundCheck.ts). */
+export async function chargeRefundCheck(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
+  await sweep();
+  const requestWait = await waitFor(REFUND_CHECK_REQUESTS, subject, budget.requests, 1);
+  const itemWait = await waitFor(REFUND_CHECK_ITEMS, subject, budget.items, items);
+  if (requestWait || itemWait) {
+    const over = itemWait >= requestWait && itemWait ? "items" : "requests";
+    const wait = Math.max(requestWait, itemWait);
+    return { ok: false, over, tooLarge: !Number.isFinite(wait),
+             retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
+  }
+  const at = new Date().toISOString();
+  await record(REFUND_CHECK_REQUESTS, subject, at, 1);
+  await record(REFUND_CHECK_ITEMS, subject, at, items);
+  return {
+    ok: true,
+    refund: async () => {
+      await (await db()).execute({
+        sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
+        args: [subject, at, REFUND_CHECK_REQUESTS, REFUND_CHECK_ITEMS],
       });
     },
   };

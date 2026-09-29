@@ -245,6 +245,47 @@ async function init(c: Client): Promise<void> {
       revoked_at  TEXT
     );
     CREATE INDEX IF NOT EXISTS api_key_account_idx ON api_key(account_id);
+
+    -- A set of entries a customer already filed, checked against today's
+    -- rules for a struck-down-duty refund and CBP's timing windows. Kept
+    -- separate from catalogue/catalogue_item: those describe a forward-
+    -- looking audit and are wired into watch_code, re-pricing and the review
+    -- workflow, none of which apply to a filed entry.
+    CREATE TABLE IF NOT EXISTS refund_check (
+      id         TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS refund_check_account_idx ON refund_check(account_id);
+
+    -- psc_eligible/protest_deadline are strings, not booleans/dates: the
+    -- honest answer is sometimes "cannot be determined", which a boolean or
+    -- null date cannot distinguish from "no" / "unknown".
+    CREATE TABLE IF NOT EXISTS refund_check_item (
+      id               TEXT PRIMARY KEY,
+      refund_check_id  TEXT NOT NULL REFERENCES refund_check(id) ON DELETE CASCADE,
+      row              INTEGER NOT NULL,
+      sku              TEXT,
+      description      TEXT NOT NULL,
+      country          TEXT NOT NULL,
+      value            REAL NOT NULL,
+      entry_hts        TEXT,
+      entry_date       TEXT NOT NULL,
+      duty_paid        REAL NOT NULL,
+      liquidation_date TEXT,
+      computed_hts     TEXT,
+      computed_duty    REAL,
+      struck_down_refundable REAL,
+      psc_eligible     TEXT,
+      psc_detail       TEXT,
+      protest_deadline TEXT,
+      protest_detail   TEXT,
+      disclaimer       TEXT,
+      status           TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS refund_check_item_parent_idx ON refund_check_item(refund_check_id);
   `);
   await migrate(c);
 

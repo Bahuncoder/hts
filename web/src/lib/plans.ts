@@ -35,6 +35,16 @@ export type ApiLimits = { enabled: boolean; requests: Window; itemsPerDay: Windo
 
 const NO_API: ApiLimits = { enabled: false, requests: { max: 0, windowMs: MINUTE }, itemsPerDay: { max: 0, windowMs: DAY }, maxKeys: 0 };
 
+/** A plan's Entry Refund Check allowance (lib/refundCheck.ts): reviewing
+ *  entries already filed, against today's rules, for struck-down-IEEPA duty
+ *  and CBP timing windows. Disabled for anonymous/free like `api` above, and
+ *  for the same reason -- its own scope, separate from ordinary audit usage,
+ *  so a compliance review does not share (or get capped by) that budget.
+ *  `maxChecks` bounds saved runs the same way `savedCatalogues` does. */
+export type RefundCheckLimits = { enabled: boolean; requests: Window; itemsPerDay: Window; maxChecks: number };
+
+const NO_REFUND_CHECK: RefundCheckLimits = { enabled: false, requests: { max: 0, windowMs: HOUR }, itemsPerDay: { max: 0, windowMs: DAY }, maxChecks: 0 };
+
 export type Limits = {
   /** Products in one audit request. */
   productsPerAudit: number;
@@ -46,6 +56,8 @@ export type Limits = {
   savedCatalogues: number;
   /** Programmatic API access. Disabled for anonymous and the free plan. */
   api: ApiLimits;
+  /** Entry Refund Check. Disabled for anonymous and the free plan. */
+  refundCheck: RefundCheckLimits;
 };
 
 export const LIMITS: Record<Tier, Limits> = {
@@ -55,6 +67,7 @@ export const LIMITS: Record<Tier, Limits> = {
     itemsPerDay: { max: 150, windowMs: DAY },
     savedCatalogues: 0,
     api: NO_API,
+    refundCheck: NO_REFUND_CHECK,
   },
   account: {
     productsPerAudit: 200,
@@ -62,6 +75,7 @@ export const LIMITS: Record<Tier, Limits> = {
     itemsPerDay: { max: 2000, windowMs: DAY },
     savedCatalogues: 20,
     api: NO_API,
+    refundCheck: NO_REFUND_CHECK,
   },
 };
 
@@ -82,6 +96,7 @@ export const PLAN_LIMITS: Record<PlanId, Limits> = {
     itemsPerDay: { max: 5_000, windowMs: DAY },
     savedCatalogues: 75,
     api: { enabled: true, requests: { max: 60, windowMs: MINUTE }, itemsPerDay: { max: 2_500, windowMs: DAY }, maxKeys: 3 },
+    refundCheck: { enabled: true, requests: { max: 10, windowMs: HOUR }, itemsPerDay: { max: 200, windowMs: DAY }, maxChecks: 10 },
   },
   growth: {
     // 1,000, not 2,000: the engine hard-rejects any audit request over 1,000
@@ -93,6 +108,7 @@ export const PLAN_LIMITS: Record<PlanId, Limits> = {
     itemsPerDay: { max: 25_000, windowMs: DAY },
     savedCatalogues: 500,
     api: { enabled: true, requests: { max: 300, windowMs: MINUTE }, itemsPerDay: { max: 12_500, windowMs: DAY }, maxKeys: 10 },
+    refundCheck: { enabled: true, requests: { max: 30, windowMs: HOUR }, itemsPerDay: { max: 1_000, windowMs: DAY }, maxChecks: 50 },
   },
 };
 
@@ -125,6 +141,7 @@ export const PLAN_COPY: Record<PlanId, { name: string; blurb: string; features: 
       `${PLAN_LIMITS.starter.itemsPerDay.max.toLocaleString()} products a day`,
       `${PLAN_LIMITS.starter.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
       `API access — ${PLAN_LIMITS.starter.api.itemsPerDay.max.toLocaleString()} products a day`,
+      "Entry Refund Check — struck-down duty and CBP timing windows",
       "Everything in Free",
     ],
   },
@@ -136,6 +153,7 @@ export const PLAN_COPY: Record<PlanId, { name: string; blurb: string; features: 
       `${PLAN_LIMITS.growth.itemsPerDay.max.toLocaleString()} products a day`,
       `${PLAN_LIMITS.growth.savedCatalogues.toLocaleString()} saved, monitored catalogues`,
       `API access — ${PLAN_LIMITS.growth.api.itemsPerDay.max.toLocaleString()} products a day`,
+      "Entry Refund Check — struck-down duty and CBP timing windows",
       "Everything in Starter",
     ],
   },
@@ -157,15 +175,14 @@ export function planForPriceId(priceId: string): PlanId | null {
 }
 
 /** Roadmap: not built yet. Listed separately so nothing on a page implies it
- *  exists. Re-pricing a saved catalogue and API access (starter/growth,
- *  lib/apiKeys.ts, /account/api-keys) both shipped and were removed from this
- *  list accordingly -- neither must be listed as upcoming when a page already
- *  does it. */
+ *  exists. Re-pricing a saved catalogue, API access, and Entry Refund Check
+ *  (starter/growth, lib/apiKeys.ts / lib/refundCheck.ts) all shipped and were
+ *  removed from this list accordingly -- none must be listed as upcoming
+ *  when a page already does it. */
 export const IN_BUILD = [
   "Savings analysis — FTA eligibility and alternate defensible codes",
   "Classification binder export for your reasonable-care file",
   "Team seats and shared catalogues",
-  "Entry audit — upload CBP 7501s and compare declared against computed",
 ] as const;
 
 /** "10 minutes", "hour", "day" for how a window reads in a sentence. */

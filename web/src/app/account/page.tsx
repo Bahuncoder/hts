@@ -83,6 +83,14 @@ export default async function AccountPage() {
             {limits.api.enabled ? "Manage API keys" : "See plans"}
           </Link>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+          <p className="text-[13px] text-muted">
+            Entry Refund Check — {limits.refundCheck.enabled ? "included" : "not included on this plan"}
+          </p>
+          <Link href={limits.refundCheck.enabled ? "/refund-check" : "/pricing"} className="text-[13px] font-medium text-accent hover:underline">
+            {limits.refundCheck.enabled ? "Run a check" : "See plans"}
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-3">

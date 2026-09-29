@@ -415,3 +415,17 @@ export async function revokeApiKeyAction(form: FormData): Promise<void> {
   }
   revalidatePath("/account/api-keys");
 }
+
+// --- Entry Refund Check -------------------------------------------------------
+
+import { deleteRefundCheck } from "./refundCheck";
+
+export async function deleteRefundCheckAction(form: FormData): Promise<void> {
+  const viewer = await currentViewer();
+  if (!viewer) return;
+  const removed = await deleteRefundCheck(viewer.account.id, String(form.get("id") ?? ""));
+  if (removed) {
+    await audit("refund_check_deleted", { accountId: viewer.account.id, email: viewer.account.email });
+  }
+  revalidatePath("/refund-check");
+}

@@ -62,6 +62,17 @@ export default function TermsPage() {
           status, so it is not a claim amount. Neither treatment is a promise
           about what CBP will assess or refund.
         </p>
+        <p>
+          Entry Refund Check lets you tell us those facts &mdash; the HTS code,
+          value, entry date, duty paid and liquidation date for an entry you
+          already filed. We compute an estimate from what you told us; we do
+          not independently verify it against CBP&rsquo;s record of that entry.
+          Timing guidance (Post Summary Correction and protest windows) is
+          based on standard statutory deadlines, not a determination for your
+          specific entry. Neither is legal advice, a claim amount, or a
+          promise of recovery; confirm with CBP or a licensed customs broker
+          before relying on either for a filing.
+        </p>
       </Section>
 
       <Section title="4. Accounts">

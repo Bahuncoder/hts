@@ -28,7 +28,10 @@ export type AuditEvent =
   | "catalogue_evidence_exported"
   | "alert_emails_changed"
   | "api_key_created"
-  | "api_key_revoked";
+  | "api_key_revoked"
+  | "refund_check_run"
+  | "refund_check_deleted"
+  | "refund_check_evidence_exported";
 
 export async function audit(
   event: AuditEvent,
