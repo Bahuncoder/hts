@@ -34,7 +34,7 @@ export default async function sitemap({
 
   const staticPages: MetadataRoute.Sitemap =
     chunk === 0
-      ? ["", "/classify", "/calculator", "/changes", "/audit"].map((p) => ({
+      ? ["", "/classify", "/calculator", "/changes", "/audit", "/china-tariffs", "/pricing", "/docs/api"].map((p) => ({
           url: `${SITE}${p}`,
           changeFrequency: "daily" as const,
           priority: p === "" ? 1 : 0.8,

@@ -38,6 +38,7 @@ export default async function Home() {
             <Link href="/pricing" className="inline-flex min-h-[44px] items-center rounded-full border border-border bg-accent-soft px-4 text-[14px] font-medium text-accent">Free to start</Link>
           </div>
           <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Try the tools without an account; a free account saves your catalogues and watches your codes. <Link href="/pricing" className="font-medium text-accent hover:underline">See plans</Link>.</p>
+          <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted">Sourcing from China? <Link href="/china-tariffs" className="font-medium text-accent hover:underline">See how Section 301 and IEEPA duty stack, and check what may be refundable</Link>.</p>
         </div>
         <div className="hero-example" aria-label="Illustrative duty breakdown, not a live quote">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
