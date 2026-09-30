@@ -263,7 +263,7 @@ await step("/pricing is a real page with the three plans", async () => {
   const probe = await ctx.newPage();
   await probe.goto(`${BASE}/pricing`, { waitUntil: "domcontentloaded" });
   assert.equal(new URL(probe.url()).pathname, "/pricing");
-  await probe.getByRole("heading", { name: /Plans by scale/ }).waitFor();
+  await probe.getByRole("heading", { name: /Plans that scale with your catalogue/ }).waitFor();
   for (const name of ["Free", "Starter", "Growth"]) {
     assert.equal(await probe.getByText(name, { exact: true }).count() > 0, true, `${name} plan card is shown`);
   }

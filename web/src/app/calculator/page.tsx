@@ -43,7 +43,7 @@ export default async function CalculatorPage({
   // them their entry.
   const hts = (one(sp.hts) ?? "").trim();
   const country = (one(sp.country) ?? "").trim();
-  const rawValue = one(sp.value) ?? "10000";
+  const rawValue = one(sp.value) ?? "";
   const transport = one(sp.transport) === "air" ? "air" : "sea";
   const entry = one(sp.entry) === "informal" ? "informal" : "formal";
   const program = (one(sp.program) ?? "").trim().toUpperCase().slice(0, 8);
@@ -120,6 +120,81 @@ export default async function CalculatorPage({
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Duty calculator" title="Know your duty exposure" description="Build an estimate for one customs entry. Choose the origin and shipping assumptions, then explore every duty and fee." />
+
+      {/* A second GET form. It carries the scenario as hidden fields so
+          searching for a code does not throw the visitor's inputs away. Shown
+          first: most visitors arrive without an HTS code in hand. */}
+      <form action="/calculator" className="panel max-w-2xl space-y-3 p-5">
+        {Object.entries(scenario).map(([k, v]) =>
+          v ? <input key={k} type="hidden" name={k} value={v} /> : null,
+        )}
+        <div>
+          <h2 className="text-[15px] font-semibold">Don&rsquo;t know your HTS code?</h2>
+          <p className="mt-0.5 text-[13px] text-muted">Describe the product and we&rsquo;ll suggest candidates.</p>
+        </div>
+        <label htmlFor="q" className="sr-only">
+          Search descriptions
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="q"
+            name="q"
+            defaultValue={q}
+            placeholder="e.g. cotton t-shirt"
+            autoComplete="off"
+            className={`min-w-0 flex-1 ${inputClass}`}
+          />
+          <button
+            type="submit"
+            className="rounded-md border px-3 py-2 text-[14px] border-border"
+          >
+            Search
+          </button>
+        </div>
+      </form>
+
+      {searchProblem ? <Note role="alert">{searchProblem}</Note> : null}
+      {matches && !matches.ok ? (
+        <FailureNotice
+          failure={matches}
+          retryHref={href({ q })}
+          subject="code search"
+        />
+      ) : null}
+      {matches?.ok && matches.data.results.length === 0 ? (
+        <p role="status" className="text-[14px] text-muted">
+          No codes matched &ldquo;{q}&rdquo;. Try the material or what the
+          goods do.
+        </p>
+      ) : null}
+      {matches?.ok && matches.data.results.length > 0 ? (
+        <Card>
+          <div
+            id="matches-label"
+            className="text-[12px] uppercase tracking-wide text-muted"
+          >
+            Matching codes for &ldquo;{q}&rdquo;
+          </div>
+          <ul aria-labelledby="matches-label" className="mt-2 space-y-1.5 text-[14px]">
+            {matches.data.results.slice(0, 8).map((r) => (
+              <li key={r.hts}>
+                <Link
+                  href={href({ hts: r.hts, q: "" })}
+                  className="tabular font-medium hover:underline text-accent"
+                >
+                  {r.hts}
+                </Link>{" "}
+                <span className="text-muted">{r.description}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      <div>
+        <h2 className="text-[15px] font-semibold">Already have your code?</h2>
+        <p className="mt-0.5 text-[13px] text-muted">Enter it below along with origin and value.</p>
+      </div>
 
       <form action="/calculator" className="panel space-y-6 p-5 sm:p-7">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -294,71 +369,6 @@ export default async function CalculatorPage({
           Calculate
         </button>
       </form>
-
-      {/* A second GET form. It carries the scenario as hidden fields so
-          searching for a code does not throw the visitor's inputs away. */}
-      <form action="/calculator" className="max-w-2xl" role="search">
-        {Object.entries(scenario).map(([k, v]) =>
-          v ? <input key={k} type="hidden" name={k} value={v} /> : null,
-        )}
-        <label htmlFor="q" className="block text-[13px] font-medium">
-          Don&rsquo;t know the code? Search descriptions
-        </label>
-        <div className="mt-1 flex gap-2">
-          <input
-            id="q"
-            name="q"
-            defaultValue={q}
-            placeholder="e.g. cotton t-shirt"
-            autoComplete="off"
-            className={`min-w-0 flex-1 ${inputClass}`}
-          />
-          <button
-            type="submit"
-            className="rounded-md border px-3 py-2 text-[14px] border-border"
-          >
-            Search
-          </button>
-        </div>
-      </form>
-
-      {searchProblem ? <Note role="alert">{searchProblem}</Note> : null}
-      {matches && !matches.ok ? (
-        <FailureNotice
-          failure={matches}
-          retryHref={href({ q })}
-          subject="code search"
-        />
-      ) : null}
-      {matches?.ok && matches.data.results.length === 0 ? (
-        <p role="status" className="text-[14px] text-muted">
-          No codes matched &ldquo;{q}&rdquo;. Try the material or what the
-          goods do.
-        </p>
-      ) : null}
-      {matches?.ok && matches.data.results.length > 0 ? (
-        <Card>
-          <div
-            id="matches-label"
-            className="text-[12px] uppercase tracking-wide text-muted"
-          >
-            Matching codes for &ldquo;{q}&rdquo;
-          </div>
-          <ul aria-labelledby="matches-label" className="mt-2 space-y-1.5 text-[14px]">
-            {matches.data.results.slice(0, 8).map((r) => (
-              <li key={r.hts}>
-                <Link
-                  href={href({ hts: r.hts, q: "" })}
-                  className="tabular font-medium hover:underline text-accent"
-                >
-                  {r.hts}
-                </Link>{" "}
-                <span className="text-muted">{r.description}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
 
       {inputProblem ? <Note role="alert">{inputProblem}</Note> : null}
       {quote && !quote.ok ? (

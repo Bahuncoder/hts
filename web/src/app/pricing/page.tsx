@@ -23,21 +23,21 @@ export default async function PricingPage() {
     <div className="space-y-9">
       <div className="max-w-[720px] space-y-3">
         <h1 className="serif text-4xl leading-[1.06] tracking-tight">
-          Plans by scale, not by feature
+          Plans that scale with your catalogue
         </h1>
         <p className="text-[16px] text-muted">
           The duty engine, the classifier and the evidence behind every code
-          are the same on every plan. What changes is how much catalogue you
-          can run through them. Every paid plan bills monthly and cancels in
-          one click, from the billing portal, any time.
+          are the same on every plan. Starter and Growth add more room —
+          larger catalogues, higher throughput — and unlock programmatic API
+          access and Entry Refund Check. Every paid plan bills monthly and
+          cancels in one click, from the billing portal, any time.
         </p>
       </div>
 
       {!billingEnabled() ? (
         <Note>
-          Billing is not switched on yet in this environment — the paid plans
-          cannot be purchased until Stripe keys are configured. The free plan
-          works now.
+          Paid plans are not available to purchase in this environment yet.
+          The free plan works now.
         </Note>
       ) : null}
 

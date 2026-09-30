@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { getRefundCheck } from "@/lib/refundCheck";
 import { deleteRefundCheckAction } from "@/lib/actions";
 import { Badge, Card } from "@/components/ui";
@@ -10,9 +10,8 @@ import { money2 } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export default async function RefundCheckDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
   const { id } = await params;
+  const viewer = await requireViewer(`/refund-check/${id}`);
   const check = await getRefundCheck(viewer.account.id, id);
   if (!check) notFound();
 

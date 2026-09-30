@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { listApiKeys } from "@/lib/apiKeys";
 import { revokeApiKeyAction } from "@/lib/actions";
 import { Card, Note } from "@/components/ui";
@@ -10,8 +9,7 @@ export const metadata = { title: "API keys" };
 export const dynamic = "force-dynamic";
 
 export default async function ApiKeysPage() {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
+  const viewer = await requireViewer("/account/api-keys");
   const { limits } = viewer;
 
   const keys = limits.api.enabled ? await listApiKeys(viewer.account.id) : [];

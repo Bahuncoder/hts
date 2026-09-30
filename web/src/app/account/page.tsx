@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { toggleAlertEmailsAction } from "@/lib/actions";
 import { AccountDraftBanner, SignOutForm } from "@/components/DraftNotice";
 import { emailEnabled } from "@/lib/email";
@@ -33,8 +32,7 @@ const EVENT_LABEL: Record<string, string> = {
 };
 
 export default async function AccountPage() {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
+  const viewer = await requireViewer("/account");
   const { account, limits, plan } = viewer;
   const alertEmailsOn = account.alert_emails !== 0;
   const watchedCount = (await listWatched(account.id)).length;

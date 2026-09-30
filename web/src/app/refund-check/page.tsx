@@ -1,7 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { listRefundChecks } from "@/lib/refundCheck";
 import { Card, Note } from "@/components/ui";
 import RefundCheckClient from "@/components/RefundCheckClient";
@@ -14,8 +13,7 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function RefundCheckPage() {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
+  const viewer = await requireViewer("/refund-check");
   const { limits } = viewer;
 
   return (

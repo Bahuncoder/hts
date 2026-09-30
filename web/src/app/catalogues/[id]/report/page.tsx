@@ -1,5 +1,5 @@
-import { notFound, redirect } from "next/navigation";
-import { currentViewer } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { requireViewer } from "@/lib/auth";
 import { catalogueTotals, getCatalogue } from "@/lib/catalogues";
 import { EMPTY_COSTS, COST_FIELDS, allocateCosts, landedCost, parseCosts } from "@/lib/landedCost";
 import { LEGACY_LABEL, STATUS_LABEL } from "@/lib/auditModel";
@@ -9,9 +9,9 @@ import EvidenceSnapshot from "@/components/EvidenceSnapshot";
 import { listReviews } from "@/lib/reviews";
 export const dynamic = "force-dynamic";
 export default async function Report({ params }: { params: Promise<{ id: string }> }) {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
-  const cat = await getCatalogue(viewer.account.id, (await params).id);
+  const { id } = await params;
+  const viewer = await requireViewer(`/catalogues/${id}/report`);
+  const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) notFound();
   const totals = catalogueTotals(cat.items, cat.mpf);
   const costs = cat.landed_cost_json ? parseCosts(JSON.parse(cat.landed_cost_json)) : EMPTY_COSTS;

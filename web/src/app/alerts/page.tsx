@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { listAlerts, unreadCount, diffStatus, failedEmailCount } from "@/lib/diff";
 import { listWatched } from "@/lib/catalogues";
 import { markAlertsReadAction } from "@/lib/actions";
@@ -11,8 +10,7 @@ export const metadata = { title: "Alerts" };
 export const dynamic = "force-dynamic";
 
 export default async function AlertsPage() {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
+  const viewer = await requireViewer("/alerts");
 
   const alerts = await listAlerts(viewer.account.id, 100);
   const unread = await unreadCount(viewer.account.id);

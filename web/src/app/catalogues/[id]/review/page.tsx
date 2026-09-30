@@ -1,6 +1,6 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { getCatalogue } from "@/lib/catalogues";
 import { LEGACY_LABEL, STATUS_LABEL } from "@/lib/auditModel";
 import {
@@ -16,6 +16,8 @@ import EvidenceSnapshot from "@/components/EvidenceSnapshot";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Review" };
 
+const PAGE_SIZE = 100;
+
 const TONE: Record<ApprovalStatus, string> = {
   pending: "text-muted",
   approved: "text-accent",
@@ -27,11 +29,11 @@ export default async function Review({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ item?: string; notice?: string }>;
+  searchParams: Promise<{ item?: string; notice?: string; q?: string; page?: string }>;
 }) {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
   const { id } = await params;
+  const viewer = await requireViewer(`/catalogues/${id}/review`);
+  const sp = await searchParams;
   const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) notFound();
   const state = await catalogueReviewState(viewer.account.id, id);
@@ -40,13 +42,35 @@ export default async function Review({
   }));
   const counts = approvalCounts(rows.map((r) => r.review));
 
-  const openId = (await searchParams).item;
+  const openId = sp.item;
   const open = openId ? rows.find((r) => r.item.id === openId) : undefined;
   const history = open ? await itemHistory(viewer.account.id, open.item.id) : [];
 
+  const q = (sp.q ?? "").trim().toLowerCase();
+  const filtered = q
+    ? rows.filter(({ item }) => [item.sku, item.description, item.country, item.hts].some((v) => v?.toLowerCase().includes(q)))
+    : rows;
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const at = Math.min(Math.max(1, Number(sp.page) || 1), pages);
+  const slice = filtered.slice((at - 1) * PAGE_SIZE, at * PAGE_SIZE);
+  const href = (p = 1) => {
+    const qp = new URLSearchParams();
+    if (sp.q) qp.set("q", sp.q);
+    if (p > 1) qp.set("page", String(p));
+    const qs = qp.toString();
+    return `/catalogues/${cat.id}/review${qs ? `?${qs}` : ""}`;
+  };
+  const openHref = (itemId: string) => {
+    const qp = new URLSearchParams();
+    if (sp.q) qp.set("q", sp.q);
+    if (at > 1) qp.set("page", String(at));
+    qp.set("item", itemId);
+    return `/catalogues/${cat.id}/review?${qp.toString()}`;
+  };
+
   return (
     <div className="space-y-6">
-      {(await searchParams).notice === "conflict" && <p role="alert" className="text-caution-ink">The review could not be saved. This view has been refreshed: check for a newer decision. Unclassified or incomplete lines cannot be approved.</p>}
+      {sp.notice === "conflict" && <p role="alert" className="text-caution-ink">The review could not be saved. This view has been refreshed: check for a newer decision. Unclassified or incomplete lines cannot be approved.</p>}
       <div className="space-y-1">
         <p className="text-[13px] text-muted">
           <Link href={`/catalogues/${cat.id}`} className="hover:underline">{cat.name}</Link> · Human review
@@ -65,44 +89,6 @@ export default async function Review({
           </span>
         ))}
       </div>
-
-      <Card>
-        <div className="scroll-x">
-          <table className="data-table w-full min-w-[720px] text-[14px]">
-            <caption className="sr-only">Products in {cat.name} with their review status</caption>
-            <thead>
-              <tr>
-                <th scope="col">Row</th>
-                <th scope="col">Product</th>
-                <th scope="col">Origin</th>
-                <th scope="col">HTS</th>
-                <th scope="col">Calculation</th>
-                <th scope="col">Review</th>
-                <th scope="col">Assigned to</th>
-                <th scope="col" className="sr-only">Open</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ item, review }) => (
-                <tr key={item.id} className={item.id === openId ? "bg-sunk" : undefined}>
-                  <td className="mono">{item.row_number ?? "—"}</td>
-                  <td>{item.description || "—"}</td>
-                  <td>{item.country}</td>
-                  <td className="mono">{item.hts ?? "Unclassified"}</td>
-                  <td>{item.status ? STATUS_LABEL[item.status] : LEGACY_LABEL}</td>
-                  <td className={TONE[review.approval_status]}>{APPROVAL_LABEL[review.approval_status]}</td>
-                  <td>{review.assigned_to || "—"}</td>
-                  <td>
-                    <Link href={`/catalogues/${cat.id}/review?item=${item.id}`} className="text-accent hover:underline">
-                      {item.id === openId ? "Open" : "Review"}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
 
       {open ? (
         <Card>
@@ -182,6 +168,73 @@ export default async function Review({
             </div>
           </div>
         </Card>
+      ) : null}
+
+      <form method="get" action={`/catalogues/${cat.id}/review`} className="flex flex-wrap items-end gap-3">
+        <label className="min-w-[16rem] flex-1 text-[13px]">
+          Search
+          <input
+            type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
+            placeholder="SKU, description, origin, or HTS code"
+          />
+        </label>
+        <button type="submit" className="btn btn-secondary">Search</button>
+      </form>
+
+      {!slice.length ? (
+        <p className="py-6 text-[14px] text-muted">No lines match this search.</p>
+      ) : (
+        <Card>
+          <div className="scroll-x">
+            <table className="data-table w-full min-w-[720px] text-[14px]">
+              <caption className="sr-only">Products in {cat.name} with their review status. Page {at} of {pages}.</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Row</th>
+                  <th scope="col">Product</th>
+                  <th scope="col">Origin</th>
+                  <th scope="col">HTS</th>
+                  <th scope="col">Calculation</th>
+                  <th scope="col">Review</th>
+                  <th scope="col">Assigned to</th>
+                  <th scope="col" className="sr-only">Open</th>
+                </tr>
+              </thead>
+              <tbody>
+                {slice.map(({ item, review }) => (
+                  <tr key={item.id} className={item.id === openId ? "bg-sunk" : undefined}>
+                    <td className="mono">{item.row_number ?? "—"}</td>
+                    <td>{item.description || "—"}</td>
+                    <td>{item.country}</td>
+                    <td className="mono">{item.hts ?? "Unclassified"}</td>
+                    <td>{item.status ? STATUS_LABEL[item.status] : LEGACY_LABEL}</td>
+                    <td className={TONE[review.approval_status]}>{APPROVAL_LABEL[review.approval_status]}</td>
+                    <td>{review.assigned_to || "—"}</td>
+                    <td>
+                      <Link href={openHref(item.id)} className="text-accent hover:underline">
+                        {item.id === openId ? "Open" : "Review"}
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {pages > 1 ? (
+        <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-[13px]">
+          {at > 1 ? (
+            <Link href={href(at - 1)} className="rounded border px-3 py-1.5 border-rule">Previous</Link>
+          ) : null}
+          <span className="text-muted">
+            Lines {(at - 1) * PAGE_SIZE + 1}–{Math.min(at * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()}
+          </span>
+          {at < pages ? (
+            <Link href={href(at + 1)} className="rounded border px-3 py-1.5 border-rule">Next</Link>
+          ) : null}
+        </nav>
       ) : null}
     </div>
   );

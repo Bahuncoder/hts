@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { accountById, accountByEmail, createAccount, db, planFor, type Account } from "./store";
 import type { Limits, PlanId } from "./plans";
 import { insertSession } from "./credentialStore";
+import { nextQuery, safeNext } from "./next";
 
 const COOKIE = "htsdesk_session";
 const SESSION_DAYS = 30;
@@ -136,4 +138,18 @@ export async function currentViewer(): Promise<Viewer | null> {
   if (!account) return null;
   const { plan, limits } = await planFor(account.id);
   return { account, plan, limits };
+}
+
+/** currentViewer(), but redirects to sign-in with this page carried as
+ *  `?next=`, validated through the same allowlist `/login` itself reads
+ *  (lib/next.ts) -- so a signed-out visitor who lands on a protected page
+ *  comes right back to it after signing in, instead of always landing on
+ *  /account. `path` must be the real, current path (including any dynamic
+ *  segments already resolved) -- an unlisted path is silently dropped by
+ *  safeNext, not an error, so this is safe to call with a path not yet in
+ *  the allowlist, it just won't carry through. */
+export async function requireViewer(path: string): Promise<Viewer> {
+  const viewer = await currentViewer();
+  if (!viewer) redirect(`/login${nextQuery(safeNext(path))}`);
+  return viewer;
 }

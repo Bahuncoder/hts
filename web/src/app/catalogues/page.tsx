@@ -1,7 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { currentViewer } from "@/lib/auth";
+import { requireViewer } from "@/lib/auth";
 import { countCatalogueWatches, listCatalogues } from "@/lib/catalogues";
 import { deleteCatalogueAction } from "@/lib/actions";
 import { money } from "@/lib/api";
@@ -16,8 +15,7 @@ export default async function CataloguesPage({
 }: {
   searchParams: Promise<{ delete?: string }>;
 }) {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
+  const viewer = await requireViewer("/catalogues");
   const catalogues = await listCatalogues(viewer.account.id);
 
   // Deleting is a two-step, no-script flow: the Delete link only asks (GET,

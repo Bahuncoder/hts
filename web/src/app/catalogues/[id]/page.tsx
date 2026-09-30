@@ -2,8 +2,8 @@ import Link from "next/link";
 import SavedCosts from "@/components/SavedCosts";
 import ReviewWorkspace from "@/components/ReviewWorkspace";
 import { EMPTY_COSTS, parseCosts } from "@/lib/landedCost";
-import { notFound, redirect } from "next/navigation";
-import { currentViewer } from "@/lib/auth";
+import { notFound } from "next/navigation";
+import { requireViewer } from "@/lib/auth";
 import { repriceCatalogueAction } from "@/lib/actions";
 import {
   catalogueTotals, countCatalogueWatches, getCatalogue, itemUnresolved,
@@ -68,11 +68,10 @@ export default async function CataloguePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ show?: string; page?: string; repriced?: string; changed?: string; unchanged?: string; repriceError?: string }>;
+  searchParams: Promise<{ show?: string; page?: string; q?: string; sort?: string; repriced?: string; changed?: string; unchanged?: string; repriceError?: string }>;
 }) {
-  const viewer = await currentViewer();
-  if (!viewer) redirect("/login");
   const { id } = await params;
+  const viewer = await requireViewer(`/catalogues/${id}`);
   const sp = await searchParams;
   const cat = await getCatalogue(viewer.account.id, id);
   if (!cat) notFound();
@@ -85,17 +84,29 @@ export default async function CataloguePage({
   const watches = await countCatalogueWatches(viewer.account.id, cat.id);
 
   const show: Show = SHOWS.some((s) => s.id === sp.show) ? (sp.show as Show) : "all";
-  // Unresolved lines first: they are the work, and a saved catalogue that
-  // buries them under a thousand ready lines has lost them again.
+  type Sort = "unresolved" | "original" | "duty" | "value";
+  const sort: Sort = sp.sort === "original" || sp.sort === "duty" || sp.sort === "value" ? sp.sort : "unresolved";
+  // Unresolved lines first by default: they are the work, and a saved
+  // catalogue that buries them under a thousand ready lines has lost them
+  // again. Original row order, highest duty, and highest value are also
+  // offered, mirroring the pre-save audit view's own sort options.
   const ordered = cat.items
     .map((item, n) => ({ item, n }))
-    .sort((a, b) =>
-      Number(itemUnresolved(b.item)) - Number(itemUnresolved(a.item)) || a.n - b.n)
+    .sort((a, b) => {
+      if (sort === "original") return a.n - b.n;
+      if (sort === "duty") return (b.item.duty ?? -1) - (a.item.duty ?? -1);
+      if (sort === "value") return (b.item.value ?? -1) - (a.item.value ?? -1);
+      return Number(itemUnresolved(b.item)) - Number(itemUnresolved(a.item)) || a.n - b.n;
+    })
     .map((x) => x.item);
+  const query = (sp.q ?? "").trim().toLowerCase();
   const filtered = ordered.filter((i) => {
-    if (show === "all") return true;
-    if (i.status === null) return show === "review" ? itemUnresolved(i) : !itemUnresolved(i);
-    return bucketOf(i.status) === show;
+    if (show !== "all") {
+      const showMatch = i.status === null ? (show === "review" ? itemUnresolved(i) : !itemUnresolved(i)) : bucketOf(i.status) === show;
+      if (!showMatch) return false;
+    }
+    if (!query) return true;
+    return [i.sku, i.description, i.country, i.hts].some((v) => v?.toLowerCase().includes(query));
   });
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const at = Math.min(Math.max(1, Number(sp.page) || 1), pages);
@@ -105,6 +116,8 @@ export default async function CataloguePage({
     const q = new URLSearchParams();
     if (s !== "all") q.set("show", s);
     if (p > 1) q.set("page", String(p));
+    if (sp.q) q.set("q", sp.q);
+    if (sort !== "unresolved") q.set("sort", sort);
     const qs = q.toString();
     return `/catalogues/${cat.id}${qs ? `?${qs}` : ""}`;
   };
@@ -155,7 +168,6 @@ export default async function CataloguePage({
         </p>
       ) : null}
 
-      <SavedCosts id={cat.id} initial={cat.landed_cost_json ? parseCosts(JSON.parse(cat.landed_cost_json)) : EMPTY_COSTS} goods={totals.value} duty={totals.duty} partial={cat.totals_complete !== 1} items={cat.items} mpf={cat.mpf} />
       <ReviewWorkspace catalogueId={cat.id} items={cat.items} />
       <Link className="btn btn-secondary" href={`/catalogues/${cat.id}/report`}>View printable evidence report</Link>
       {legacy ? (
@@ -241,6 +253,27 @@ export default async function CataloguePage({
         ))}
       </nav>
 
+      <form method="get" action={`/catalogues/${cat.id}`} className="flex flex-wrap items-end gap-3">
+        {show !== "all" ? <input type="hidden" name="show" value={show} /> : null}
+        <label className="min-w-[16rem] flex-1 text-[13px]">
+          Search
+          <input
+            type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
+            placeholder="SKU, description, origin, or HTS code"
+          />
+        </label>
+        <label className="text-[13px]">
+          Sort
+          <select name="sort" defaultValue={sort} className="field-control mt-1 block w-full">
+            <option value="unresolved">Needs attention first</option>
+            <option value="original">Original row order</option>
+            <option value="duty">Highest duty first</option>
+            <option value="value">Highest value first</option>
+          </select>
+        </label>
+        <button type="submit" className="btn btn-secondary">Apply</button>
+      </form>
+
       {!slice.length ? (
         <p className="py-6 text-[14px] text-muted">No lines match this filter.</p>
       ) : (
@@ -308,6 +341,8 @@ export default async function CataloguePage({
           ) : null}
         </nav>
       ) : null}
+
+      <SavedCosts id={cat.id} initial={cat.landed_cost_json ? parseCosts(JSON.parse(cat.landed_cost_json)) : EMPTY_COSTS} goods={totals.value} duty={totals.duty} partial={cat.totals_complete !== 1} items={cat.items} mpf={cat.mpf} />
     </div>
   );
 }

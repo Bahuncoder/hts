@@ -45,6 +45,10 @@ try {
   const before = await (await page.request.get(app.base + "/api/catalogues/evidence?id=" + id)).json();
   assert.equal(before.landed_cost.landed, 512.08);
   assert.equal(before.per_product_allocation.reduce((n, l) => n + Math.round(l.additional_costs * 100), 0), 1250);
+  // SavedCosts is a collapsed <details> on a reopened catalogue (a returning
+  // visitor is usually here to review or export, not re-enter costs) -- open
+  // it before interacting with the fields inside.
+  await page.getByText("Landed-cost assumptions", { exact: true }).click();
   await page.getByLabel("Freight (EUR)", { exact: true }).fill("20");
   await page.getByRole("button", { name: "Save import costs", exact: true }).click();
   await page.getByText("Import costs saved. Exports now include these amounts.").waitFor();
