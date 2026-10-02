@@ -5,7 +5,7 @@ import { getCatalogue } from "@/lib/catalogues";
 import { LEGACY_LABEL, STATUS_LABEL } from "@/lib/auditModel";
 import {
   APPROVAL_LABEL, APPROVAL_STATUSES, approvalCounts, catalogueReviewState,
-  itemHistory, type ApprovalStatus,
+  isApprovalStatus, itemHistory, type ApprovalStatus,
 } from "@/lib/review";
 import { addCommentAction, assignItemAction, setApprovalAction } from "@/lib/reviewActions";
 import { Card } from "@/components/ui";
@@ -25,11 +25,24 @@ const TONE: Record<ApprovalStatus, string> = {
   rejected: "text-danger",
 };
 
+type StatusFilter = "all" | ApprovalStatus;
+const isStatusFilter = (v: unknown): v is StatusFilter => v === "all" || isApprovalStatus(v);
+// "Pending" here, not APPROVAL_LABEL.pending ("Pending review") — the word
+// "Review" in a filter pill collides with tests/review.test.mjs's
+// `a:has-text("Review")` locator for the per-row open link.
+const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "pending", label: "Pending" },
+  { id: "approved", label: APPROVAL_LABEL.approved },
+  { id: "changes_requested", label: APPROVAL_LABEL.changes_requested },
+  { id: "rejected", label: APPROVAL_LABEL.rejected },
+];
+
 export default async function Review({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ item?: string; notice?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ item?: string; notice?: string; q?: string; page?: string; status?: string }>;
 }) {
   const { id } = await params;
   const viewer = await requireViewer(`/catalogues/${id}/review`);
@@ -46,31 +59,59 @@ export default async function Review({
   const open = openId ? rows.find((r) => r.item.id === openId) : undefined;
   const history = open ? await itemHistory(viewer.account.id, open.item.id) : [];
 
+  const statusFilter: StatusFilter = isStatusFilter(sp.status) ? sp.status : "all";
   const q = (sp.q ?? "").trim().toLowerCase();
-  const filtered = q
-    ? rows.filter(({ item }) => [item.sku, item.description, item.country, item.hts].some((v) => v?.toLowerCase().includes(q)))
-    : rows;
+  const filtered = rows.filter(({ review, item }) => {
+    if (statusFilter !== "all" && review.approval_status !== statusFilter) return false;
+    if (!q) return true;
+    return [item.sku, item.description, item.country, item.hts].some((v) => v?.toLowerCase().includes(q));
+  });
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const at = Math.min(Math.max(1, Number(sp.page) || 1), pages);
   const slice = filtered.slice((at - 1) * PAGE_SIZE, at * PAGE_SIZE);
-  const href = (p = 1) => {
+  const href = (p = 1, s: StatusFilter = statusFilter) => {
     const qp = new URLSearchParams();
     if (sp.q) qp.set("q", sp.q);
+    if (s !== "all") qp.set("status", s);
     if (p > 1) qp.set("page", String(p));
     const qs = qp.toString();
     return `/catalogues/${cat.id}/review${qs ? `?${qs}` : ""}`;
   };
-  const openHref = (itemId: string) => {
+  const openHref = (itemId: string, p = at) => {
     const qp = new URLSearchParams();
     if (sp.q) qp.set("q", sp.q);
-    if (at > 1) qp.set("page", String(at));
+    if (statusFilter !== "all") qp.set("status", statusFilter);
+    if (p > 1) qp.set("page", String(p));
     qp.set("item", itemId);
-    return `/catalogues/${cat.id}/review?${qp.toString()}`;
+    return `/catalogues/${cat.id}/review?${qp.toString()}#row-${itemId}`;
   };
+
+  // "Record decision and review next" — the next item, wrapping around the
+  // current filtered queue, still pending; may live on a different page than
+  // the one open now, so its real page index is computed, not assumed.
+  let nextPendingId = "";
+  let nextPendingPage = at;
+  if (open) {
+    const openIdx = filtered.findIndex((r) => r.item.id === open.item.id);
+    const n = filtered.length;
+    // Visit every OTHER index once, wrapping forward from the open item; if
+    // the open item isn't in the current filtered view at all (its own
+    // status just changed and no longer matches an active status filter —
+    // already possible today with the `q` filter), scan the whole thing.
+    const order = openIdx === -1
+      ? Array.from({ length: n }, (_, i) => i)
+      : Array.from({ length: n - 1 }, (_, step) => (openIdx + step + 1) % n);
+    const idx = order.find((i) => filtered[i].review.approval_status === "pending");
+    if (idx !== undefined) {
+      nextPendingId = filtered[idx].item.id;
+      nextPendingPage = Math.floor(idx / PAGE_SIZE) + 1;
+    }
+  }
 
   return (
     <div className="space-y-6">
       {sp.notice === "conflict" && <p role="alert" className="text-caution-ink">The review could not be saved. This view has been refreshed: check for a newer decision. Unclassified or incomplete lines cannot be approved.</p>}
+      {sp.notice === "queue_complete" && <p role="status" className="text-accent">Nice work — every item in this view has been reviewed.</p>}
       <div className="space-y-1">
         <p className="text-[13px] text-muted">
           <Link href={`/catalogues/${cat.id}`} className="hover:underline">{cat.name}</Link> · Human review
@@ -90,152 +131,189 @@ export default async function Review({
         ))}
       </div>
 
-      {open ? (
-        <Card>
-          <div className="space-y-5">
-            <div>
-              <h2 className="serif text-xl">
-                Row {open.item.row_number ?? "—"} — {open.item.description || "Unnamed product"}
-              </h2>
-              <p className="text-[13px] text-muted">
-                {open.item.country} · {open.item.hts ?? "Unclassified"}
-                {open.item.duty !== null ? ` · Duty ${money2(open.item.duty)}` : ""}
-              </p>
-            </div>
+      <div className={open ? "lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-6 lg:items-start" : undefined}>
+        <div
+          className={open ? "hidden space-y-6 lg:block lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto lg:pr-1" : "space-y-6"}
+          role={open ? "region" : undefined}
+          aria-label={open ? "Review queue" : undefined}
+        >
+          <nav aria-label="Filter by review status" className="flex flex-wrap gap-2">
+            {STATUS_FILTERS.map((f) => (
+              <Link
+                key={f.id}
+                href={href(1, f.id)}
+                aria-current={statusFilter === f.id ? "true" : undefined}
+                className={`rounded border px-3 py-1.5 text-[13px] font-medium ${
+                  statusFilter === f.id ? "border-accent bg-accent-soft text-accent" : "border-rule text-muted"
+                }`}
+              >
+                {f.label} <span className="mono">({(f.id === "all" ? rows.length : counts[f.id]).toLocaleString()})</span>
+              </Link>
+            ))}
+          </nav>
 
-            <EvidenceSnapshot json={open.item.evidence_json} />
-            <form action={setApprovalAction} className="flex flex-wrap items-end gap-3">
-              <input type="hidden" name="review_version" value={open.item.review_version} />
-              <input type="hidden" name="item_id" value={open.item.id} />
-              <input type="hidden" name="catalogue_id" value={cat.id} />
-              <label className="text-[13px]">
-                Decision
-                <select name="approval_status" defaultValue={open.review.approval_status} className="field-control mt-1 block w-full">
-                  {APPROVAL_STATUSES.map((s) => <option key={s} value={s}>{APPROVAL_LABEL[s]}</option>)}
-                </select>
-              </label>
-              <label className="min-w-[16rem] flex-1 text-[13px]">
-                Note (optional)
-                <input name="note" maxLength={MAX_REVIEW_NOTE} className="field-control mt-1 block w-full" placeholder="Why, or what changed" />
-              </label>
-              <button type="submit" className="btn btn-primary">Record decision</button>
-            </form>
+          <form method="get" action={`/catalogues/${cat.id}/review`} className="flex flex-wrap items-end gap-3">
+            {statusFilter !== "all" ? <input type="hidden" name="status" value={statusFilter} /> : null}
+            <label className="min-w-[16rem] flex-1 text-[13px]">
+              Search
+              <input
+                type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
+                placeholder="SKU, description, origin, or HTS code"
+              />
+            </label>
+            <button type="submit" className="btn btn-secondary">Search</button>
+          </form>
 
-            <form action={assignItemAction} className="flex flex-wrap items-end gap-3">
-              <input type="hidden" name="review_version" value={open.item.review_version} />
-              <input type="hidden" name="item_id" value={open.item.id} />
-              <input type="hidden" name="catalogue_id" value={cat.id} />
-              <label className="min-w-[16rem] flex-1 text-[13px]">
-                Assigned to
-                <input
-                  name="assigned_to" maxLength={200} defaultValue={open.review.assigned_to ?? ""}
-                  className="field-control mt-1 block w-full" placeholder="Name or email — leave blank to unassign"
-                />
-              </label>
-              <button type="submit" className="btn btn-secondary">Save assignment</button>
-            </form>
+          {!slice.length ? (
+            <p className="py-6 text-[14px] text-muted">No lines match this search.</p>
+          ) : (
+            <Card>
+              <div className="scroll-x">
+                <table className="data-table w-full min-w-[720px] text-[14px]">
+                  <caption className="sr-only">Products in {cat.name} with their review status. Page {at} of {pages}.</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Row</th>
+                      <th scope="col">Product</th>
+                      <th scope="col">Origin</th>
+                      <th scope="col">HTS</th>
+                      <th scope="col">Calculation</th>
+                      <th scope="col">Review</th>
+                      <th scope="col">Assigned to</th>
+                      <th scope="col" className="sr-only">Open</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slice.map(({ item, review }) => (
+                      <tr key={item.id} id={`row-${item.id}`} className={item.id === openId ? "bg-sunk" : undefined}>
+                        <td className="mono">{item.row_number ?? "—"}</td>
+                        <td>{item.description || "—"}</td>
+                        <td>{item.country}</td>
+                        <td className="mono">{item.hts ?? "Unclassified"}</td>
+                        <td>{item.status ? STATUS_LABEL[item.status] : LEGACY_LABEL}</td>
+                        <td className={TONE[review.approval_status]}>{APPROVAL_LABEL[review.approval_status]}</td>
+                        <td>{review.assigned_to || "—"}</td>
+                        <td>
+                          <Link href={openHref(item.id)} className="text-accent hover:underline">
+                            {item.id === openId ? "Open" : "Review"}
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
-            <div className="space-y-3 border-t border-rule pt-4">
-              <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted">History</h3>
-              {history.length === 0 ? (
-                <p className="text-[13px] text-muted">Nothing recorded yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {history.map((event) => (
-                    <li key={event.id} className="text-[13px]">
-                      <span className="mono text-faint">{new Date(event.created_at).toLocaleString()}</span>{" "}
-                      <span className="font-medium">{event.actor}</span>{" "}
-                      {event.kind === "approval" && event.approval_status
-                        ? <>marked it <span className={TONE[event.approval_status]}>{APPROVAL_LABEL[event.approval_status]}</span></>
-                        : event.kind === "assignment"
-                          ? <>{event.assigned_to ? <>assigned it to <strong>{event.assigned_to}</strong></> : "unassigned it"}</>
-                          : "commented"}
-                      {event.comment ? <span className="block pl-1 text-ink">“{event.comment}”</span> : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <form action={addCommentAction} className="flex flex-wrap items-end gap-3">
-                <input type="hidden" name="review_version" value={open.item.review_version} />
-                <input type="hidden" name="item_id" value={open.item.id} />
-                <input type="hidden" name="catalogue_id" value={cat.id} />
-                <label className="min-w-[16rem] flex-1 text-[13px]">
-                  Add a comment
-                  <textarea name="comment" maxLength={MAX_REVIEW_NOTE} rows={2} className="field-control mt-1 block w-full" required />
-                </label>
-                <button type="submit" className="btn btn-secondary">Comment</button>
-              </form>
-            </div>
-          </div>
-        </Card>
-      ) : null}
-
-      <form method="get" action={`/catalogues/${cat.id}/review`} className="flex flex-wrap items-end gap-3">
-        <label className="min-w-[16rem] flex-1 text-[13px]">
-          Search
-          <input
-            type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
-            placeholder="SKU, description, origin, or HTS code"
-          />
-        </label>
-        <button type="submit" className="btn btn-secondary">Search</button>
-      </form>
-
-      {!slice.length ? (
-        <p className="py-6 text-[14px] text-muted">No lines match this search.</p>
-      ) : (
-        <Card>
-          <div className="scroll-x">
-            <table className="data-table w-full min-w-[720px] text-[14px]">
-              <caption className="sr-only">Products in {cat.name} with their review status. Page {at} of {pages}.</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Row</th>
-                  <th scope="col">Product</th>
-                  <th scope="col">Origin</th>
-                  <th scope="col">HTS</th>
-                  <th scope="col">Calculation</th>
-                  <th scope="col">Review</th>
-                  <th scope="col">Assigned to</th>
-                  <th scope="col" className="sr-only">Open</th>
-                </tr>
-              </thead>
-              <tbody>
-                {slice.map(({ item, review }) => (
-                  <tr key={item.id} className={item.id === openId ? "bg-sunk" : undefined}>
-                    <td className="mono">{item.row_number ?? "—"}</td>
-                    <td>{item.description || "—"}</td>
-                    <td>{item.country}</td>
-                    <td className="mono">{item.hts ?? "Unclassified"}</td>
-                    <td>{item.status ? STATUS_LABEL[item.status] : LEGACY_LABEL}</td>
-                    <td className={TONE[review.approval_status]}>{APPROVAL_LABEL[review.approval_status]}</td>
-                    <td>{review.assigned_to || "—"}</td>
-                    <td>
-                      <Link href={openHref(item.id)} className="text-accent hover:underline">
-                        {item.id === openId ? "Open" : "Review"}
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {pages > 1 ? (
-        <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-[13px]">
-          {at > 1 ? (
-            <Link href={href(at - 1)} className="rounded border px-3 py-1.5 border-rule">Previous</Link>
+          {pages > 1 ? (
+            <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-[13px]">
+              {at > 1 ? (
+                <Link href={href(at - 1)} className="rounded border px-3 py-1.5 border-rule">Previous</Link>
+              ) : null}
+              <span className="text-muted">
+                Lines {(at - 1) * PAGE_SIZE + 1}–{Math.min(at * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()}
+              </span>
+              {at < pages ? (
+                <Link href={href(at + 1)} className="rounded border px-3 py-1.5 border-rule">Next</Link>
+              ) : null}
+            </nav>
           ) : null}
-          <span className="text-muted">
-            Lines {(at - 1) * PAGE_SIZE + 1}–{Math.min(at * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()}
-          </span>
-          {at < pages ? (
-            <Link href={href(at + 1)} className="rounded border px-3 py-1.5 border-rule">Next</Link>
-          ) : null}
-        </nav>
-      ) : null}
+        </div>
+
+        {open ? (
+          <div
+            className="mt-6 lg:mt-0 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
+            role="region" aria-label="Selected product"
+          >
+            <Link href={href(at)} className="mb-3 inline-block text-[13px] hover:underline text-faint lg:hidden">
+              ← Back to review queue
+            </Link>
+            <Card>
+              <div className="space-y-5">
+                <div>
+                  <h2 className="serif text-xl">
+                    Row {open.item.row_number ?? "—"} — {open.item.description || "Unnamed product"}
+                  </h2>
+                  <p className="text-[13px] text-muted">
+                    {open.item.country} · {open.item.hts ?? "Unclassified"}
+                    {open.item.duty !== null ? ` · Duty ${money2(open.item.duty)}` : ""}
+                  </p>
+                </div>
+
+                <EvidenceSnapshot json={open.item.evidence_json} />
+                <form action={setApprovalAction} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="review_version" value={open.item.review_version} />
+                  <input type="hidden" name="item_id" value={open.item.id} />
+                  <input type="hidden" name="catalogue_id" value={cat.id} />
+                  <input type="hidden" name="next_item_id" value={nextPendingId} />
+                  <input type="hidden" name="q" value={sp.q ?? ""} />
+                  <input type="hidden" name="status" value={statusFilter} />
+                  <input type="hidden" name="page" value={String(nextPendingPage)} />
+                  <label className="text-[13px]">
+                    Decision
+                    <select name="approval_status" defaultValue={open.review.approval_status} className="field-control mt-1 block w-full">
+                      {APPROVAL_STATUSES.map((s) => <option key={s} value={s}>{APPROVAL_LABEL[s]}</option>)}
+                    </select>
+                  </label>
+                  <label className="min-w-[16rem] flex-1 text-[13px]">
+                    Note (optional)
+                    <input name="note" maxLength={MAX_REVIEW_NOTE} className="field-control mt-1 block w-full" placeholder="Why, or what changed" />
+                  </label>
+                  <button type="submit" className="btn btn-primary">Record decision</button>
+                  <button type="submit" name="advance" value="1" className="btn btn-secondary">Record decision and review next</button>
+                </form>
+
+                <form action={assignItemAction} className="flex flex-wrap items-end gap-3">
+                  <input type="hidden" name="review_version" value={open.item.review_version} />
+                  <input type="hidden" name="item_id" value={open.item.id} />
+                  <input type="hidden" name="catalogue_id" value={cat.id} />
+                  <label className="min-w-[16rem] flex-1 text-[13px]">
+                    Assigned to
+                    <input
+                      name="assigned_to" maxLength={200} defaultValue={open.review.assigned_to ?? ""}
+                      className="field-control mt-1 block w-full" placeholder="Name or email — leave blank to unassign"
+                    />
+                  </label>
+                  <button type="submit" className="btn btn-secondary">Save assignment</button>
+                </form>
+
+                <div className="space-y-3 border-t border-rule pt-4">
+                  <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted">History</h3>
+                  {history.length === 0 ? (
+                    <p className="text-[13px] text-muted">Nothing recorded yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {history.map((event) => (
+                        <li key={event.id} className="text-[13px]">
+                          <span className="mono text-faint">{new Date(event.created_at).toLocaleString()}</span>{" "}
+                          <span className="font-medium">{event.actor}</span>{" "}
+                          {event.kind === "approval" && event.approval_status
+                            ? <>marked it <span className={TONE[event.approval_status]}>{APPROVAL_LABEL[event.approval_status]}</span></>
+                            : event.kind === "assignment"
+                              ? <>{event.assigned_to ? <>assigned it to <strong>{event.assigned_to}</strong></> : "unassigned it"}</>
+                              : "commented"}
+                          {event.comment ? <span className="block pl-1 text-ink">“{event.comment}”</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <form action={addCommentAction} className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="review_version" value={open.item.review_version} />
+                    <input type="hidden" name="item_id" value={open.item.id} />
+                    <input type="hidden" name="catalogue_id" value={cat.id} />
+                    <label className="min-w-[16rem] flex-1 text-[13px]">
+                      Add a comment
+                      <textarea name="comment" maxLength={MAX_REVIEW_NOTE} rows={2} className="field-control mt-1 block w-full" required />
+                    </label>
+                    <button type="submit" className="btn btn-secondary">Comment</button>
+                  </form>
+                </div>
+              </div>
+            </Card>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
