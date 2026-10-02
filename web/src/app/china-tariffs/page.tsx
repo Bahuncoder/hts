@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getHealth } from "@/lib/api";
 import { Card } from "@/components/ui";
+import DutyExampleCard from "@/components/DutyExampleCard";
+import ToolsGrid from "@/components/ToolsGrid";
 
 export const revalidate = 900;
 
@@ -19,6 +21,7 @@ const tools = [
 export default async function ChinaTariffsPage() {
   const health = await getHealth();
   const counts = health.ok ? health.data.counts : undefined;
+  const edition = health.ok ? health.data.hts_edition : undefined;
 
   return (
     <div className="space-y-14 sm:space-y-20">
@@ -41,28 +44,11 @@ export default async function ChinaTariffsPage() {
             <Link href="/refund-check" className="font-medium text-accent hover:underline">Already filed entries?</Link>
           </p>
         </div>
-        <div className="hero-example" aria-label="Illustrative duty breakdown, not a live quote">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <span className="lbl">Inside a China-origin estimate</span><span className="rounded bg-sunk px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">Example</span>
-          </div>
-          <div className="p-6 sm:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div><p className="text-sm font-medium">Cotton T-shirt</p><p className="mono mt-1 text-xs text-faint">China · $10,000 entered value</p></div>
-              <span className="rounded-full bg-caution-soft px-2.5 py-1 text-xs text-caution-ink">Review needed</span>
-            </div>
-            <div className="mt-7 space-y-4 text-sm">
-              {[["Base duty (HTSUS Column 1)", "$1,650.00"], ["Section 301 List 3", "$750.00"], ["Processing & harbor fees", "$47.14"]].map(([label, amount]) => (
-                <div key={label} className="flex justify-between gap-3"><span className="text-muted">{label}</span><span className="mono">{amount}</span></div>
-              ))}
-            </div>
-            <div className="mt-6 flex items-end justify-between gap-4 border-t border-rule pt-5">
-              <div><p className="lbl">Illustrative subtotal</p><p className="mt-1 text-xs text-muted">Before unresolved duties</p></div>
-              <p className="mono text-2xl font-medium text-accent">$2,447.14</p>
-            </div>
-            <p className="mt-5 rounded-md border-l-2 border-caution bg-caution-soft p-3 text-xs leading-relaxed text-caution-ink">An unresolved scope is kept visible, so you know what to confirm before relying on a figure.</p>
-          </div>
-          <div className="border-t border-border bg-sunk px-6 py-3 text-xs text-muted">Illustration only. Run a calculation for your goods and current data.</div>
-        </div>
+        <DutyExampleCard
+          heading="Inside a China-origin estimate"
+          lines={[["Base duty (HTSUS Column 1)", "$1,650.00"], ["Section 301 List 3", "$750.00"], ["Processing & harbor fees", "$47.14"]]}
+          edition={edition}
+        />
       </section>
 
       <section className="panel space-y-4 p-6 sm:p-8" aria-labelledby="refund-title">
@@ -79,45 +65,36 @@ export default async function ChinaTariffsPage() {
         <Link href="/refund-check" className="btn btn-secondary w-fit">Check your entries</Link>
       </section>
 
-      <section aria-labelledby="workflow-title">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div><p className="eyebrow">From question to decision</p><h2 id="workflow-title" className="serif mt-2 text-3xl tracking-tight">Built for the layers China adds.</h2></div>
-          <Link href="/changes" className="text-sm font-medium text-accent hover:underline">Explore tariff changes <span aria-hidden="true">↗</span></Link>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3">
-          {tools.map((tool) => <Link key={tool.href} href={tool.href} className="tool-card">
-            <span className="mono text-xs text-faint">{tool.step} /</span>
-            <h3 className="serif text-2xl leading-tight tracking-tight">{tool.title}</h3>
-            <p className="text-sm leading-relaxed text-muted">{tool.description}</p>
-            <span className="tool-arrow">{tool.action} <span aria-hidden="true">→</span></span>
-          </Link>)}
-        </div>
-      </section>
+      <ToolsGrid heading="Built for the layers China adds." tools={tools} />
 
-      <section className="panel grid gap-8 p-6 sm:p-8 md:grid-cols-2" aria-labelledby="why-title">
-        <div>
-          <p className="eyebrow">Why China needs its own read</p>
-          <h2 id="why-title" className="serif mt-3 text-3xl tracking-tight">Four Section 301 lists. One IEEPA action. Real gaps.</h2>
-          <p className="mt-4 max-w-md text-sm leading-relaxed text-muted">
-            Section 301 List 1&ndash;4 product scope is defined in prose in the Chapter 99 U.S.
-            Notes, not a clean lookup table &mdash; we parse it directly rather than maintain a
-            separate list. Where a heading&rsquo;s scope can&rsquo;t be resolved mechanically, it is
-            excluded from the total and flagged, not guessed at, so a figure is never confidently
-            wrong.
-          </p>
+      <div className="relative left-1/2 right-1/2 mx-[-50vw] w-screen bg-deep">
+        <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+          <section className="panel-deep grid gap-8 p-6 sm:p-8 md:grid-cols-2" aria-labelledby="why-title">
+            <div>
+              <p className="eyebrow">Why China needs its own read</p>
+              <h2 id="why-title" className="serif mt-3 text-3xl tracking-tight">Four Section 301 lists. One IEEPA action. Real gaps.</h2>
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-deep-muted">
+                Section 301 List 1&ndash;4 product scope is defined in prose in the Chapter 99 U.S.
+                Notes, not a clean lookup table &mdash; we parse it directly rather than maintain a
+                separate list. Where a heading&rsquo;s scope can&rsquo;t be resolved mechanically, it is
+                excluded from the total and flagged, not guessed at, so a figure is never confidently
+                wrong.
+              </p>
+            </div>
+            <div className="self-center">
+              {counts ? (
+                <dl className="grid grid-cols-2 gap-x-5 gap-y-7">
+                  <div><dt className="lbl">HTS lines</dt><dd className="mono mt-2 text-3xl sm:text-4xl font-semibold">{counts.hts?.toLocaleString()}</dd></div>
+                  <div><dt className="lbl">Chapter 99 rules</dt><dd className="mono mt-2 text-3xl sm:text-4xl font-semibold">{counts.ch99_rule?.toLocaleString()}</dd></div>
+                  <div><dt className="lbl">Scoped code links</dt><dd className="mono mt-2 text-3xl sm:text-4xl font-semibold">{counts.ch99_scope?.toLocaleString()}</dd></div>
+                  <div><dt className="lbl">CBP rulings</dt><dd className="mono mt-2 text-3xl sm:text-4xl font-semibold">{counts.ruling?.toLocaleString()}</dd></div>
+                </dl>
+              ) : null}
+              <p className={counts ? "mt-7 text-xs text-deep-muted" : "text-sm leading-relaxed text-deep-muted"}>Sources: USITC, CBP, and the Federal Register.</p>
+            </div>
+          </section>
         </div>
-        <div className="self-center">
-          {counts ? (
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-7">
-              <div><dt className="lbl">HTS lines</dt><dd className="mono mt-2 text-xl">{counts.hts?.toLocaleString()}</dd></div>
-              <div><dt className="lbl">Chapter 99 rules</dt><dd className="mono mt-2 text-xl">{counts.ch99_rule?.toLocaleString()}</dd></div>
-              <div><dt className="lbl">Scoped code links</dt><dd className="mono mt-2 text-xl">{counts.ch99_scope?.toLocaleString()}</dd></div>
-              <div><dt className="lbl">CBP rulings</dt><dd className="mono mt-2 text-xl">{counts.ruling?.toLocaleString()}</dd></div>
-            </dl>
-          ) : null}
-          <p className={counts ? "mt-7 text-xs text-faint" : "text-sm leading-relaxed text-muted"}>Sources: USITC, CBP, and the Federal Register.</p>
-        </div>
-      </section>
+      </div>
 
       <Card className="space-y-2">
         <h2 className="text-[15px] font-semibold">What we do not do</h2>

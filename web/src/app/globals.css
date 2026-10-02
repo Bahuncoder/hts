@@ -192,6 +192,16 @@ input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .page-title { margin-top: 10px; font-family: var(--serif); font-size: clamp(32px, 4vw, 46px); font-weight: 400; letter-spacing: -.035em; line-height: 1.12; text-wrap: balance; }
 .page-description { margin-top: 14px; max-width: 640px; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .panel { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
+/* A deliberately dark marketing surface (the --deep trio above), not a
+   dark-mode variant of .panel. Plain CSS, like every other themed surface
+   here: this file has no @layer, so an unlayered rule like .panel's own
+   background always beats a layered Tailwind utility (bg-deep) on the same
+   element regardless of specificity — this class exists so that conflict
+   never has a chance to happen. .eyebrow/.lbl need their own overrides
+   here for the same reason: both set their own color as plain CSS. */
+.panel-deep { border-radius: var(--radius-panel); background: var(--deep); color: var(--deep-ink); }
+.panel-deep .eyebrow { color: var(--deep-muted); }
+.panel-deep .lbl { color: var(--deep-muted); }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--border); }
 .panel-title { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
 .step-number { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin-right: 10px; border: 1px solid var(--border); border-radius: 50%; font: 12px var(--mono); color: var(--accent); background: var(--accent-soft); }
@@ -221,10 +231,10 @@ input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .data-table tbody tr:hover { background: var(--sunk); }
 .metric-card { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); padding: 22px; }
 .hero { display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; align-items: center; padding: 28px 0; }
-.hero-title { font: 400 clamp(42px, 5vw, 66px)/1.04 var(--serif); letter-spacing: -.045em; text-wrap: balance; }
+.hero-title { font: 400 clamp(42px, 5vw, 72px)/1.04 var(--serif); letter-spacing: -.045em; text-wrap: balance; }
 .hero-example { border: 1px solid var(--rule); border-radius: var(--radius-panel); background: var(--surface); box-shadow: 0 16px 44px #10201c08; overflow: hidden; }
-.tool-card { display: flex; flex-direction: column; gap: 14px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
-.tool-card:hover { border-color: var(--accent); }
+.tool-card { display: flex; flex-direction: column; gap: 14px; padding: 28px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); transition: transform 150ms, border-color 150ms; }
+.tool-card:hover { border-color: var(--accent); transform: translateY(-2px); }
 .tool-card .tool-arrow { margin-top: auto; padding-top: 10px; color: var(--accent); font-size: 14px; font-weight: 500; }
 @media (max-width: 767px) {
  .page-header { align-items: flex-start; flex-direction: column; gap: 16px; }

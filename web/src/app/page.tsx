@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getHealth } from "@/lib/api";
+import DutyExampleCard from "@/components/DutyExampleCard";
+import ToolsGrid from "@/components/ToolsGrid";
 
 export const revalidate = 900;
 
@@ -40,56 +42,30 @@ export default async function Home() {
           <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Try the tools without an account; a free account saves your catalogues and watches your codes. <Link href="/pricing" className="font-medium text-accent hover:underline">See plans</Link>.</p>
           <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted">Sourcing from China? <Link href="/china-tariffs" className="font-medium text-accent hover:underline">See how Section 301 and IEEPA duty stack, and check what may be refundable</Link>.</p>
         </div>
-        <div className="hero-example" aria-label="Illustrative duty breakdown, not a live quote">
-          <div className="flex items-center justify-between border-b border-border px-6 py-4">
-            <span className="lbl">Inside your duty estimate</span><span className="rounded bg-sunk px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">Example</span>
-          </div>
-          <div className="p-6 sm:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div><p className="text-sm font-medium">Cotton T-shirt</p><p className="mono mt-1 text-xs text-faint">China · $10,000 entered value</p></div>
-              <span className="rounded-full bg-caution-soft px-2.5 py-1 text-xs text-caution-ink">Review needed</span>
-            </div>
-            <div className="mt-7 space-y-4 text-sm">
-              {[["Base duty", "$1,650.00"], ["Trade remedy", "$750.00"], ["Processing & harbor fees", "$47.14"]].map(([label, amount]) => (
-                <div key={label} className="flex justify-between gap-3"><span className="text-muted">{label}</span><span className="mono">{amount}</span></div>
-              ))}
-            </div>
-            <div className="mt-6 flex items-end justify-between gap-4 border-t border-rule pt-5">
-              <div><p className="lbl">Illustrative subtotal</p><p className="mt-1 text-xs text-muted">Before unresolved duties</p></div>
-              <p className="mono text-2xl font-medium text-accent">$2,447.14</p>
-            </div>
-            <p className="mt-5 rounded-md border-l-2 border-caution bg-caution-soft p-3 text-xs leading-relaxed text-caution-ink">An unresolved scope is kept visible, so you know what to confirm before relying on a figure.</p>
-          </div>
-          <div className="border-t border-border bg-sunk px-6 py-3 text-xs text-muted">Illustration only. Run a calculation for your goods and current data.</div>
-        </div>
+        <DutyExampleCard
+          heading="Inside your duty estimate"
+          lines={[["Base duty", "$1,650.00"], ["Trade remedy", "$750.00"], ["Processing & harbor fees", "$47.14"]]}
+          edition={edition}
+        />
       </section>
 
-      <section aria-labelledby="workflow-title">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div><p className="eyebrow">From question to decision</p><h2 id="workflow-title" className="serif mt-2 text-3xl tracking-tight">A clearer way to work.</h2></div>
-          <Link href="/changes" className="text-sm font-medium text-accent hover:underline">Explore tariff changes <span aria-hidden="true">↗</span></Link>
-        </div>
-        <div className="grid gap-4 md:grid-cols-3">
-          {tools.map((tool) => <Link key={tool.href} href={tool.href} className="tool-card">
-            <span className="mono text-xs text-faint">{tool.step} /</span>
-            <h3 className="serif text-2xl leading-tight tracking-tight">{tool.title}</h3>
-            <p className="text-sm leading-relaxed text-muted">{tool.description}</p>
-            <span className="tool-arrow">{tool.action} <span aria-hidden="true">→</span></span>
-          </Link>)}
-        </div>
-      </section>
+      <ToolsGrid heading="A clearer way to work." tools={tools} />
 
-      <section className="panel grid gap-8 p-6 sm:p-8 md:grid-cols-2" aria-labelledby="evidence-title">
-        <div><p className="eyebrow">Evidence you can inspect</p><h2 id="evidence-title" className="serif mt-3 text-3xl tracking-tight">Every figure needs context.</h2><p className="mt-4 max-w-md text-sm leading-relaxed text-muted">Follow classifications back to ruling precedent. Inspect duty components and assumptions. Keep incomplete estimates visible while you review the details with your broker.</p></div>
-        <div className="self-center">
-          {figures.length ? (
-            <dl className="grid grid-cols-2 gap-x-5 gap-y-7">
-              {figures.map(([label, count]) => <div key={label}><dt className="lbl">{label}</dt><dd className="mono mt-2 text-xl">{(count as number).toLocaleString()}</dd></div>)}
-            </dl>
-          ) : null}
-          <p className={`${figures.length ? "mt-7 text-xs text-faint" : "text-sm leading-relaxed text-muted"}`}>{edition ? `Reference edition: ${edition}.` : health.ok ? "" : "Live reference figures are temporarily unavailable."} Sources: USITC, CBP, and the Federal Register.</p>
+      <div className="relative left-1/2 right-1/2 mx-[-50vw] w-screen bg-deep">
+        <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+          <section className="panel-deep grid gap-8 p-6 sm:p-8 md:grid-cols-2" aria-labelledby="evidence-title">
+            <div><p className="eyebrow">Evidence you can inspect</p><h2 id="evidence-title" className="serif mt-3 text-3xl tracking-tight">Every figure needs context.</h2><p className="mt-4 max-w-md text-sm leading-relaxed text-deep-muted">Follow classifications back to ruling precedent. Inspect duty components and assumptions. Keep incomplete estimates visible while you review the details with your broker.</p></div>
+            <div className="self-center">
+              {figures.length ? (
+                <dl className="grid grid-cols-2 gap-x-5 gap-y-7">
+                  {figures.map(([label, count]) => <div key={label}><dt className="lbl">{label}</dt><dd className="mono mt-2 text-3xl sm:text-4xl font-semibold">{(count as number).toLocaleString()}</dd></div>)}
+                </dl>
+              ) : null}
+              <p className={`${figures.length ? "mt-7 text-xs text-deep-muted" : "text-sm leading-relaxed text-deep-muted"}`}>{edition ? `Reference edition: ${edition}.` : health.ok ? "" : "Live reference figures are temporarily unavailable."} Sources: USITC, CBP, and the Federal Register.</p>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
     </div>
   );
 }
