@@ -43,12 +43,14 @@ const newsreader = Newsreader({
   variable: "--font-newsreader",
 });
 
-/** Navigation follows the work. Signed in, Catalogues comes first, since that
- *  is where a review is waiting. Review itself is reached from a catalogue,
- *  because each review belongs to one. */
+/** Navigation follows the work. Signed in, Catalogues and Review come first,
+ *  since that is where waiting work is. Review opens the catalogue with a line
+ *  still awaiting a decision (app/review/page.tsx). */
 function navGroups(signedIn: boolean): NavGroup[] {
   return [
-    ...(signedIn ? [{ title: "Work", items: [{ href: "/catalogues", label: "Catalogues" }] }] : []),
+    ...(signedIn
+      ? [{ title: "Work", items: [{ href: "/catalogues", label: "Catalogues" }, { href: "/review", label: "Review" }] }]
+      : []),
     {
       title: "Analyze",
       items: [

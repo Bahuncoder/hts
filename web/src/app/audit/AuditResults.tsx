@@ -139,7 +139,7 @@ function Detail({ line, onEdit, onSave, amount }: {
         </div>
       ) : null}
 
-      <details className="rounded border border-rule p-3">
+      <details className="border-t border-border pt-3">
         <summary className="cursor-pointer text-[14px] font-medium text-accent">Change this product&rsquo;s facts</summary>
         <form
           className="mt-3 grid gap-3 sm:grid-cols-2"
@@ -181,7 +181,7 @@ function Detail({ line, onEdit, onSave, amount }: {
       </details>
 
       {failed ? <List title="What went wrong" items={reasons} /> : null}
-      <details className="rounded border border-rule p-3">
+      <details className="border-t border-border pt-3">
         <summary className="cursor-pointer text-[14px] font-medium text-accent">Evidence and sources</summary>
         <div className="mt-3 space-y-4">
       {failed ? null : <List title="Why this needs review" items={reasons} />}

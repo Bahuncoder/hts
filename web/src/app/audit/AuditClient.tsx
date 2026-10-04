@@ -414,7 +414,7 @@ export default function AuditClient({
         <details
           open={rawOpen}
           onToggle={(e) => setRawOpen(e.currentTarget.open)}
-          className="rounded border border-rule p-4"
+          className="border-t border-border pt-4"
         >
           <summary className={`cursor-pointer text-[14px] font-medium text-accent ${focusRing}`}>
             Raw CSV text <span className="font-normal text-muted">(advanced)</span>
@@ -479,7 +479,7 @@ export default function AuditClient({
       </div>
 
       {parsed?.ok && parsed.items.length ? (
-        <div className="rounded border border-rule p-4">
+        <div className="border-t border-border pt-4">
           <p className="text-[14px]">
             <span className="mono font-semibold">{parsed.items.length.toLocaleString()}</span>{" "}
             {parsed.items.length === 1 ? "product" : "products"} found. The first rows, as they will be read:
@@ -515,7 +515,7 @@ export default function AuditClient({
         <details
           open={mapOpen}
           onToggle={(e) => setMapToggled((e.currentTarget as HTMLDetailsElement).open)}
-          className="rounded border border-rule p-4 text-[14px]"
+          className="border-t border-border pt-4 text-[14px]"
         >
           <summary className={`cursor-pointer font-medium text-accent ${focusRing}`}>Match your columns</summary>
           <p className="mt-2 text-[13px] text-muted">
@@ -585,7 +585,7 @@ export default function AuditClient({
         ) : null}
       </div>
 
-      <details className="rounded border p-3 text-[14px] border-border">
+      <details className="border-t border-border pt-3 text-[14px]">
         <summary className={`cursor-pointer font-medium ${focusRing}`}>
           Assumptions: {entryCount} formal {entryCount === 1 ? "entry" : "entries"}, {transport === "vessel" ? "vessel" : "air"} shipment
         </summary>

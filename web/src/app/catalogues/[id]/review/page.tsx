@@ -312,7 +312,7 @@ export default async function Review({
 
                 <EvidenceSnapshot json={open.item.evidence_json} />
 
-                <details className="rounded border border-rule p-4">
+                <details className="border-t border-border pt-4">
                   <summary className="cursor-pointer text-[13px] font-medium text-accent">Correct this line</summary>
                   <div className="mt-4 space-y-4">
                     {draft ? (

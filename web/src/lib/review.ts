@@ -204,3 +204,21 @@ export function approvalCounts(items: Iterable<{ approval_status: ApprovalStatus
   for (const item of items) out[item.approval_status] += 1;
   return out;
 }
+
+/** The catalogue to open from the Review link: the most recently changed one
+ *  that still has a line waiting for a decision. Null when nothing is waiting. */
+export async function nextReviewCatalogue(accountId: string): Promise<{ id: string; pending: number } | null> {
+  const c = await conn();
+  const rs = await c.execute({
+    sql: `SELECT c.id, count(i.id) AS pending
+            FROM catalogue c
+            JOIN catalogue_item i ON i.catalogue_id = c.id
+           WHERE c.account_id = ? AND i.approval_status = 'pending'
+           GROUP BY c.id
+           ORDER BY c.updated_at DESC
+           LIMIT 1`,
+    args: [accountId],
+  });
+  const row = rs.rows[0];
+  return row ? { id: String(row.id), pending: Number(row.pending) } : null;
+}
