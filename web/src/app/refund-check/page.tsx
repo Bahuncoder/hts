@@ -54,7 +54,7 @@ async function RefundCheckHistory({ accountId }: { accountId: string }) {
   if (!checks.length) return null;
   return (
     <div className="space-y-3">
-      <h2 className="text-[15px] font-semibold">Past checks</h2>
+      <h2 className="text-[18px] font-semibold">Past checks</h2>
       <div className="space-y-3">
         {checks.map((c) => (
           <Card key={c.id}>

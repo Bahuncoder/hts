@@ -97,7 +97,7 @@ export default async function ChinaTariffsPage() {
       </div>
 
       <Card className="space-y-2">
-        <h2 className="text-[15px] font-semibold">What we do not do</h2>
+        <h2 className="text-[18px] font-semibold">What we do not do</h2>
         <p className="text-[13.5px] leading-relaxed text-muted">
           We do not file entries, and we are not your customs broker. HTSDesk finds candidate
           classifications, shows the CBP rulings behind them, and prices the duty &mdash; your broker

@@ -56,7 +56,7 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-[15px] font-semibold">Authentication</h2>
+        <h2 className="text-[18px] font-semibold">Authentication</h2>
         <p className="text-[14px] text-muted">
           Send your key as a bearer token. A key is a server-side credential
           for your own backend — never put it in code that runs in a browser,
@@ -66,7 +66,7 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-[15px] font-semibold">POST /api/v1/audit</h2>
+        <h2 className="text-[18px] font-semibold">POST /api/v1/audit</h2>
         <p className="text-[14px] text-muted">
           Prices and classifies a list of products in one call: each line
           comes back with an HTS code (if one could be found), the duty
@@ -101,7 +101,7 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-[15px] font-semibold">Errors</h2>
+        <h2 className="text-[18px] font-semibold">Errors</h2>
         <div className="scroll-x">
           <table className="w-full min-w-[520px] text-[13px]">
             <thead>
@@ -132,7 +132,7 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="space-y-3">
-        <h2 className="text-[15px] font-semibold">Rate limits</h2>
+        <h2 className="text-[18px] font-semibold">Rate limits</h2>
         <p className="text-[14px] text-muted">
           Independent of your plan&rsquo;s web-app allowance — an integration
           running on a schedule will not compete with your team&rsquo;s manual
@@ -169,7 +169,7 @@ export default function ApiDocsPage() {
       </div>
 
       <div className="space-y-3 border-t border-border pt-7">
-        <h2 className="text-[15px] font-semibold">Rotating a key</h2>
+        <h2 className="text-[18px] font-semibold">Rotating a key</h2>
         <p className="text-[13.5px] leading-[1.55] text-muted">
           Your plan&rsquo;s key limit exists as much for rotation as for
           running several integrations: create a new key, update your

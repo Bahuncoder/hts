@@ -83,7 +83,7 @@ export default async function AccountPage() {
       </section>
 
       <div className="space-y-3 border-b border-border pb-6">
-        <h2 className="text-[15px] font-semibold">Plan</h2>
+        <h2 className="text-[18px] font-semibold">Plan</h2>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-[14px]">
@@ -124,7 +124,7 @@ export default async function AccountPage() {
 
       <div className="space-y-3">
         <div>
-          <h2 className="text-[15px] font-semibold">Your allowance</h2>
+          <h2 className="text-[18px] font-semibold">Your allowance</h2>
           <p className="mt-1 text-[14px] text-muted">
             These limits keep {plan === "free" ? "the free plan" : "your plan"}{" "}
             fast for everyone, and they may change.
@@ -166,7 +166,7 @@ export default async function AccountPage() {
       </div>
 
       <div className="space-y-3 border-t pt-6 border-border">
-        <h2 className="text-[15px] font-semibold">Alert emails</h2>
+        <h2 className="text-[18px] font-semibold">Alert emails</h2>
         <p className="text-[14px] text-muted">
           {alertEmailsOn
             ? `We email you when a tariff action names one of the ${watchedCount.toLocaleString()} codes you watch.`
@@ -184,7 +184,7 @@ export default async function AccountPage() {
       </div>
 
       <div className="space-y-3 border-t pt-6 border-border">
-        <h2 className="text-[15px] font-semibold">Recent activity</h2>
+        <h2 className="text-[18px] font-semibold">Recent activity</h2>
         <p className="text-[13px] text-faint">
           Sign-ins and changes to your account. If you see something you did not
           do, reset your password — that signs out every other device.

@@ -35,7 +35,7 @@ export default async function ApiKeysPage() {
         <>
           <Card className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">Create a key</h2>
+              <h2 className="text-[18px] font-semibold">Create a key</h2>
               <p className="text-[13px] text-faint">
                 {active.length} of {limits.api.maxKeys} used
               </p>
@@ -50,7 +50,7 @@ export default async function ApiKeysPage() {
           </Card>
 
           <div className="space-y-3">
-            <h2 className="text-[15px] font-semibold">Your keys</h2>
+            <h2 className="text-[18px] font-semibold">Your keys</h2>
             {keys.length === 0 ? (
               <p className="text-[13px] text-faint">No keys yet.</p>
             ) : (

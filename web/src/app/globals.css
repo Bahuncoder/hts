@@ -214,6 +214,8 @@ input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .btn-primary:hover:not(:disabled) { filter: brightness(.92); }
 .btn-secondary { border-color: var(--rule); background: var(--surface); color: var(--ink); }
 .btn-secondary:hover:not(:disabled) { background: var(--sunk); border-color: var(--faint); }
+/* The chosen option among a set of buttons. Unlayered, like .btn, so it wins over the border that .btn sets. */
+.btn-selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .btn:disabled { opacity: .5; }
 .field-control { min-height: 44px; width: 100%; border: 1px solid var(--rule); border-radius: var(--radius-control); padding: 10px 12px; background: var(--surface); color: var(--ink); font-size: 15px; }
 .field-control:hover { border-color: var(--faint); }

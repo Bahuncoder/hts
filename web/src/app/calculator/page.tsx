@@ -142,8 +142,8 @@ export default async function CalculatorPage({
           searching for a code does not throw the visitor's inputs away. Shown
           first: most visitors arrive without an HTS code in hand. */}
       <nav aria-label="How do you want to start?" className="flex flex-wrap gap-2">
-        <a href="#code-form" aria-current={findOpen ? undefined : "true"} className="btn btn-secondary">I know my code</a>
-        <a href={findHref} aria-current={findOpen ? "true" : undefined} className="btn btn-secondary">Find a code</a>
+        <a href="#code-form" aria-current={findOpen ? undefined : "true"} className={`btn ${findOpen ? "btn-secondary" : "btn-selected"}`}>I know my code</a>
+        <a href={findHref} aria-current={findOpen ? "true" : undefined} className={`btn ${findOpen ? "btn-selected" : "btn-secondary"}`}>Find a code</a>
       </nav>
       {findOpen ? (
         <div id="find-code" className="max-w-2xl">
@@ -152,7 +152,7 @@ export default async function CalculatorPage({
                 v ? <input key={k} type="hidden" name={k} value={v} /> : null,
               )}
               <div>
-                <h2 className="text-[15px] font-semibold">Don&rsquo;t know your HTS code?</h2>
+                <h2 className="text-[18px] font-semibold">Don&rsquo;t know your HTS code?</h2>
                 <p className="mt-0.5 text-[13px] text-muted">Describe the product and we&rsquo;ll suggest candidates.</p>
               </div>
               <label htmlFor="q" className="sr-only">

@@ -123,7 +123,7 @@ export default async function PricingPage() {
       </div>
 
       <div className="space-y-3 border-t border-border pt-7">
-        <h2 className="text-[15px] font-semibold">Being built, and not yet sold</h2>
+        <h2 className="text-[18px] font-semibold">Being built, and not yet sold</h2>
         <p className="text-[13.5px] leading-[1.55] text-muted">
           These are on the way. They are listed here rather than inside a plan
           because none of them work yet, and a price list is a promise.
@@ -137,7 +137,7 @@ export default async function PricingPage() {
 
       <div className="grid gap-6 border-t border-border pt-7 md:grid-cols-2">
         <div className="space-y-1.5">
-          <h2 className="text-[15px] font-semibold">What we do not do</h2>
+          <h2 className="text-[18px] font-semibold">What we do not do</h2>
           <p className="text-[13.5px] leading-[1.55] text-muted">
             We do not file entries, and we are not your customs broker. HTSDesk
             is decision support: it finds candidate classifications, shows the
@@ -145,7 +145,7 @@ export default async function PricingPage() {
           </p>
         </div>
         <div className="space-y-1.5">
-          <h2 className="text-[15px] font-semibold">Where a figure is uncertain, we say so</h2>
+          <h2 className="text-[18px] font-semibold">Where a figure is uncertain, we say so</h2>
           <p className="text-[13.5px] leading-[1.55] text-muted">
             A classifier-suggested code is labelled as unconfirmed until a
             person reviews it, on every plan. You will see an honest flag,

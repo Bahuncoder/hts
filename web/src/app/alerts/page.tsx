@@ -144,7 +144,7 @@ export default async function AlertsPage() {
 
       {watched.length > 0 ? (
         <div id="watched-codes" className="space-y-2 border-t pt-6 border-border">
-          <h2 className="text-[15px] font-semibold">Watched codes</h2>
+          <h2 className="text-[18px] font-semibold">Watched codes</h2>
           <div className="flex flex-wrap gap-1.5">
             {watched.map((w) => (
               <Link
