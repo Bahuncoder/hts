@@ -10,10 +10,17 @@ import { LIMITS } from "@/lib/plans";
 import { DraftNotice, useSavedDraft } from "@/components/DraftNotice";
 import { clearDraft, countRows, writeDraft } from "@/lib/draft";
 import {
-  EXPECTED_FORMAT, FIELD_LABEL, REQUIRED, SAMPLE_CSV, TEMPLATE_CSV, detectMapping, parseCatalogue,
+  EXPECTED_FORMAT, FIELD_LABEL, REQUIRED, SAMPLE_CSV, TEMPLATE_CSV, detectMapping, parseCatalogue, updateRow,
   readHeaders, type ColumnMapping, type Field,
 } from "@/lib/csvParse";
-import AuditResults, { type AuditSummary } from "./AuditResults";
+import dynamic from "next/dynamic";
+import type { AuditSummary } from "./AuditResults";
+
+// The results code is only needed once an audit has run, so it loads then.
+const AuditResults = dynamic(() => import("./AuditResults"), {
+  ssr: false,
+  loading: () => <p role="status" className="text-muted">Loading results…</p>,
+});
 import { EMPTY_COSTS } from "@/lib/landedCost";
 
 type AuditResponse = {
@@ -177,10 +184,11 @@ export default function AuditClient({
     clearDraft();
   }
 
-  async function runAudit() {
+  async function runAudit(source?: string) {
+    const src = typeof source === "string" ? source : text;
     setAttempted(true);
     if (busy) return;
-    const p = parseCatalogue(text, mapping);
+    const p = parseCatalogue(src, mapping);
     if (!p.ok || p.items.length > maxRows) return; // the problems are already on screen, in an alert
 
     setBusy(true);
@@ -225,13 +233,13 @@ export default function AuditClient({
       }
       setRun({
         response: payload, inputs: p.items.map((i) => i.value),
-        ranAt: new Date(), text, mappingKey, sample: isSample, entries: entryCount, transport,
+        ranAt: new Date(), text: src, mappingKey, sample: isSample, entries: entryCount, transport,
       });
       setSaveError(null);
       setEditing(false);
       focusAfter.current = "bar";
       if (!signedIn && !isSample) {
-        writeDraft({ text, entries: entryCount, transport, rows: p.items.length, mapping });
+        writeDraft({ text: src, entries: entryCount, transport, rows: p.items.length, mapping });
       }
     } catch (e) {
       const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
@@ -592,7 +600,7 @@ export default function AuditClient({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={runAudit}
+          onClick={() => runAudit()}
           disabled={busy || Boolean(overLimit)}
           className={`btn btn-primary ${focusRing}`}
         >
@@ -641,6 +649,15 @@ export default function AuditClient({
             lines={run.response.lines}
             inputs={run.inputs}
             onEdit={() => { focusAfter.current = "text"; setEditing(true); }}
+            onRowSave={(row, changes) => {
+              const next = updateRow(text, row, changes, mapping);
+              if (next === null) {
+                setError("That change needs a column this file does not have. Add it to the catalogue text first.");
+                return;
+              }
+              setText(next);
+              void runAudit(next);
+            }}
           />
 
           <div id="save-results" className="flex scroll-mt-6 flex-wrap items-end gap-3 border-t pt-5 border-border">

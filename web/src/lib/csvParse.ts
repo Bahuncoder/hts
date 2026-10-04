@@ -141,7 +141,7 @@ export function parseRows(input: string): string[][] {
 }
 
 /** Looks at the first line only, outside quotes. */
-function detectDelimiter(text: string): string {
+export function detectDelimiter(text: string): string {
   let quoted = false;
   const n: Record<string, number> = { ",": 0, "\t": 0, ";": 0 };
   for (let i = 0; i < text.length; i++) {
@@ -192,6 +192,37 @@ export function readHeaders(text: string): string[] {
  *  replaces header-name detection entirely: a field absent from it is treated
  *  as not in the file. Without it, headers are matched by ALIASES as before. */
 export type ColumnMapping = Partial<Record<Field, number>>;
+
+/** Sets the given fields on one product row of a catalogue, by its data row
+ *  number (1-based, as parseCatalogue numbers them), and returns the new text.
+ *  Returns null when the row does not exist or a changed field has no column in
+ *  the file. Every other row and the header come back exactly as they were. */
+export function updateRow(
+  text: string, dataRow: number, changes: Partial<Record<Field, string>>, mapping?: ColumnMapping,
+): string | null {
+  const delim = detectDelimiter(text);
+  const rows = parseRows(text);
+  const headIdx = rows.findIndex((r) => r.some((c) => c.trim()));
+  if (headIdx < 0) return null;
+  const columns = mapping ?? detectMapping(text);
+  let seen = 0, target = -1;
+  for (let i = headIdx + 1; i < rows.length; i++) {
+    if (!rows[i].some((c) => c.trim())) continue;
+    seen += 1;
+    if (seen === dataRow) { target = i; break; }
+  }
+  if (target < 0) return null;
+  const row = [...rows[target]];
+  for (const [field, value] of Object.entries(changes) as [Field, string][]) {
+    const col = columns[field];
+    if (col === undefined) return null;
+    while (row.length <= col) row.push("");
+    row[col] = value;
+  }
+  rows[target] = row;
+  const quote = (c: string) => (/[",\r\n]/.test(c) || c.includes(delim) ? `"${c.replace(/"/g, '""')}"` : c);
+  return rows.map((r) => r.map(quote).join(delim)).join("\r\n") + "\r\n";
+}
 
 /** The mapping header-name detection would choose on its own, so the mapping
  *  panel can start from it and show the customer what was matched. */

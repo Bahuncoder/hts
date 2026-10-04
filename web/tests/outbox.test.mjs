@@ -34,7 +34,7 @@ await seedAccount(db, { id: "acct2" });
 await seedAccount(db, { id: "acct3" });
 await seedAccount(db, { id: "quiet", alertEmails: 0 });
 
-async function addAlert(account, n, extra = {}) {
+async function addAlert(account, n) {
   const id = crypto.randomUUID();
   await db.execute({
     sql: `INSERT INTO alert(id,account_id,document_number,title,publication_date,html_url,digits,hts,created_at)

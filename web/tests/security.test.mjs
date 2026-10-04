@@ -27,14 +27,8 @@ async function blockWebfonts(ctx) {
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
 }
 
-async function newPage() {
-  const c = await b.newContext();
-  await blockWebfonts(c);
-  return c.newPage();
-}
 
 
-const PASSWORD = "a-perfectly-fine-passphrase";
 const results = [];
 
 const browser = await chromium.launch({

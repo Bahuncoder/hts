@@ -20,7 +20,7 @@ const app = await startApp({ port: 3485 });
 // helpers.mjs reads HTSDESK_TEST_WEB at import time, so this must be set
 // before it is first imported (dynamically, not statically, for that reason).
 process.env.HTSDESK_TEST_WEB = app.base;
-const { BASE, PASSWORD: SHARED_PW, go, inbox, newContext, signUp } = await import("./helpers.mjs");
+const { BASE, PASSWORD: SHARED_PW, newContext, signUp } = await import("./helpers.mjs");
 
 const results = [];
 let browser, page, account;

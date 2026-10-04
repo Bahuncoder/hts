@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui";
 import { PartialMark, StatusChip } from "@/components/status";
 import { bucketOf, countLines, type AuditLine, type Bucket, type Status } from "@/lib/auditModel";
+import type { Field } from "@/lib/csvParse";
 import { landedCost, type LandedCostInputs } from "@/lib/landedCost";
 import CostInputs from "@/components/CostInputs";
 
@@ -121,7 +122,12 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-function Detail({ line, onEdit }: { line: AuditLine; onEdit: () => void }) {
+function Detail({ line, onEdit, onSave, amount }: {
+  line: AuditLine;
+  onEdit: () => void;
+  onSave: (changes: Partial<Record<Field, string>>) => void;
+  amount: number;
+}) {
   const uniq = (xs: string[], not: string[]) => [...new Set(xs)].filter((x) => x && !not.includes(x));
   const reasons = uniq([line.error ?? "", ...(line.review_reasons ?? [])], []);
   const incomplete = uniq(line.incomplete ?? [], reasons);
@@ -148,6 +154,47 @@ function Detail({ line, onEdit }: { line: AuditLine; onEdit: () => void }) {
           ) : null}
         </div>
       ) : null}
+
+      <details className="rounded border border-rule p-3">
+        <summary className="cursor-pointer text-[14px] font-medium text-accent">Change this product&rsquo;s facts</summary>
+        <form
+          className="mt-3 grid gap-3 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            // Only fields the person changed are sent, so a column this file
+            // does not have is never asked to change.
+            const f = new FormData(e.currentTarget);
+            const current: Record<Field, string> = {
+              hts: line.hts ?? "",
+              country: line.country,
+              value: String(line.entered_value ?? amount),
+              quantity: line.quantity === undefined ? "" : String(line.quantity),
+            } as Record<Field, string>;
+            const changes: Partial<Record<Field, string>> = {};
+            for (const field of ["hts", "country", "value", "quantity"] as const) {
+              const next = String(f.get(field) ?? "").trim();
+              if (next !== current[field]) changes[field] = next;
+            }
+            if (Object.keys(changes).length) onSave(changes);
+          }}
+        >
+          <label className="text-[13px]">HTS code
+            <input name="hts" defaultValue={line.hts ?? ""} className="mono field-control mt-1 block w-full" />
+          </label>
+          <label className="text-[13px]">Country of origin
+            <input name="country" defaultValue={line.country} className="field-control mt-1 block w-full" />
+          </label>
+          <label className="text-[13px]">Entered value (USD)
+            <input name="value" defaultValue={String(line.entered_value ?? amount)} className="mono field-control mt-1 block w-full" />
+          </label>
+          <label className="text-[13px]">Quantity
+            <input name="quantity" defaultValue={line.quantity === undefined ? "" : String(line.quantity)} className="mono field-control mt-1 block w-full" />
+          </label>
+          <div className="sm:col-span-2">
+            <button type="submit" className="btn btn-primary">Save and run audit again</button>
+          </div>
+        </form>
+      </details>
 
       {failed ? <List title="What went wrong" items={reasons} /> : null}
       <details className="rounded border border-rule p-3">
@@ -226,11 +273,12 @@ function Detail({ line, onEdit }: { line: AuditLine; onEdit: () => void }) {
 }
 
 export default function AuditResults({
-  summary, lines, inputs, landedCosts, onCostsChange, onEdit,
+  summary, lines, inputs, landedCosts, onCostsChange, onEdit, onRowSave,
 }: {
   landedCosts: LandedCostInputs;
   onCostsChange: (costs: LandedCostInputs) => void;
   onEdit: () => void;
+  onRowSave: (row: number, changes: Partial<Record<Field, string>>) => void;
   summary: AuditSummary;
   lines: AuditLine[];
   /** The amount submitted for each line, shown where a line carries none. */
@@ -383,7 +431,7 @@ export default function AuditResults({
                   </button>
                   {expanded ? (
                     <div id={detailId} className="mt-3 border-t border-hair pt-3">
-                      <Detail line={l} onEdit={onEdit} />
+                      <Detail line={l} onEdit={onEdit} amount={inputs[i] ?? 0} onSave={(c) => onRowSave(l.row, c)} />
                     </div>
                   ) : null}
                 </div>
@@ -457,7 +505,7 @@ export default function AuditResults({
                     {expanded ? (
                       <tr id={detailId} className="border-b border-hair bg-sunk">
                         <td colSpan={7} className="px-2">
-                          <Detail line={l} onEdit={onEdit} />
+                          <Detail line={l} onEdit={onEdit} amount={inputs[i] ?? 0} onSave={(c) => onRowSave(l.row, c)} />
                         </td>
                       </tr>
                     ) : null}

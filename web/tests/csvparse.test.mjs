@@ -38,6 +38,25 @@ await check("an explicit mapping overrides an alias that would otherwise match a
   assert.equal(r.items[0].hts, "shirt", "the mapping's choice wins, not the header name");
 });
 
+await check("a product row can be changed in place, and nothing else moves", () => {
+  const text = "sku,description,country,value,hts\nA,\"cotton shirt, knitted\",China,100,\nB,mug,Germany,50,\n";
+  const next = csv.updateRow(text, 1, { hts: "6109.10.00.12", value: "200" });
+  assert.ok(next, "row 1 exists");
+  const r = csv.parseCatalogue(next);
+  assert.ok(r.ok);
+  assert.equal(r.items[0].hts, "6109.10.00.12");
+  assert.equal(r.items[0].value, 200);
+  assert.equal(r.items[0].description, "cotton shirt, knitted", "a comma inside a quoted cell survives the rewrite");
+  assert.equal(r.items[1].hts, null, "the other row is untouched");
+  assert.equal(r.items[1].value, 50);
+});
+
+await check("a row edit refuses a row that does not exist or a field the file does not have", () => {
+  const text = "description,country,value\nshirt,China,10\n";
+  assert.equal(csv.updateRow(text, 5, { country: "Vietnam" }), null, "no such row");
+  assert.equal(csv.updateRow(text, 1, { hts: "6109.10.00.12" }), null, "the file has no hts column");
+});
+
 await check("every data row is kept, numbered from 1, blank lines skipped, header excluded", () => {
   const r = ok("sku,description,country,value\n\nA,shirt,China,10\n\n   \nB,,China,x\nC,mug,DE,5\n");
   assert.deepEqual(r.items.map((i) => i.row), [1, 2, 3]);
