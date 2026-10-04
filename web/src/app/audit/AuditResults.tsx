@@ -121,7 +121,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-function Detail({ line }: { line: AuditLine }) {
+function Detail({ line, onEdit }: { line: AuditLine; onEdit: () => void }) {
   const uniq = (xs: string[], not: string[]) => [...new Set(xs)].filter((x) => x && !not.includes(x));
   const reasons = uniq([line.error ?? "", ...(line.review_reasons ?? [])], []);
   const incomplete = uniq(line.incomplete ?? [], reasons);
@@ -143,6 +143,9 @@ function Detail({ line }: { line: AuditLine }) {
         <div className="rounded border border-rule bg-paper p-4 text-[15px] space-y-2">
           <p>{NEXT_STEP[line.status]!.meaning}</p>
           <p className="font-medium">Next step: {NEXT_STEP[line.status]!.next}</p>
+          {line.status !== "ready" ? (
+            <button type="button" onClick={onEdit} className="btn btn-secondary">Correct this product</button>
+          ) : null}
         </div>
       ) : null}
 
@@ -223,10 +226,11 @@ function Detail({ line }: { line: AuditLine }) {
 }
 
 export default function AuditResults({
-  summary, lines, inputs, landedCosts, onCostsChange,
+  summary, lines, inputs, landedCosts, onCostsChange, onEdit,
 }: {
   landedCosts: LandedCostInputs;
   onCostsChange: (costs: LandedCostInputs) => void;
+  onEdit: () => void;
   summary: AuditSummary;
   lines: AuditLine[];
   /** The amount submitted for each line, shown where a line carries none. */
@@ -282,17 +286,18 @@ export default function AuditResults({
         </span>
       </div>
       <div className="space-y-3">
-        <p className="text-[15px]">
-          Estimated duty and fees <span className="mono font-medium">{money(summary.duty)}</span>
-          <span className="ml-2 text-[13px] text-muted font-sans">
+        <div>
+          <p className="text-[13px] text-muted">Estimated duty and fees</p>
+          <p className="mono text-3xl font-semibold">{money(summary.duty)}</p>
+          <p className="mt-1 text-[13px] text-muted">
             {partial ? (
               <>
                 <span className="md:hidden">includes {counts.review.toLocaleString()} still to confirm, excludes {counts.failed.toLocaleString()} unpriced.</span>
                 <span className="hidden md:inline">includes {counts.review.toLocaleString()} priced line{counts.review === 1 ? "" : "s"} still to confirm; leaves out {counts.failed.toLocaleString()} that could not be priced. Lines marked incomplete may understate duty.</span>
               </>
             ) : `covers all ${counts.submitted.toLocaleString()} products.`}
-          </span>
-        </p>
+          </p>
+        </div>
         {unresolved > 0 ? (
           <button
             type="button"
@@ -378,7 +383,7 @@ export default function AuditResults({
                   </button>
                   {expanded ? (
                     <div id={detailId} className="mt-3 border-t border-hair pt-3">
-                      <Detail line={l} />
+                      <Detail line={l} onEdit={onEdit} />
                     </div>
                   ) : null}
                 </div>
@@ -452,7 +457,7 @@ export default function AuditResults({
                     {expanded ? (
                       <tr id={detailId} className="border-b border-hair bg-sunk">
                         <td colSpan={7} className="px-2">
-                          <Detail line={l} />
+                          <Detail line={l} onEdit={onEdit} />
                         </td>
                       </tr>
                     ) : null}

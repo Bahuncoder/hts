@@ -640,6 +640,7 @@ export default function AuditClient({
             summary={run.response.summary}
             lines={run.response.lines}
             inputs={run.inputs}
+            onEdit={() => { focusAfter.current = "text"; setEditing(true); }}
           />
 
           <div id="save-results" className="flex scroll-mt-6 flex-wrap items-end gap-3 border-t pt-5 border-border">

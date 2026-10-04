@@ -42,7 +42,7 @@ export default async function ClassifyPage({
     <div className="space-y-8">
       <PageHeader eyebrow="Product classification" title="Find the right HTS code" description="Start with what your product is, what it is made of, and how it is used. Compare candidate codes and the rulings behind them." />
       <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted">
-        <span>{edition ? `Reference data: ${edition}` : "Reference data edition unavailable"}</span>
+        <span>{edition ? `Reference data: ${edition}` : health.ok ? null : "Reference data is temporarily unavailable"}</span>
         {q ? <Link href="/classify" className="font-medium text-accent hover:underline">Start over</Link> : null}
       </div>
 

@@ -123,42 +123,45 @@ export default async function CalculatorPage({
     <div className="space-y-8">
       <PageHeader eyebrow="Duty calculator" title="Know your duty exposure" description="Build an estimate for one customs entry. Choose the origin and shipping assumptions, then explore every duty and fee." />
       <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted">
-        <span>{edition ? `Reference data: ${edition}` : "Reference data edition unavailable"}</span>
+        <span>{edition ? `Reference data: ${edition}` : health.ok ? null : "Reference data is temporarily unavailable"}</span>
         {hts || country || rawValue || q ? <Link href="/calculator" className="font-medium text-accent hover:underline">Start over</Link> : null}
       </div>
 
       {/* A second GET form. It carries the scenario as hidden fields so
           searching for a code does not throw the visitor's inputs away. Shown
           first: most visitors arrive without an HTS code in hand. */}
-      <form action="/calculator" className="panel max-w-2xl space-y-3 p-5">
-        {Object.entries(scenario).map(([k, v]) =>
-          v ? <input key={k} type="hidden" name={k} value={v} /> : null,
-        )}
-        <div>
-          <h2 className="text-[15px] font-semibold">Don&rsquo;t know your HTS code?</h2>
-          <p className="mt-0.5 text-[13px] text-muted">Describe the product and we&rsquo;ll suggest candidates.</p>
-        </div>
-        <label htmlFor="q" className="sr-only">
-          Search descriptions
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="q"
-            data-search
-            name="q"
-            defaultValue={q}
-            placeholder="e.g. cotton t-shirt"
-            autoComplete="off"
-            className={`min-w-0 flex-1 ${inputClass}`}
-          />
-          <button
-            type="submit"
-            className="rounded-md border px-3 py-2 text-[14px] border-border"
-          >
-            Search
-          </button>
-        </div>
-      </form>
+      <details id="find-code" open={Boolean(q)} className="max-w-2xl">
+        <summary className="cursor-pointer text-[15px] font-semibold">Find a code <span className="text-[13px] font-normal text-muted">when you do not know it</span></summary>
+              <form action="/calculator" className="panel mt-3 space-y-3 p-5">
+            {Object.entries(scenario).map(([k, v]) =>
+              v ? <input key={k} type="hidden" name={k} value={v} /> : null,
+            )}
+            <div>
+              <h2 className="text-[15px] font-semibold">Don&rsquo;t know your HTS code?</h2>
+              <p className="mt-0.5 text-[13px] text-muted">Describe the product and we&rsquo;ll suggest candidates.</p>
+            </div>
+            <label htmlFor="q" className="sr-only">
+              Search descriptions
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="q"
+                data-search
+                name="q"
+                defaultValue={q}
+                placeholder="e.g. cotton t-shirt"
+                autoComplete="off"
+                className={`min-w-0 flex-1 ${inputClass}`}
+              />
+              <button
+                type="submit"
+                className="rounded-md border px-3 py-2 text-[14px] border-border"
+              >
+                Search
+              </button>
+            </div>
+          </form>
+      </details>
 
       {searchProblem ? <Note role="alert">{searchProblem}</Note> : null}
       {matches && !matches.ok ? (
@@ -198,8 +201,8 @@ export default async function CalculatorPage({
         </Card>
       ) : null}
 
-      <div>
-        <h2 className="text-[15px] font-semibold">Already have your code?</h2>
+      <div id="code-form">
+        <h2 className="text-[15px] font-semibold">I know my code</h2>
         <p className="mt-0.5 text-[13px] text-muted">Enter it below along with origin and value.</p>
       </div>
 

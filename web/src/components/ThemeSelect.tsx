@@ -46,6 +46,7 @@ export function ThemeSelect() {
         aria-label="Theme"
         value={value}
         onChange={(e) => apply(e.target.value as ThemeChoice)}
+        style={{ width: "auto", minHeight: 36 }}
         className="rounded border border-border bg-surface px-2 py-1 text-[13px] text-ink"
       >
         <option value="system">System</option>
