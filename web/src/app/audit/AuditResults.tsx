@@ -283,46 +283,6 @@ export default function AuditResults({
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric
-          label="Entered value"
-          value={money(summary.entered_value)}
-          sub={`${summary.priced.toLocaleString()} of ${counts.submitted.toLocaleString()} lines priced`}
-          partial={partial ? unresolved : undefined}
-        />
-        <Metric
-          label="Duty and fees"
-          value={money(summary.duty)}
-          sub={`${summary.effective_rate_pct}% effective · includes ${money(summary.mpf)} MPF`}
-          partial={partial ? unresolved : undefined}
-        />
-        <Metric
-          label="Potentially refundable"
-          value={money(summary.potentially_refundable)}
-          sub="Estimate: IEEPA duties struck down, not a filed claim"
-          tone="recover"
-          partial={partial ? unresolved : undefined}
-        />
-        <Metric
-          label="Needs attention"
-          value={unresolved.toLocaleString()}
-          sub={`${counts.review.toLocaleString()} to review · ${counts.failed.toLocaleString()} failed`}
-        />
-      </div>
-      <LandedCostPanel goods={summary.entered_value} duty={summary.duty} inputs={landedCosts} onChange={onCostsChange} partial={partial} />
-
-      <details className="text-[13px]">
-        <summary className="cursor-pointer text-muted hover:underline">
-          Assumptions behind these figures ({summary.assumptions.length})
-        </summary>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
-          {summary.assumptions.map((a, i) => <li key={i}>{a}</li>)}
-        </ul>
-      </details>
-      <p className="-mt-3 text-[11px] text-faint">
-        Reference data revision:{" "}
-        <span className="mono">{summary.dataset_revision || "not reported"}</span>
-      </p>
 
       <div className="panel space-y-4 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -456,6 +416,50 @@ export default function AuditResults({
           </button>
         </nav>
       ) : null}
+
+      <div className="space-y-5 border-t pt-5 border-border">
+        <p className="text-[13px] font-medium text-muted">Totals for this audit</p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric
+          label="Entered value"
+          value={money(summary.entered_value)}
+          sub={`${summary.priced.toLocaleString()} of ${counts.submitted.toLocaleString()} lines priced`}
+          partial={partial ? unresolved : undefined}
+        />
+        <Metric
+          label="Duty and fees"
+          value={money(summary.duty)}
+          sub={`${summary.effective_rate_pct}% effective · includes ${money(summary.mpf)} MPF`}
+          partial={partial ? unresolved : undefined}
+        />
+        <Metric
+          label="Potentially refundable"
+          value={money(summary.potentially_refundable)}
+          sub="Estimate: IEEPA duties struck down, not a filed claim"
+          tone="recover"
+          partial={partial ? unresolved : undefined}
+        />
+        <Metric
+          label="Needs attention"
+          value={unresolved.toLocaleString()}
+          sub={`${counts.review.toLocaleString()} to review · ${counts.failed.toLocaleString()} failed`}
+        />
+      </div>
+      <LandedCostPanel goods={summary.entered_value} duty={summary.duty} inputs={landedCosts} onChange={onCostsChange} partial={partial} />
+
+      <details className="text-[13px]">
+        <summary className="cursor-pointer text-muted hover:underline">
+          Assumptions behind these figures ({summary.assumptions.length})
+        </summary>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+          {summary.assumptions.map((a, i) => <li key={i}>{a}</li>)}
+        </ul>
+      </details>
+      <p className="mt-0 text-[11px] text-faint">
+        Reference data revision:{" "}
+        <span className="mono">{summary.dataset_revision || "not reported"}</span>
+      </p>
+      </div>
     </section>
   );
 }

@@ -277,7 +277,34 @@ export default async function CataloguePage({
       {!slice.length ? (
         <p className="py-6 text-[14px] text-muted">No lines match this filter.</p>
       ) : (
-        <div className="scroll-x relative">
+        <>
+        <ul className="space-y-3 md:hidden" aria-label="Saved lines">
+          {slice.map((i) => (
+            <li key={i.id} className="panel p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="mono text-[12px] text-faint">Row {i.row_number ?? "—"}{i.country ? ` · ${i.country}` : ""}</p>
+                  <p className="mt-1 text-[15px] font-medium">{i.sku || "no SKU"}</p>
+                  <p className="clamp-2 text-[13px] text-muted">{i.description}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  {i.status === null && i.scope_unverified ? (
+                    <Badge tone="warn">Scope unverified</Badge>
+                  ) : (
+                    <StatusChip status={i.status} />
+                  )}
+                </div>
+              </div>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
+                <div><dt className="text-faint">HTS</dt><dd className="mono">{i.hts ?? "—"}</dd></div>
+                <div><dt className="text-faint">Value</dt><dd className="mono">{i.status && !isPriced(i.status) && !i.value ? "—" : money2(i.value)}</dd></div>
+                <div><dt className="text-faint">Duty</dt><dd className="mono">{i.duty !== null ? money2(i.duty) : "—"}</dd></div>
+              </dl>
+              <Notes item={i} />
+            </li>
+          ))}
+        </ul>
+        <div className="scroll-x relative hidden md:block">
           <table className="w-full min-w-[820px] text-[14px]">
             <caption className="sr-only">
               Saved lines, unresolved first. Page {at} of {pages}.
@@ -326,6 +353,7 @@ export default async function CataloguePage({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {pages > 1 ? (
