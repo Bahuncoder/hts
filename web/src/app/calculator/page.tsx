@@ -197,7 +197,7 @@ export default async function CalculatorPage({
         <Card>
           <div
             id="matches-label"
-            className="text-[12px] uppercase tracking-wide text-muted"
+            className="text-[13px] font-medium text-muted"
           >
             Matching codes for &ldquo;{q}&rdquo;
           </div>
@@ -283,7 +283,7 @@ export default async function CalculatorPage({
           </Field>
         </div>
 
-        <details className="rounded-md border border-border p-4" open={Boolean(program || rawQuantity)}>
+        <details className="border-t border-border pt-4" open={Boolean(program || rawQuantity)}>
           <summary className="cursor-pointer text-[14px] font-medium">Quantity or preference program (only if they apply)</summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field
@@ -339,7 +339,7 @@ export default async function CalculatorPage({
           </div>
         </details>
 
-        <details className="rounded-md border border-border p-4" open={Boolean(rawMetal || vehicleUse || endUse)}>
+        <details className="border-t border-border pt-4" open={Boolean(rawMetal || vehicleUse || endUse)}>
           <summary className="cursor-pointer text-[14px] font-medium">About the goods (optional)</summary>
           <p className="mt-2 text-[13px] text-muted">
             Some duties depend on what the goods are used for or made of. Leave these blank if you do not

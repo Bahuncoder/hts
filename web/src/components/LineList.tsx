@@ -73,7 +73,7 @@ export default function LineList({
     );
 
   return (
-    <div className="panel overflow-hidden">
+    <div>
       <div className="space-y-3 md:hidden" aria-label={label}>
         {lines.map((l) => {
           const expanded = open.has(l.key);
@@ -113,7 +113,7 @@ export default function LineList({
         })}
       </div>
 
-      <div className="scroll-x relative hidden md:block" tabIndex={0} role="region" aria-label={`${label} table`}>
+      <div className="scroll-x panel relative hidden overflow-hidden md:block" tabIndex={0} role="region" aria-label={`${label} table`}>
         <table className="data-table w-full min-w-[520px] text-[14px] md:min-w-[860px]">
           <caption className="sr-only">{caption}</caption>
           <thead>

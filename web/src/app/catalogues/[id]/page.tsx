@@ -33,7 +33,7 @@ function Metric({
 }: { label: string; value: string; sub?: string; partial?: number; tone?: "recover" }) {
   return (
     <Card>
-      <div className="text-[12px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-[13px] font-medium text-muted">{label}</div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className={`mono text-2xl font-semibold ${tone === "recover" ? "text-recover" : ""}`}>{value}</span>
         {partial ? <PartialMark unresolved={partial} /> : null}
@@ -183,7 +183,7 @@ export default async function CataloguePage({
         />
       )}
 
-      <details className="rounded border border-rule p-4">
+      <details className="border-t border-border pt-4">
         <summary className="cursor-pointer text-[14px] font-medium text-accent">Totals, refund estimate and assumptions</summary>
         <div className="mt-4 space-y-5">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">

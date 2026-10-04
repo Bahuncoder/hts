@@ -152,7 +152,7 @@ export default async function ClassifyPage({
 
             {c.rulings.length ? (
               <div className="mt-4 space-y-1">
-                <div className="text-[12px] uppercase tracking-wide text-muted">
+                <div className="text-[13px] font-medium text-muted">
                   Precedent
                 </div>
                 {c.rulings.map((r) => (

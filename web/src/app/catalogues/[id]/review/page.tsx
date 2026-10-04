@@ -459,7 +459,7 @@ export default async function Review({
                 </form>
 
                 <div className="space-y-3 border-t border-rule pt-4">
-                  <h3 className="text-[13px] font-medium uppercase tracking-wide text-muted">History</h3>
+                  <h3 className="text-[18px] font-semibold">History</h3>
                   {history.length === 0 ? (
                     <p className="text-[13px] text-muted">Nothing recorded yet.</p>
                   ) : (

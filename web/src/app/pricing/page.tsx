@@ -53,7 +53,7 @@ export default async function PricingPage() {
               className={`flex flex-col gap-4${featured ? " border-accent" : ""}`}
             >
               {featured ? (
-                <span className="w-fit rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-on-accent">
+                <span className="w-fit rounded-full bg-accent px-2.5 py-1 text-[12px] font-semibold text-on-accent">
                   For larger import programmes
                 </span>
               ) : null}

@@ -171,7 +171,7 @@ function RemedyList({ remedies, country }: { remedies: Remedy[]; country: string
         )}
       </div>
       {others.length ? (
-        <details className="group rounded-md border border-border p-4" data-testid="other-remedies">
+        <details className="group border-t border-border pt-4" data-testid="other-remedies">
           <summary className="cursor-pointer text-[14px] font-medium">
             Also cover this code for other origins ({others.length})
           </summary>

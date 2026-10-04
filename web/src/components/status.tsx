@@ -19,7 +19,7 @@ export function StatusChip({ status }: { status: Status | null }) {
   const bucket = bucketOf(status);
   return (
     <span className="inline-flex flex-col items-start gap-0.5">
-      <Badge tone={TONE[bucket]} caps={false}>{ESTIMATE_LABEL[bucket]}</Badge>
+      <Badge tone={TONE[bucket]}>{ESTIMATE_LABEL[bucket]}</Badge>
       <span className="text-[12px] text-muted">{STATUS_LABEL[status]}</span>
     </span>
   );

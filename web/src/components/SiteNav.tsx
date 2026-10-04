@@ -74,7 +74,7 @@ export function SiteNav({ items }: { items: Item[] }) {
             if (!groupItems.length) return null;
             return (
               <div key={g.title}>
-                <p className="px-1 text-[12px] font-medium uppercase tracking-wide text-muted">{g.title}</p>
+                <p className="px-1 text-[13px] font-medium text-muted">{g.title}</p>
                 <ul className="flex flex-col">
                   {groupItems.map((n) => (
                     <li key={n.href}>
