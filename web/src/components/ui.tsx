@@ -19,9 +19,12 @@ export function Card({
 export function Badge({
   tone = "neutral",
   children,
+  caps = true,
 }: {
   tone?: "neutral" | "good" | "warn" | "bad";
   children: React.ReactNode;
+  /** Badges are capitals by default; a sentence-style label opts out. */
+  caps?: boolean;
 }) {
   const tones = {
     neutral: {
@@ -47,7 +50,7 @@ export function Badge({
   }[tone];
   return (
     <span
-      className="inline-block rounded border px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide"
+      className={`inline-block rounded border px-1.5 py-0.5 text-[11px] font-medium ${caps ? "uppercase tracking-wide" : ""}`}
       style={tones}
     >
       {children}

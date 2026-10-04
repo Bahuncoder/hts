@@ -56,6 +56,16 @@ export default async function CalculatorPage({
   const endUse = ["civil aircraft", "pharmaceutical"].includes(one(sp.enduse) ?? "") ? (one(sp.enduse) as string) : "";
   const q = (one(sp.q) ?? "").trim();
   const findOpen = one(sp.find) === "1" || Boolean(q);
+  // "Find a code" keeps whatever the visitor already entered, so changing
+  // path does not reset the scenario.
+  const keepScenario = new URLSearchParams();
+  for (const [k, v] of [
+    ["hts", hts], ["country", country], ["value", rawValue], ["quantity", rawQuantity],
+    ["unit", quantityUnit], ["metal", rawMetal], ["vehicle", vehicleUse], ["enduse", endUse],
+    ["program", program], ["transport", transport === "air" ? "air" : ""], ["entry", entry === "informal" ? "informal" : ""],
+  ] as const) if (v) keepScenario.set(k, v);
+  keepScenario.set("find", "1");
+  const findHref = `/calculator?${keepScenario.toString()}#find-code`;
 
   const scenario: Record<string, string> = {
     hts,
@@ -133,7 +143,7 @@ export default async function CalculatorPage({
           first: most visitors arrive without an HTS code in hand. */}
       <nav aria-label="How do you want to start?" className="flex flex-wrap gap-2">
         <a href="#code-form" aria-current={findOpen ? undefined : "true"} className="btn btn-secondary">I know my code</a>
-        <a href="/calculator?find=1#find-code" aria-current={findOpen ? "true" : undefined} className="btn btn-secondary">Find a code</a>
+        <a href={findHref} aria-current={findOpen ? "true" : undefined} className="btn btn-secondary">Find a code</a>
       </nav>
       {findOpen ? (
         <div id="find-code" className="max-w-2xl">

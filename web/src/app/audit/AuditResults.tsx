@@ -3,8 +3,10 @@
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui";
-import { PartialMark, StatusChip } from "@/components/status";
-import { bucketOf, countLines, type AuditLine, type Bucket, type Status } from "@/lib/auditModel";
+import { PartialMark } from "@/components/status";
+import { LineFilterTabs, LineSummary, type LineFilterId } from "@/components/LineSummary";
+import LineList from "@/components/LineList";
+import { bucketOf, countLines, type AuditLine, type Status } from "@/lib/auditModel";
 import type { Field } from "@/lib/csvParse";
 import { landedCost, type LandedCostInputs } from "@/lib/landedCost";
 import CostInputs from "@/components/CostInputs";
@@ -33,15 +35,6 @@ const money = (n: number | undefined | null) =>
   typeof n === "number" && Number.isFinite(n) ? usd.format(n) : "—";
 
 export const PAGE_SIZE = 100;
-
-type Filter = "all" | Bucket;
-
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "review", label: "Needs review" },
-  { id: "ready", label: "Ready" },
-  { id: "failed", label: "Failed" },
-];
 
 function LandedCostPanel({ goods, duty, inputs, onChange, partial }: { goods: number; duty: number; inputs: LandedCostInputs; onChange: (costs: LandedCostInputs) => void; partial: boolean }) {
   const [open, setOpen] = useState(false);
@@ -112,15 +105,6 @@ const NEXT_STEP: Partial<Record<Status, { meaning: string; next: string }>> = {
     next: "Add the missing fact (for example a quantity for a per-unit duty, or a claimed program) and run the audit again.",
   },
 };
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"
-      className={`ml-1 inline-block transition-transform ${open ? "rotate-180" : ""}`}>
-      <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function Detail({ line, onEdit, onSave, amount }: {
   line: AuditLine;
@@ -285,11 +269,10 @@ export default function AuditResults({
   inputs: number[];
 }) {
   const counts = useMemo(() => countLines(lines), [lines]);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<LineFilterId>("all");
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState("original");
-  const [open, setOpen] = useState<Set<number>>(new Set());
 
   const shown = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -307,46 +290,23 @@ export default function AuditResults({
 
   const partial = !summary.totals_complete || counts.unresolved > 0;
   const unresolved = counts.unresolved;
-  const filterCount: Record<Filter, number> = {
+  const filterCount: Record<LineFilterId, number> = {
     all: counts.submitted, review: counts.review, ready: counts.ready, failed: counts.failed,
   };
 
-  const toggle = (i: number) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(i)) next.add(i);
-      return next;
-    });
-
   return (
     <section className="space-y-5" aria-label="Audit results">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border pt-7">
-        <h2 className="serif text-3xl tracking-tight" id="results-heading">
-          {unresolved > 0 ? (
-            <><span className="mono">{unresolved.toLocaleString()}</span> of <span className="mono">{counts.submitted.toLocaleString()}</span> products need attention</>
-          ) : (
-            <>All <span className="mono">{counts.submitted.toLocaleString()}</span> products are priced and complete</>
-          )}
-        </h2>
-        <span className="flex flex-wrap items-center gap-4 text-[13px] text-muted">
-          Open a row to see what it means and what to do
-          <a href="#save-results" className="btn btn-secondary">Save these results ↓</a>
-        </span>
-      </div>
-      <div className="flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <p className="text-[13px] text-muted">Estimated duty and fees</p>
-          <p className="mono text-3xl font-semibold">{money(summary.duty)}</p>
-          <p className="mt-1 text-[13px] text-muted">
-            {partial ? (
-              <>
-                <span className="md:hidden">includes {counts.review.toLocaleString()} still to confirm, excludes {counts.failed.toLocaleString()} unpriced.</span>
-                <span className="hidden md:inline">includes {counts.review.toLocaleString()} priced line{counts.review === 1 ? "" : "s"} still to confirm; leaves out {counts.failed.toLocaleString()} that could not be priced. Lines marked incomplete may understate duty.</span>
-              </>
-            ) : `covers all ${counts.submitted.toLocaleString()} products.`}
-          </p>
-        </div>
-        {unresolved > 0 ? (
+      <LineSummary
+        headingId="results-heading"
+        submitted={counts.submitted}
+        unresolved={unresolved}
+        duty={summary.duty}
+        partial={partial}
+        review={counts.review}
+        failed={counts.failed}
+        ready={counts.ready}
+        aside={<>Open a row to see what it means and what to do <a href="#save-results" className="btn btn-secondary">Save these results ↓</a></>}
+        action={unresolved > 0 ? (
           <button
             type="button"
             onClick={() => { setFilter(counts.review > 0 ? "review" : "failed"); setPage(0); }}
@@ -356,13 +316,8 @@ export default function AuditResults({
               ? `Review the ${counts.review.toLocaleString()} to confirm`
               : `See the ${counts.failed.toLocaleString()} that could not be priced`}
           </button>
-        ) : null}
-      </div>
-      <p className="text-[13px] text-muted" data-testid="reconciliation">
-        <span className="mono">{counts.submitted.toLocaleString()}</span> submitted ·{" "}
-        <span className="mono">{counts.ready.toLocaleString()}</span> ready ·{" "}
-        <span className="mono">{unresolved.toLocaleString()}</span> need attention
-      </p>
+        ) : undefined}
+      />
 
       {summary.truncated ? (
         <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
@@ -377,21 +332,7 @@ export default function AuditResults({
         <label className="flex-1 space-y-1.5"><span className="text-[13px] font-medium">Find a product</span><input data-search type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search SKU, description, code, or origin" className="field-control" /></label>
         <label className="space-y-1.5 sm:w-52"><span className="text-[13px] font-medium">Sort results</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }} className="field-control"><option value="original">Original row order</option><option value="duty">Highest duty first</option><option value="value">Highest value first</option></select></label>
       </div>
-      <div role="group" aria-label="Filter lines" className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            aria-pressed={filter === f.id}
-            onClick={() => { setFilter(f.id); setPage(0); }}
-            className={`rounded border px-3 py-1.5 text-[13px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${
-              filter === f.id ? "border-accent bg-accent-soft text-accent" : "border-rule text-muted"
-            }`}
-          >
-            {f.label} <span className="mono">({filterCount[f.id].toLocaleString()})</span>
-          </button>
-        ))}
-      </div>
+      <LineFilterTabs counts={filterCount} active={filter} onSelect={(id) => { setFilter(id); setPage(0); }} />
 
       <p role="status" className="text-xs text-muted">{shown.length.toLocaleString()} of {lines.length.toLocaleString()} products match</p>
       </div>
@@ -399,123 +340,26 @@ export default function AuditResults({
       {!shown.length ? (
         <div className="panel px-5 py-10 text-center"><p className="font-medium">No products match this view</p><p className="mt-2 text-sm text-muted">Try a different search or show all review statuses.</p><button type="button" onClick={() => { setQuery(""); setFilter("all"); setPage(0); }} className="btn btn-secondary mt-5">Clear search and filters</button></div>
       ) : (
-        <div className="panel overflow-hidden">
-          <div className="space-y-3 md:hidden" aria-label="Audited products">
-            {slice.map(({ line: l, i }) => {
-              const expanded = open.has(i);
-              const detailId = `line-card-detail-${i}`;
-              const value = l.entered_value ?? (inputs[i] > 0 ? inputs[i] : undefined);
-              return (
-                <div key={i} className="panel min-w-0 break-words p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="mono text-[12px] text-faint">Row {l.row}{l.country ? ` · ${l.country}` : ""}</p>
-                      <p className="mono mt-1 text-[14px] font-medium">{l.sku || "no SKU"}</p>
-                      <p className="text-[14px] text-muted">{l.description || "—"}</p>
-                    </div>
-                    <div className="shrink-0"><StatusChip status={l.status} /></div>
-                  </div>
-                  <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
-                    <div><dt className="text-faint">HTS</dt><dd className="mono whitespace-nowrap text-[12px]">{l.hts ?? "—"}</dd></div>
-                    <div><dt className="text-faint">Value</dt><dd className="mono">{money(value)}</dd></div>
-                    <div><dt className="text-faint">Duty</dt><dd className="mono">{l.duty !== undefined ? money(l.duty) : "—"}</dd></div>
-                  </dl>
-                  <button
-                    type="button"
-                    aria-expanded={expanded}
-                    aria-controls={detailId}
-                    onClick={() => toggle(i)}
-                    className="mt-3 inline-flex min-h-[44px] items-center text-[14px] font-medium text-accent hover:underline"
-                  >
-                    {expanded ? "Hide details" : "Details"}<Chevron open={expanded} /><span className="sr-only"> for row {l.row}</span>
-                  </button>
-                  {expanded ? (
-                    <div id={detailId} className="mt-3 border-t border-hair pt-3">
-                      <Detail line={l} onEdit={onEdit} amount={inputs[i] ?? 0} onSave={(c) => onRowSave(l.row, c)} />
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-          <div className="scroll-x relative hidden md:block" tabIndex={0} role="region" aria-label="Audited products table">
-          <table className="data-table w-full min-w-[520px] text-[14px] md:min-w-[860px]">
-            <caption className="sr-only">
-              Audited lines, {shown.length} shown, page {at + 1} of {pages}
-            </caption>
-            <thead>
-              <tr className="border-b text-left border-border text-faint">
-                <th scope="col" className="hidden py-2 pr-3 font-medium md:table-cell">Row</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Product</th>
-                <th scope="col" className="hidden py-2 pr-3 font-medium md:table-cell">HTS</th>
-                <th scope="col" className="hidden py-2 pr-3 font-medium md:table-cell">Origin</th>
-                <th scope="col" className="hidden py-2 pr-3 text-right font-medium sm:table-cell">Value</th>
-                <th scope="col" className="py-2 pr-3 text-right font-medium">Duty</th>
-                <th scope="col" className="py-2 pl-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map(({ line: l, i }) => {
-                const expanded = open.has(i);
-                const detailId = `line-detail-${i}`;
-                const value = l.entered_value ?? (inputs[i] > 0 ? inputs[i] : undefined);
-                return (
-                  <Fragment key={i}>
-                    <tr className="border-b align-top border-hair">
-                      <td className="mono hidden py-2 pr-3 text-[13px] text-muted md:table-cell">{l.row}</td>
-                      <td className="max-w-[28rem] py-2 pr-3">
-                        <div className="flex items-baseline gap-2">
-                          <span className="mono text-[13px] text-faint md:hidden">#{l.row}</span>
-                          <span className="mono text-[13px] font-medium">{l.sku || "no SKU"}</span>
-                        </div>
-                        <div className="text-muted">{l.description || "—"}</div>
-                        <div className="mono mt-0.5 text-[12px] text-faint md:hidden">
-                          {l.hts ?? "no code"} · {l.country || "no origin"}
-                          {value !== undefined ? ` · ${money(value)}` : ""}
-                        </div>
-                      </td>
-                      <td className="mono hidden py-2 pr-3 text-[13px] md:table-cell">
-                        {l.hts ? (
-                          <Link href={`/hts/${l.hts}?country=${encodeURIComponent(l.country || "")}`} className="hover:underline text-accent">{l.hts}</Link>
-                        ) : "—"}
-                      </td>
-                      <td className="hidden py-2 pr-3 text-muted md:table-cell">{l.country || "—"}</td>
-                      <td className={`mono hidden py-2 pr-3 text-right sm:table-cell ${l.entered_value === undefined ? "text-faint" : ""}`}>
-                        {money(value)}
-                      </td>
-                      <td className="mono py-2 pr-3 text-right">
-                        {l.duty !== undefined ? money(l.duty) : "—"}
-                      </td>
-                      <td className="py-2 pl-2">
-                        <div className="flex flex-col items-start gap-1">
-                          <StatusChip status={l.status} />
-                          <button
-                            type="button"
-                            aria-expanded={expanded}
-                            aria-controls={detailId}
-                            onClick={() => toggle(i)}
-                            className="text-[12px] hover:underline text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                          >
-                            {expanded ? "Hide details" : "Details"}<Chevron open={expanded} />
-                            <span className="sr-only"> for row {l.row}</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    {expanded ? (
-                      <tr id={detailId} className="border-b border-hair bg-sunk">
-                        <td colSpan={7} className="px-2">
-                          <Detail line={l} onEdit={onEdit} amount={inputs[i] ?? 0} onSave={(c) => onRowSave(l.row, c)} />
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
-        </div>
+        <LineList
+          label="Audited products"
+          caption={`Audited lines, ${shown.length} shown, page ${at + 1} of ${pages}`}
+          lines={slice.map(({ line: l, i }) => ({
+            key: String(i),
+            row: l.row,
+            sku: l.sku ?? null,
+            description: l.description ?? null,
+            country: l.country ?? null,
+            hts: l.hts ?? null,
+            value: l.entered_value ?? (inputs[i] > 0 ? inputs[i] : null),
+            duty: l.duty ?? null,
+            status: l.status,
+          }))}
+          renderDetail={(key) => {
+            const i = Number(key);
+            const l = lines[i];
+            return <Detail line={l} onEdit={onEdit} amount={inputs[i] ?? 0} onSave={(c) => onRowSave(l.row, c)} />;
+          }}
+        />
       )}
 
       {pages > 1 ? (

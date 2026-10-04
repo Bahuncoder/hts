@@ -94,7 +94,7 @@ try {
     await page.locator("#results-heading").waitFor();
     assert.match(await page.locator("main").innerText(), /products need attention/);
     await page.getByRole("button", { name: /^Review the \d+ to confirm$/ }).click();
-    assert.equal(await page.getByRole("button", { name: /^Needs review/ }).getAttribute("aria-pressed"), "true");
+    assert.equal(await page.getByRole("button", { name: /^Needs information/ }).getAttribute("aria-pressed"), "true");
   });
   await check("audit retains row identity when searching and sorting", async () => {
     await page.goto(`${app.base}/audit`);
@@ -110,7 +110,7 @@ try {
     await page.getByLabel("Find a product").fill("no-such-product");
     await page.getByRole("button", { name: "Clear search and filters" }).click();
     assert.equal(await rows().count(), 3);
-    await page.getByRole("button", { name: /^Needs review \(/ }).click();
+    await page.getByRole("button", { name: /^Needs information \(/ }).click();
     assert.equal(await rows().count(), 1);
     await rows().first().getByRole("button", { name: /Details/ }).click();
     await page.locator("tr.bg-sunk").getByText("Evidence and sources", { exact: true }).click();

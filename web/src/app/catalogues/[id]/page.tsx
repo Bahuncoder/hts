@@ -7,23 +7,20 @@ import { requireViewer } from "@/lib/auth";
 import { repriceCatalogueAction } from "@/lib/actions";
 import {
   catalogueTotals, countCatalogueWatches, getCatalogue, itemUnresolved,
-  type CatalogueItem,
+
 } from "@/lib/catalogues";
 import { money2 } from "@/lib/api";
-import { Badge, Card } from "@/components/ui";
-import { PartialMark, StatusChip } from "@/components/status";
+import { Card } from "@/components/ui";
+import { PartialMark } from "@/components/status";
+import LineList from "@/components/LineList";
 import { LEGACY_LABEL, bucketOf, countLines, isPriced, reviewNotes } from "@/lib/auditModel";
+import { approvalCounts } from "@/lib/review";
+import { LineFilterTabs, LineSummary, LINE_FILTERS, type LineFilterId } from "@/components/LineSummary";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 100;
-type Show = "all" | "review" | "ready" | "failed";
-const SHOWS: { id: Show; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "review", label: "Needs review" },
-  { id: "ready", label: "Ready" },
-  { id: "failed", label: "Failed" },
-];
+type Show = LineFilterId;
 
 const when = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-US", {
@@ -46,24 +43,6 @@ function Metric({
   );
 }
 
-function Notes({ item }: { item: CatalogueItem }) {
-  const notes = reviewNotes({
-    error: item.error, review_reasons: item.review,
-    incomplete: item.incomplete, warnings: item.warnings,
-  });
-  if (!notes.length) return null;
-  return (
-    <details className="mt-1 text-[12px]">
-      <summary className="cursor-pointer text-accent hover:underline">
-        Details<span className="sr-only"> for row {item.row_number ?? ""}</span>
-      </summary>
-      <ul className="mt-1 max-w-[26rem] list-disc space-y-1 pl-4 text-muted">
-        {notes.map((n, i) => <li key={i}>{n}</li>)}
-      </ul>
-    </details>
-  );
-}
-
 export default async function CataloguePage({
   params, searchParams,
 }: {
@@ -83,7 +62,7 @@ export default async function CataloguePage({
   const partial = cat.totals_complete === 0;
   const watches = await countCatalogueWatches(viewer.account.id, cat.id);
 
-  const show: Show = SHOWS.some((s) => s.id === sp.show) ? (sp.show as Show) : "all";
+  const show: Show = LINE_FILTERS.some((s) => s.id === sp.show) ? (sp.show as Show) : "all";
   type Sort = "unresolved" | "original" | "duty" | "value";
   const sort: Sort = sp.sort === "original" || sp.sort === "duty" || sp.sort === "value" ? sp.sort : "unresolved";
   // Unresolved lines first by default: they are the work, and a saved
@@ -126,6 +105,8 @@ export default async function CataloguePage({
     : { all: counts.submitted, review: counts.review, ready: counts.ready, failed: counts.failed };
 
   const calculated = when(cat.calculated_at);
+  const approval = approvalCounts(cat.items.map((i) => ({ approval_status: i.review_status })));
+  const pendingReview = approval.pending;
 
   return (
     <div className="space-y-7">
@@ -140,19 +121,34 @@ export default async function CataloguePage({
             {watches === 1 ? "code" : "codes"} watched
             {legacy ? "" : " · lines that could not be priced are kept here but not watched"}
           </p>
+          <p className="text-[13px] text-faint" data-testid="history">
+            Saved {when(cat.created_at)}
+            {cat.updated_at !== cat.created_at ? ` · last changed ${when(cat.updated_at)}` : ""}
+          </p>
         </div>
-        <a href={`/api/catalogues/export?id=${cat.id}`} className="btn btn-secondary">
-          Export CSV
-        </a>
-        <a href={`/api/catalogues/evidence?id=${cat.id}`} className="btn btn-secondary">
-          Evidence package
-        </a>
-        <form action={repriceCatalogueAction}>
-          <input type="hidden" name="id" value={cat.id} />
-          <button className="btn btn-secondary">
-            Re-price with current rates
-          </button>
-        </form>
+        {/* One primary action: the human review that is waiting. Everything
+            else is secondary, so the eye has a single place to go. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/catalogues/${cat.id}/review`} className="btn btn-primary">
+            {pendingReview > 0
+              ? `Review ${pendingReview.toLocaleString()} ${pendingReview === 1 ? "product" : "products"}`
+              : "Review classifications"}
+          </Link>
+          <details className="relative">
+            <summary className="btn btn-secondary cursor-pointer list-none">Export</summary>
+            <div className="absolute right-0 z-10 mt-2 grid w-64 gap-1 rounded-[var(--radius-panel)] border border-rule bg-surface p-2 shadow-lg">
+              <a href={`/api/catalogues/export?id=${cat.id}`} className="rounded px-3 py-2 text-[14px] hover:bg-sunk">Export CSV</a>
+              <a href={`/api/catalogues/evidence?id=${cat.id}`} className="rounded px-3 py-2 text-[14px] hover:bg-sunk">Evidence package</a>
+              <Link href={`/catalogues/${cat.id}/report`} className="rounded px-3 py-2 text-[14px] hover:bg-sunk">Printable report</Link>
+            </div>
+          </details>
+          <form action={repriceCatalogueAction}>
+            <input type="hidden" name="id" value={cat.id} />
+            <button className="btn btn-secondary">
+              Re-price with current rates
+            </button>
+          </form>
+        </div>
       </div>
 
       {sp.repriced ? (
@@ -168,8 +164,7 @@ export default async function CataloguePage({
         </p>
       ) : null}
 
-      <ReviewWorkspace catalogueId={cat.id} items={cat.items} />
-      <Link className="btn btn-secondary" href={`/catalogues/${cat.id}/report`}>View printable evidence report</Link>
+      <ReviewWorkspace items={cat.items} />
       {legacy ? (
         <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
           <strong>{LEGACY_LABEL}.</strong> This catalogue was saved when only priced lines were kept, so it
@@ -177,81 +172,74 @@ export default async function CataloguePage({
           audit again and save it to get the full review record.
         </p>
       ) : (
-        <>
-          <p className="text-[15px] font-medium" data-testid="reconciliation">
-            Submitted <span className="mono">{counts.submitted.toLocaleString()}</span>
-            {" · "}Ready <span className="mono">{counts.ready.toLocaleString()}</span>
-            {" · "}Needs attention <span className="mono">{counts.unresolved.toLocaleString()}</span>
-          </p>
-          <p className="-mt-5 text-[13px] text-muted">
-            Ready means priced, complete, and nothing left to confirm. Needs attention is every other line:{" "}
-            {counts.review.toLocaleString()} priced but to be confirmed, {counts.failed.toLocaleString()} that
-            could not be priced.
-          </p>
-        </>
+        <LineSummary
+          submitted={counts.submitted}
+          unresolved={counts.unresolved}
+          duty={totals.duty}
+          partial={partial || counts.unresolved > 0}
+          review={counts.review}
+          failed={counts.failed}
+          ready={counts.ready}
+        />
       )}
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric
-          label="Entered value"
-          value={money2(totals.value)}
-          sub={legacy ? undefined : `${cat.items.filter((i) => i.status && isPriced(i.status)).length.toLocaleString()} of ${cat.items.length.toLocaleString()} lines priced`}
-          partial={partial ? unresolved : undefined}
-        />
-        <Metric
-          label="Duty and fees"
-          value={money2(totals.duty)}
-          sub={`${totals.ratePct.toFixed(2)}% effective${cat.mpf ? ` · includes ${money2(cat.mpf)} MPF` : legacy ? " · MPF not recorded" : ""}`}
-          partial={partial ? unresolved : undefined}
-        />
-        <Metric
-          label="Potentially refundable"
-          value={money2(totals.refundable)}
-          sub={totals.refundable > 0 ? "Estimate: IEEPA duties struck down, not a filed claim" : "none identified"}
-          tone={totals.refundable > 0 ? "recover" : undefined}
-          partial={partial ? unresolved : undefined}
-        />
-        <Metric
-          label="Needs review"
-          value={unresolved.toLocaleString()}
-          sub={legacy ? "scope unverified" : `${counts.review.toLocaleString()} to review · ${counts.failed.toLocaleString()} failed`}
-        />
-      </div>
+      <details className="rounded border border-rule p-4">
+        <summary className="cursor-pointer text-[14px] font-medium text-accent">Totals, refund estimate and assumptions</summary>
+        <div className="mt-4 space-y-5">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric
+              label="Entered value"
+              value={money2(totals.value)}
+              sub={legacy ? undefined : `${cat.items.filter((i) => i.status && isPriced(i.status)).length.toLocaleString()} of ${cat.items.length.toLocaleString()} lines priced`}
+              partial={partial ? unresolved : undefined}
+            />
+            <Metric
+              label="Duty and fees"
+              value={money2(totals.duty)}
+              sub={`${totals.ratePct.toFixed(2)}% effective${cat.mpf ? ` · includes ${money2(cat.mpf)} MPF` : legacy ? " · MPF not recorded" : ""}`}
+              partial={partial ? unresolved : undefined}
+            />
+            <Metric
+              label="Potentially refundable"
+              value={money2(totals.refundable)}
+              sub={totals.refundable > 0 ? "Estimate: IEEPA duties struck down, not a filed claim" : "none identified"}
+              tone={totals.refundable > 0 ? "recover" : undefined}
+              partial={partial ? unresolved : undefined}
+            />
+            <Metric
+              label="Needs review"
+              value={unresolved.toLocaleString()}
+              sub={legacy ? "scope unverified" : `${counts.review.toLocaleString()} to review · ${counts.failed.toLocaleString()} failed`}
+            />
+          </div>
 
-      <div className="space-y-2 text-[13px]">
-        {calculated ? (
-          <p className="text-muted">
-            Calculated <span className="nb">{calculated}</span>
-            {" · "}reference data revision{" "}
-            <span className="mono">{cat.dataset_revision || "not reported"}</span>
-          </p>
-        ) : null}
-        {cat.assumptions.length ? (
-          <details>
-            <summary className="cursor-pointer text-muted hover:underline">
-              Assumptions behind these figures ({cat.assumptions.length})
-            </summary>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
-              {cat.assumptions.map((a, i) => <li key={i}>{a}</li>)}
-            </ul>
-          </details>
-        ) : null}
-      </div>
+        <div className="space-y-2 text-[13px]">
+            {calculated ? (
+              <p className="text-muted">
+                Calculated <span className="nb">{calculated}</span>
+                {" · "}reference data revision{" "}
+                <span className="mono">{cat.dataset_revision || "not reported"}</span>
+              </p>
+            ) : null}
+            {cat.assumptions.length ? (
+              <details>
+                <summary className="cursor-pointer text-muted hover:underline">
+                  Assumptions behind these figures ({cat.assumptions.length})
+                </summary>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+                  {cat.assumptions.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        </div>
+      </details>
 
-      <nav aria-label="Filter lines" className="flex flex-wrap gap-2">
-        {SHOWS.filter((s) => !legacy || s.id !== "failed").map((s) => (
-          <Link
-            key={s.id}
-            href={href(s.id)}
-            aria-current={show === s.id ? "true" : undefined}
-            className={`rounded border px-3 py-1.5 text-[13px] font-medium ${
-              show === s.id ? "border-accent bg-accent-soft text-accent" : "border-rule text-muted"
-            }`}
-          >
-            {s.label} <span className="mono">({filterCount[s.id].toLocaleString()})</span>
-          </Link>
-        ))}
-      </nav>
+      <LineFilterTabs
+        counts={filterCount}
+        active={show}
+        hrefFor={(id) => href(id)}
+      />
 
       <form method="get" action={`/catalogues/${cat.id}`} className="flex flex-wrap items-end gap-3">
         {show !== "all" ? <input type="hidden" name="show" value={show} /> : null}
@@ -277,83 +265,26 @@ export default async function CataloguePage({
       {!slice.length ? (
         <p className="py-6 text-[14px] text-muted">No lines match this filter.</p>
       ) : (
-        <>
-        <ul className="space-y-3 md:hidden" aria-label="Saved lines">
-          {slice.map((i) => (
-            <li key={i.id} className="panel p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="mono text-[12px] text-faint">Row {i.row_number ?? "—"}{i.country ? ` · ${i.country}` : ""}</p>
-                  <p className="mt-1 text-[15px] font-medium">{i.sku || "no SKU"}</p>
-                  <p className="clamp-2 text-[13px] text-muted">{i.description}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  {i.status === null && i.scope_unverified ? (
-                    <Badge tone="warn">Scope unverified</Badge>
-                  ) : (
-                    <StatusChip status={i.status} />
-                  )}
-                </div>
-              </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
-                <div><dt className="text-faint">HTS</dt><dd className="mono">{i.hts ?? "—"}</dd></div>
-                <div><dt className="text-faint">Value</dt><dd className="mono">{i.status && !isPriced(i.status) && !i.value ? "—" : money2(i.value)}</dd></div>
-                <div><dt className="text-faint">Duty</dt><dd className="mono">{i.duty !== null ? money2(i.duty) : "—"}</dd></div>
-              </dl>
-              <Notes item={i} />
-            </li>
-          ))}
-        </ul>
-        <div className="scroll-x relative hidden md:block">
-          <table className="w-full min-w-[820px] text-[14px]">
-            <caption className="sr-only">
-              Saved lines, unresolved first. Page {at} of {pages}.
-            </caption>
-            <thead>
-              <tr className="border-b text-left border-border text-faint">
-                <th scope="col" className="py-2 pr-3 font-medium">Row</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Product</th>
-                <th scope="col" className="py-2 pr-3 font-medium">HTS</th>
-                <th scope="col" className="py-2 pr-3 font-medium">Origin</th>
-                <th scope="col" className="py-2 pr-3 text-right font-medium">Value</th>
-                <th scope="col" className="py-2 pr-3 text-right font-medium">Duty</th>
-                <th scope="col" className="py-2 pl-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map((i) => (
-                <tr key={i.id} className="border-b align-top border-hair">
-                  <td className="mono py-2 pr-3 text-[13px] text-muted">{i.row_number ?? "—"}</td>
-                  <td className="max-w-[26rem] py-2 pr-3">
-                    <div className="mono text-[13px] font-medium">{i.sku || "no SKU"}</div>
-                    <div className="clamp-2 text-muted">{i.description}</div>
-                  </td>
-                  <td className="mono py-2 pr-3 text-[13px]">
-                    {i.hts ? (
-                      <Link href={`/hts/${i.hts}`} className="hover:underline text-accent">{i.hts}</Link>
-                    ) : "—"}
-                  </td>
-                  <td className="py-2 pr-3 text-muted">{i.country || "—"}</td>
-                  <td className={`mono py-2 pr-3 text-right ${i.status && !isPriced(i.status) ? "text-faint" : ""}`}>
-                    {i.status && !isPriced(i.status) && !i.value ? "—" : money2(i.value)}
-                  </td>
-                  <td className="mono py-2 pr-3 text-right">
-                    {i.duty !== null ? money2(i.duty) : "—"}
-                  </td>
-                  <td className="py-2 pl-2">
-                    {i.status === null && i.scope_unverified ? (
-                      <Badge tone="warn">Scope unverified</Badge>
-                    ) : (
-                      <StatusChip status={i.status} />
-                    )}
-                    <Notes item={i} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        </>
+        <LineList
+          label="Saved lines"
+          caption={`Saved lines, unresolved first. Page ${at} of ${pages}.`}
+          lines={slice.map((i) => ({
+            key: i.id,
+            row: i.row_number,
+            sku: i.sku,
+            description: i.description,
+            country: i.country,
+            hts: i.hts,
+            value: i.status && !isPriced(i.status) && !i.value ? null : i.value,
+            duty: i.duty,
+            status: i.status,
+            scopeUnverified: i.scope_unverified === 1,
+            notes: reviewNotes({
+              error: i.error, review_reasons: i.review,
+              incomplete: i.incomplete, warnings: i.warnings,
+            }),
+          }))}
+        />
       )}
 
       {pages > 1 ? (

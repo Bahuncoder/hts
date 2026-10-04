@@ -160,10 +160,7 @@ export default async function AccountPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/audit"
-          className="px-4 py-2 text-[14px] font-medium bg-accent text-on-accent"
-        >
+        <Link href="/audit" className="btn btn-primary">
           Audit a catalogue
         </Link>
       </div>

@@ -107,7 +107,7 @@ try {
     const { ctx, page } = await newPage("owner-session");
     await page.goto(`${BASE}/catalogues/cat/review`, { waitUntil: "networkidle" });
     const body = await page.locator("body").innerText();
-    assert.match(body, /Pending review: 1/);
+    assert.match(body, /Pending \(1\)/);
     assert.match(body, /Cotton t-shirt/);
     await ctx.close();
   });
@@ -120,7 +120,7 @@ try {
     await page.click('button:has-text("Record decision")');
     await page.waitForTimeout(800);
     const body = await page.locator("body").innerText();
-    assert.match(body, /Approved: 1/, "the summary count did not move");
+    assert.match(body, /Approved \(1\)/, "the summary count did not move");
     assert.match(body, /marked it Approved/);
     assert.match(body, /Checked against the supplier invoice\./);
     await ctx.close();
@@ -151,7 +151,7 @@ try {
     await page.waitForTimeout(800);
     const body = await page.locator("body").innerText();
     assert.match(body, /Following up with the broker next week\./);
-    assert.match(body, /Approved: 1/, "a comment changed the approval count");
+    assert.match(body, /Approved \(1\)/, "a comment changed the approval count");
     await ctx.close();
   });
 

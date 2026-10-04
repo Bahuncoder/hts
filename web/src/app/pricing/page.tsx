@@ -54,7 +54,7 @@ export default async function PricingPage() {
             >
               {featured ? (
                 <span className="w-fit rounded-full bg-accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-on-accent">
-                  Most catalogues
+                  For larger import programmes
                 </span>
               ) : null}
               <div className="space-y-1">

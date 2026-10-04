@@ -159,6 +159,7 @@ await check("CSV export neutralises spreadsheet formulas", async () => {
     `INJ-3,"@SUM(1+1)",China,1000,`,
     `OK-1,ordinary cotton shirt,China,1000,`,
   ]);
+  await user.page.click("summary:has-text('Export')");
   const [dl] = await Promise.all([
     user.page.waitForEvent("download", { timeout: 20000 }),
     user.page.click("text=Export CSV"),

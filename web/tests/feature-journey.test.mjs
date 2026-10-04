@@ -66,7 +66,7 @@ try {
   await page.locator('input[name="note"]').fill("Checked material and the saved ruling excerpt.");
   await page.getByRole("button", { name: "Record decision", exact: true }).click();
   await page.waitForFunction(() => document.body.textContent.includes("Checked material and the saved ruling excerpt."));
-  assert.match(await page.locator("body").innerText(), /Approved: 1/);
+  assert.match(await page.locator("body").innerText(), /Approved \(1\)/);
 
   await stalePage.locator('select[name="approval_status"]').selectOption("approved");
   await stalePage.locator('input[name="note"]').fill("stale decision");

@@ -84,6 +84,12 @@ export default async function Review({
     const qs = qp.toString();
     return `/catalogues/${cat.id}/review${qs ? `?${qs}` : ""}`;
   };
+  // The first product still waiting for a decision, in queue order, opened
+  // directly so the reviewer does not have to click a row first.
+  const pendingRows = rows.filter((r) => r.review.approval_status === "pending");
+  const startId = pendingRows[0]?.item.id;
+  // Under the pending filter this product is first, so it is on page 1.
+  const startHref = startId ? `/catalogues/${cat.id}/review?status=pending&item=${startId}` : "";
   const openHref = (itemId: string, p = at) => {
     const qp = new URLSearchParams();
     if (sp.q) qp.set("q", sp.q);
@@ -160,13 +166,15 @@ export default async function Review({
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-3 text-[13px]">
-        {APPROVAL_STATUSES.map((s) => (
-          <span key={s} className={`rounded-full border border-border px-3 py-1 ${TONE[s]}`}>
-            {APPROVAL_LABEL[s]}: {counts[s]}
-          </span>
-        ))}
-      </div>
+      {/* The counts live on the filter tabs below, so they are shown once.
+          The primary action is the next product still waiting for a decision. */}
+      {startId ? (
+        <div>
+          <Link href={startHref} className="btn btn-primary">
+            Start next pending review
+          </Link>
+        </div>
+      ) : null}
 
       <div className={open ? "lg:grid lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-6 lg:items-start" : undefined}>
         <div

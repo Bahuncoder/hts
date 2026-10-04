@@ -3,11 +3,26 @@ import { LEGACY_LABEL, STATUS_LABEL, bucketOf, type Bucket, type Status } from "
 
 const TONE: Record<Bucket, "good" | "warn" | "bad"> = { ready: "good", review: "warn", failed: "bad" };
 
-/** A line's state, in words. Colour reinforces it and never carries it. A
- *  null status is a row saved before statuses were recorded. */
+/** The estimate, in two names only: a line is complete or it needs
+ *  information. Human review is a separate state (see APPROVAL_LABEL). */
+export const ESTIMATE_LABEL: Record<Bucket, string> = {
+  ready: "Estimate: Complete",
+  review: "Estimate: Needs information",
+  failed: "Estimate: Needs information",
+};
+
+/** A line's estimate state, with the specific reason beneath it. Colour
+ *  reinforces the words and never carries them. A null status is a row saved
+ *  before statuses were recorded. */
 export function StatusChip({ status }: { status: Status | null }) {
   if (status === null) return <Badge tone="neutral">{LEGACY_LABEL}</Badge>;
-  return <Badge tone={TONE[bucketOf(status)]}>{STATUS_LABEL[status]}</Badge>;
+  const bucket = bucketOf(status);
+  return (
+    <span className="inline-flex flex-col items-start gap-0.5">
+      <Badge tone={TONE[bucket]} caps={false}>{ESTIMATE_LABEL[bucket]}</Badge>
+      <span className="text-[12px] text-muted">{STATUS_LABEL[status]}</span>
+    </span>
+  );
 }
 
 /** A total that leaves lines out must say so beside the amount, not in a

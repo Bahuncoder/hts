@@ -130,10 +130,12 @@ await step("the audit offers to save, and saving lands on the catalogue", async 
     page.waitForURL(/\/catalogues\/[0-9a-f-]{36}/, { timeout: 30000 }),
     page.click("text=Save and watch these codes"),
   ]);
+  // The URL changes before the page has rendered; wait for its heading.
+  await page.waitForSelector("h1:has-text('Journey test catalogue')", { timeout: 20000 });
   const body = await text();
   assert.match(body, /Journey test catalogue/);
   assert.match(body, /\d+ codes? watched/i, "the catalogue says how many codes it watches");
-  assert.match(body, /Submitted \d+ · Ready \d+ · Needs attention \d+/, "the saved catalogue reconciles");
+  assert.match(body, /Submitted \d+ · Complete \d+ · Needs attention \d+/, "the saved catalogue reconciles");
 });
 
 await step("saving a catalogue watches its codes", async () => {
@@ -159,6 +161,7 @@ await step("catalogue exports as CSV with a sensible filename", async () => {
 
   // Exercise the path a customer actually takes — clicking the link — rather
   // than refetching the URL, so the download headers are what is under test.
+  await page.click("summary:has-text('Export')");
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 20000 }),
     page.click("text=Export CSV"),
