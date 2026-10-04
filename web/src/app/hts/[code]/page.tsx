@@ -454,7 +454,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
                   className="font-medium hover:underline text-accent"
                 >
                   {r.ruling_number}
-                </a>{" "}
+                <span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a>{" "}
                 <span className="tabular text-[12px] text-muted">
                   {r.ruling_date}
                 </span>{" "}

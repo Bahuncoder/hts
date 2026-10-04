@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
-import { getQuote, money2, search, type Quote } from "@/lib/api";
+import { getHealth, getQuote, money2, search, type Quote } from "@/lib/api";
 import { Card, Note, Stat } from "@/components/ui";
 import { Field, RadioGroup, inputClass } from "@/components/Field";
 import { ORIGINS } from "@/lib/origins";
@@ -38,6 +38,8 @@ export default async function CalculatorPage({
   searchParams: Promise<Params>;
 }) {
   const sp = await searchParams;
+  const health = await getHealth();
+  const edition = health.ok ? health.data.hts_edition : undefined;
 
   // Everything the visitor typed is kept verbatim so a failure never costs
   // them their entry.
@@ -120,6 +122,10 @@ export default async function CalculatorPage({
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Duty calculator" title="Know your duty exposure" description="Build an estimate for one customs entry. Choose the origin and shipping assumptions, then explore every duty and fee." />
+      <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted">
+        <span>{edition ? `Reference data: ${edition}` : "Reference data edition unavailable"}</span>
+        {hts || country || rawValue || q ? <Link href="/calculator" className="font-medium text-accent hover:underline">Start over</Link> : null}
+      </div>
 
       {/* A second GET form. It carries the scenario as hidden fields so
           searching for a code does not throw the visitor's inputs away. Shown
@@ -138,6 +144,7 @@ export default async function CalculatorPage({
         <div className="flex gap-2">
           <input
             id="q"
+            data-search
             name="q"
             defaultValue={q}
             placeholder="e.g. cotton t-shirt"

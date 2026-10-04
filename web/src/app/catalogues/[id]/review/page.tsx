@@ -193,7 +193,7 @@ export default async function Review({
             {statusFilter !== "all" ? <input type="hidden" name="status" value={statusFilter} /> : null}
             <label className="min-w-[16rem] flex-1 text-[13px]">
               Search
-              <input
+              <input data-search
                 type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
                 placeholder="SKU, description, origin, or HTS code"
               />
@@ -393,7 +393,7 @@ export default async function Review({
                                       <div className="mt-3 space-y-1">
                                         {c.rulings.map((r) => (
                                           <div key={r.ruling} className="text-[13px]">
-                                            <a href={r.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline text-accent">{r.ruling}</a>{" "}
+                                            <a href={r.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline text-accent">{r.ruling}<span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a>{" "}
                                             {r.revoked ? <Badge tone="bad">revoked</Badge> : null}{" "}
                                             <span className="text-muted">{r.subject}</span>
                                           </div>

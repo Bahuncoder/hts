@@ -131,7 +131,7 @@ export default async function ChangesPage({
                   className="mt-1 block font-medium hover:underline"
                 >
                   {c.title}
-                </a>
+                <span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
                 {c.abstract ? (
                   <p className="mt-2 text-[14px] text-muted">
                     {c.abstract.slice(0, 280)}

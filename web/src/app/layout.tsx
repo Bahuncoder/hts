@@ -3,6 +3,7 @@ import Link from "next/link";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { Lockup } from "@/components/Logo";
 import { ThemeSelect } from "@/components/ThemeSelect";
+import { KeyShortcuts } from "@/components/KeyShortcuts";
 import { NavLink, SignedOutLinks, SiteNav } from "@/components/SiteNav";
 import { currentViewer } from "@/lib/auth";
 import "./globals.css";
@@ -73,6 +74,7 @@ export default async function RootLayout({
         />
       </head>
       <body>
+        <KeyShortcuts />
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-2 focus:z-50 focus:px-3 focus:py-2 focus:text-[14px] focus:font-medium focus:bg-accent focus:text-on-accent"

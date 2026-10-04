@@ -135,7 +135,7 @@ export default async function AlertsPage() {
                 className="mt-1.5 block font-medium hover:underline"
               >
                 {a.title}
-              </a>
+              <span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
             </Card>
           ))}
         </div>

@@ -346,13 +346,29 @@ export default function AuditClient({
             </span>{" "}
             · {run.entries} formal {run.entries === 1 ? "entry" : "entries"} · {run.transport === "vessel" ? "vessel" : "air"} shipment · audited {timeOf(run.ranAt)}
           </p>
-          <button
-            type="button"
-            onClick={() => { focusAfter.current = "text"; setEditing(true); }}
-            className={`btn btn-secondary ${focusRing}`}
-          >
-            Edit catalogue
-          </button>
+          <span className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => { focusAfter.current = "text"; setEditing(true); }}
+              className={`btn btn-secondary ${focusRing}`}
+            >
+              Edit catalogue
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                focusAfter.current = "text";
+                setRun(null);
+                setText("");
+                setAttempted(false);
+                setFileNote(null);
+                setEditing(true);
+              }}
+              className={`btn btn-secondary ${focusRing}`}
+            >
+              Start over
+            </button>
+          </span>
         </section>
       ) : (
       <section className="panel overflow-hidden" aria-labelledby="import-heading">

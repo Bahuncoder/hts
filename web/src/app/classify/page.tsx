@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
-import { classify } from "@/lib/api";
+import { classify, getHealth } from "@/lib/api";
 import { allow, CLASSIFY_LIMIT } from "@/lib/budget";
 import { clientId } from "@/lib/throttle";
 import { Badge, Card, HtsLink, Note } from "@/components/ui";
@@ -22,6 +22,8 @@ export default async function ClassifyPage({
   searchParams: Promise<{ q?: string | string[] }>;
 }) {
   const { q: rawQ } = await searchParams;
+  const health = await getHealth();
+  const edition = health.ok ? health.data.hts_edition : undefined;
   const q = (Array.isArray(rawQ) ? rawQ[0] : rawQ)?.trim() ?? "";
   // The engine needs three characters to classify; say so rather than spend a
   // budgeted call to be told it.
@@ -39,6 +41,10 @@ export default async function ClassifyPage({
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Product classification" title="Find the right HTS code" description="Start with what your product is, what it is made of, and how it is used. Compare candidate codes and the rulings behind them." />
+      <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted">
+        <span>{edition ? `Reference data: ${edition}` : "Reference data edition unavailable"}</span>
+        {q ? <Link href="/classify" className="font-medium text-accent hover:underline">Start over</Link> : null}
+      </div>
 
       <form action="/classify" className="panel p-5 sm:p-7" role="search">
         <label htmlFor="q" className="block text-[13px] font-medium">
@@ -47,6 +53,7 @@ export default async function ClassifyPage({
         <div className="mt-1 flex flex-wrap gap-2">
           <input
             id="q"
+            data-search
             name="q"
             defaultValue={q}
             required
@@ -157,7 +164,7 @@ export default async function ClassifyPage({
                       className="font-medium hover:underline text-accent"
                     >
                       {r.ruling}
-                    </a>{" "}
+                    <span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a>{" "}
                     {r.revoked ? <Badge tone="bad">revoked</Badge> : null}{" "}
                     <span className="text-muted">{r.subject}</span>
                   </div>

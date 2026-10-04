@@ -189,7 +189,7 @@ function Detail({ line }: { line: AuditLine }) {
                         {r.url ? (
                           <a href={r.url} target="_blank" rel="noopener noreferrer" className="hover:underline text-accent">
                             {r.ruling}
-                          </a>
+                          <span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a>
                         ) : r.ruling}
                         {r.revoked ? " (revoked)" : ""}
                       </span>
@@ -321,7 +321,7 @@ export default function AuditResults({
 
       <div className="panel space-y-4 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="flex-1 space-y-1.5"><span className="text-[13px] font-medium">Find a product</span><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search SKU, description, code, or origin" className="field-control" /></label>
+        <label className="flex-1 space-y-1.5"><span className="text-[13px] font-medium">Find a product</span><input data-search type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search SKU, description, code, or origin" className="field-control" /></label>
         <label className="space-y-1.5 sm:w-52"><span className="text-[13px] font-medium">Sort results</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }} className="field-control"><option value="original">Original row order</option><option value="duty">Highest duty first</option><option value="value">Highest value first</option></select></label>
       </div>
       <div role="group" aria-label="Filter lines" className="flex flex-wrap gap-2">

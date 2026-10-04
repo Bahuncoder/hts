@@ -257,7 +257,7 @@ export default async function CataloguePage({
         {show !== "all" ? <input type="hidden" name="show" value={show} /> : null}
         <label className="min-w-[16rem] flex-1 text-[13px]">
           Search
-          <input
+          <input data-search
             type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
             placeholder="SKU, description, origin, or HTS code"
           />

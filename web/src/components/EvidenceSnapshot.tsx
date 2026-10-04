@@ -8,7 +8,7 @@ export default function EvidenceSnapshot({ json }: { json: string | null }) {
     {evidence.reasoning && <p>{evidence.reasoning}</p>}
     {!evidence.rulings.length && <p>No supporting rulings were returned for this candidate.</p>}
     {evidence.rulings.map((r, i) => <section key={i} className="border-l border-rule pl-3 break-inside-avoid">
-      <p className="font-semibold">{r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline">{r.ruling}</a> : r.ruling} · {r.date || "Date not recorded"}{r.revoked ? " · REVOKED" : ""}</p>
+      <p className="font-semibold">{r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer" className="underline">{r.ruling}<span aria-hidden="true" className="ml-0.5">↗</span><span className="sr-only"> (opens in a new tab)</span></a> : r.ruling} · {r.date || "Date not recorded"}{r.revoked ? " · REVOKED" : ""}</p>
       <p>{r.subject}</p>{r.excerpt && <blockquote>{r.excerpt}</blockquote>}
     </section>)}
     <p className="text-xs text-muted">Evidence snapshot from the saved calculation; excerpts are not the full ruling. Revocation status is as recorded at that time.</p>
