@@ -6,6 +6,7 @@ import { clientId } from "@/lib/throttle";
 import { Badge, Card, HtsLink, Note } from "@/components/ui";
 import { FailureNotice } from "@/components/FailureNotice";
 import { inputClass } from "@/components/Field";
+import { CopyButton } from "@/components/CopyButton";
 
 export const metadata = {
   title: "HTS classification — describe your product",
@@ -113,6 +114,7 @@ export default async function ClassifyPage({
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[13px] text-muted">#{i + 1}</span>
               <HtsLink code={c.hts} />
+              <CopyButton value={c.hts} />
               {/* Never "good"/green: a candidate is never decided, at any
                   confidence level (see docs/STATUS.md's accuracy figures and
                   api/main.py's `low_confidence` gate, which the audit engine

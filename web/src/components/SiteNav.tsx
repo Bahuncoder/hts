@@ -6,6 +6,14 @@ import { nextQuery, safeNext } from "@/lib/next";
 
 type Item = { href: string; label: string };
 
+/** How the mobile menu groups the destinations. Account actions live in the
+ *  header, next to the account link. */
+const MENU_GROUPS: { title: string; hrefs: string[] }[] = [
+  { title: "Analyze", hrefs: ["/classify", "/calculator", "/audit"] },
+  { title: "Monitor", hrefs: ["/changes", "/alerts"] },
+  { title: "Work", hrefs: ["/catalogues"] },
+];
+
 function isActive(pathname: string | null, href: string): boolean {
   if (!pathname) return false;
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -58,18 +66,27 @@ export function SiteNav({ items }: { items: Item[] }) {
         className="order-last basis-full text-[14px] xl:hidden"
       >
         <summary className="cursor-pointer list-none rounded border px-3 py-1.5 font-medium border-border [&::-webkit-details-marker]:hidden">
-          Explore tools <span aria-hidden="true" className="float-right">＋</span>
+          Menu <span aria-hidden="true" className="float-right">＋</span>
         </summary>
-        <nav aria-label="Main" className="mt-2">
-          <ul className="flex flex-col">
-            {items.map((n) => (
-              <li key={n.href}>
-                <NavLink href={n.href} className="block py-2">
-                  {n.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+        <nav aria-label="Main" className="mt-2 space-y-4">
+          {MENU_GROUPS.map((g) => {
+            const groupItems = items.filter((n) => g.hrefs.includes(n.href));
+            if (!groupItems.length) return null;
+            return (
+              <div key={g.title}>
+                <p className="px-1 text-[12px] font-medium uppercase tracking-wide text-muted">{g.title}</p>
+                <ul className="flex flex-col">
+                  {groupItems.map((n) => (
+                    <li key={n.href}>
+                      <NavLink href={n.href} className="block py-2">
+                        {n.label}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
       </details>
     </>

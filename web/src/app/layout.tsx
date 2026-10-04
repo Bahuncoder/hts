@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { Lockup } from "@/components/Logo";
+import { ThemeSelect } from "@/components/ThemeSelect";
 import { NavLink, SignedOutLinks, SiteNav } from "@/components/SiteNav";
 import { currentViewer } from "@/lib/auth";
 import "./globals.css";
@@ -64,6 +65,13 @@ export default async function RootLayout({
       lang="en"
       className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable}`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: 'try{var t=localStorage.getItem("htsdesk.theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}',
+          }}
+        />
+      </head>
       <body>
         <a
           href="#main"
@@ -80,6 +88,7 @@ export default async function RootLayout({
               items={[...NAV, ...(viewer ? SIGNED_IN_NAV : [])]}
             />
             <div className="ml-auto flex items-center gap-4 text-[14px]">
+              <ThemeSelect />
               {viewer ? (
                 <>
                   <NavLink href="/account">Account</NavLink>

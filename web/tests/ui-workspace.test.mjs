@@ -78,9 +78,9 @@ try {
     await page.getByLabel("Your catalogue", { exact: true }).fill("Product Name,Ctry,Price\nmens knitted cotton t-shirt,China,4800\nceramic coffee mug,Germany,1200");
     await page.waitForTimeout(500);
     assert.match(await page.locator("body").innerText(), /Missing the “description” column/, "the missing column is named");
-    await page.locator("select").nth(0).selectOption({ label: "Product Name" });
-    await page.locator("select").nth(1).selectOption({ label: "Ctry" });
-    await page.locator("select").nth(2).selectOption({ label: "Price" });
+    await page.locator("details").filter({ hasText: "Match your columns" }).locator("select").nth(0).selectOption({ label: "Product Name" });
+    await page.locator("details").filter({ hasText: "Match your columns" }).locator("select").nth(1).selectOption({ label: "Ctry" });
+    await page.locator("details").filter({ hasText: "Match your columns" }).locator("select").nth(2).selectOption({ label: "Price" });
     await page.waitForTimeout(500);
     const text = await page.locator("body").innerText();
     assert.match(text, /2 rows read/, "the two rows are read once mapped");
@@ -174,7 +174,7 @@ try {
     assert.equal(colors.background, "rgb(20, 29, 26)", "dark secondary controls use the dark surface token");
     assert.equal(colors.foreground, "rgb(232, 239, 236)");
     await shot("audit-mobile-dark");
-    await page.locator("summary").filter({ hasText: "Explore tools" }).click();
+    await page.locator("summary").filter({ hasText: "Menu" }).click();
     const current = page.locator('nav:visible a[aria-current="page"]');
     assert.equal(await current.innerText(), "Catalogue audit");
     await page.emulateMedia({ colorScheme: "light" });
