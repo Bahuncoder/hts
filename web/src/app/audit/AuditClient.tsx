@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PageHeader } from "@/components/PageHeader";
 import { saveCatalogueAction } from "@/lib/actions";
 import { AUDIT_COLUMNS, auditExportRow, toCsv } from "@/lib/csv";
 import { projectLine, type AuditLine } from "@/lib/auditModel";
@@ -310,15 +311,23 @@ export default function AuditClient({
 
   const preflight = parsed?.ok ? parsed : null;
 
+  // After a run the page is about the results: the title alone, not the
+  // introduction and the steps, so the products start higher on the screen.
+  const compact = Boolean(run) && !editing;
   return (
     <div className="space-y-6">
-      <ol className="workflow-steps" aria-label="Audit workflow">
+      {compact ? (
+        <h1 className="serif text-[30px] tracking-tight leading-tight">Catalogue audit</h1>
+      ) : (
+        <PageHeader eyebrow="Your import workspace" title="Catalogue audit" description="Turn your product list into a clear picture of duty exposure. Import a CSV, review the estimates, then save the codes you want to monitor." />
+      )}
+      {compact ? null : <ol className="workflow-steps" aria-label="Audit workflow">
         {["Import your products", "Review the estimates", "Save and monitor"].map((label, index) => (
           <li key={label} className="workflow-step" aria-current={(run ? 1 : 0) === index ? "step" : undefined}>
             <span>{index + 1}</span><span>{label}</span>
           </li>
         ))}
-      </ol>
+      </ol>}
       {signedIn && draft ? (
         <DraftNotice draft={draft} onRestore={restoreDraft} onDiscard={clearDraft} />
       ) : null}
@@ -617,7 +626,7 @@ export default function AuditClient({
             inputs={run.inputs}
           />
 
-          <div className="flex flex-wrap items-end gap-3 border-t pt-5 border-border">
+          <div id="save-results" className="flex scroll-mt-6 flex-wrap items-end gap-3 border-t pt-5 border-border">
             {signedIn ? (
               <>
                 <label className="flex flex-col gap-1.5">
