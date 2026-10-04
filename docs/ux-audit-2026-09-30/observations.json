@@ -1,0 +1,19 @@
+[
+  {
+    "refundSignedOutDestination": "http://127.0.0.1:3511/login"
+  },
+  {
+    "savedSearchInputs": 0,
+    "savedPageHeight": 7939
+  },
+  {
+    "reviewRows": 100,
+    "decisionY": 5723.296875,
+    "reviewPageHeight": 6325,
+    "reviewSearchInputs": 0
+  },
+  {
+    "mobileSavedPageHeight": 9167,
+    "mobileTableWidth": 820
+  }
+]
