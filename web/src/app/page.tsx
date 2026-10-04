@@ -1,15 +1,8 @@
 import Link from "next/link";
 import { getHealth } from "@/lib/api";
 import DutyExampleCard from "@/components/DutyExampleCard";
-import ToolsGrid from "@/components/ToolsGrid";
 
 export const revalidate = 900;
-
-const tools = [
-  { step: "01", title: "Find your product code", description: "Describe your goods in plain words. Compare HTS candidates with the CBP rulings that support them.", href: "/classify", action: "Classify a product" },
-  { step: "02", title: "Understand the duty", description: "See base duty, trade remedies, and fees together, with the assumptions behind your estimate.", href: "/calculator", action: "Calculate duty" },
-  { step: "03", title: "Review your whole catalogue", description: "Import your product list, focus on the lines that need attention, and save your codes to monitor.", href: "/audit", action: "Audit a catalogue" },
-];
 
 export default async function Home() {
   const health = await getHealth();
@@ -51,19 +44,17 @@ export default async function Home() {
 
       <section aria-labelledby="start-title" className="grid gap-4 md:grid-cols-2">
         <h2 id="start-title" className="sr-only">Where to start</h2>
-        <Link href="/classify" className="panel p-6 hover:border-accent">
+        <Link href="/classify" className="tool-card">
           <p className="eyebrow">One product</p>
           <p className="serif mt-2 text-2xl tracking-tight">Start with its HTS code</p>
           <p className="mt-2 text-sm leading-relaxed text-muted">Describe it, compare the candidate codes, then estimate its duty.</p>
         </Link>
-        <Link href="/audit" className="panel p-6 hover:border-accent">
+        <Link href="/audit" className="tool-card">
           <p className="eyebrow">A product spreadsheet</p>
           <p className="serif mt-2 text-2xl tracking-tight">Audit your whole list</p>
           <p className="mt-2 text-sm leading-relaxed text-muted">Paste or upload it, check the products that need attention, and save the evidence.</p>
         </Link>
       </section>
-
-      <ToolsGrid heading="A clearer way to work." tools={tools} />
 
       <div className="relative left-1/2 right-1/2 mx-[-50vw] w-screen bg-deep">
         <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">

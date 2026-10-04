@@ -278,6 +278,12 @@ export default function AuditResults({
             <>All <span className="mono">{counts.submitted.toLocaleString()}</span> products are priced and complete</>
           )}
         </p>
+        <p className="text-[15px]">
+          Estimated duty and fees <span className="mono font-medium">{money(summary.duty)}</span>
+          <span className="ml-2 text-[13px] text-muted font-sans">
+            {partial ? "partial: products that need attention are not in this figure" : "complete"}
+          </span>
+        </p>
         {unresolved > 0 ? (
           <button
             type="button"
@@ -290,16 +296,10 @@ export default function AuditResults({
           </button>
         ) : null}
       </div>
-      <p className="text-[15px] font-medium" data-testid="reconciliation">
-        Submitted <span className="mono">{counts.submitted.toLocaleString()}</span>
-        {" · "}Ready <span className="mono">{counts.ready.toLocaleString()}</span>
-        {" · "}Needs attention <span className="mono">{unresolved.toLocaleString()}</span>
-      </p>
-      <p className="-mt-3 text-[13px] text-muted">
-        Ready means priced, complete, and nothing left to confirm.
-        {unresolved > 0
-          ? ` Needs attention is every other line: ${counts.review.toLocaleString()} priced but to be confirmed, and ${counts.failed.toLocaleString()} that could not be priced.`
-          : " Every line is priced and complete."}
+      <p className="text-[13px] text-muted" data-testid="reconciliation">
+        <span className="mono">{counts.submitted.toLocaleString()}</span> submitted ·{" "}
+        <span className="mono">{counts.ready.toLocaleString()}</span> ready ·{" "}
+        <span className="mono">{unresolved.toLocaleString()}</span> need attention
       </p>
 
       {summary.truncated ? (
@@ -338,8 +338,45 @@ export default function AuditResults({
         <div className="panel px-5 py-10 text-center"><p className="font-medium">No products match this view</p><p className="mt-2 text-sm text-muted">Try a different search or show all review statuses.</p><button type="button" onClick={() => { setQuery(""); setFilter("all"); setPage(0); }} className="btn btn-secondary mt-5">Clear search and filters</button></div>
       ) : (
         <div className="panel overflow-hidden">
-          <p className="border-b border-border px-4 py-2 text-xs text-muted md:hidden">Scroll across to see every column. Open Details to review a product.</p>
-          <div className="scroll-x relative" tabIndex={0} role="region" aria-label="Audited products">
+          <div className="space-y-3 md:hidden" aria-label="Audited products">
+            {slice.map(({ line: l, i }) => {
+              const expanded = open.has(i);
+              const detailId = `line-card-detail-${i}`;
+              const value = l.entered_value ?? (inputs[i] > 0 ? inputs[i] : undefined);
+              return (
+                <div key={i} className="panel min-w-0 break-words p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="mono text-[12px] text-faint">Row {l.row}{l.country ? ` · ${l.country}` : ""}</p>
+                      <p className="mono mt-1 text-[14px] font-medium">{l.sku || "no SKU"}</p>
+                      <p className="text-[14px] text-muted">{l.description || "—"}</p>
+                    </div>
+                    <div className="shrink-0"><StatusChip status={l.status} /></div>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
+                    <div><dt className="text-faint">HTS</dt><dd className="mono">{l.hts ?? "—"}</dd></div>
+                    <div><dt className="text-faint">Value</dt><dd className="mono">{money(value)}</dd></div>
+                    <div><dt className="text-faint">Duty</dt><dd className="mono">{l.duty !== undefined ? money(l.duty) : "—"}</dd></div>
+                  </dl>
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={detailId}
+                    onClick={() => toggle(i)}
+                    className="mt-3 inline-flex min-h-[44px] items-center text-[14px] font-medium text-accent hover:underline"
+                  >
+                    {expanded ? "Hide details" : "Details"}<span className="sr-only"> for row {l.row}</span>
+                  </button>
+                  {expanded ? (
+                    <div id={detailId} className="mt-3 border-t border-hair pt-3">
+                      <Detail line={l} submitted={inputs[i] ?? 0} />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+          <div className="scroll-x relative hidden md:block" tabIndex={0} role="region" aria-label="Audited products table">
           <table className="data-table w-full min-w-[520px] text-[14px] md:min-w-[860px]">
             <caption className="sr-only">
               Audited lines, {shown.length} shown, page {at + 1} of {pages}
