@@ -46,7 +46,7 @@ export default async function ClassifyPage({
         {q ? <Link href="/classify" className="font-medium text-accent hover:underline">Start over</Link> : null}
       </div>
 
-      <form action="/classify" className="panel p-5 sm:p-7" role="search">
+      <form action="/classify" className="panel p-5 sm:p-6" role="search">
         <label htmlFor="q" className="block text-[13px] font-medium">
           Product description
         </label>

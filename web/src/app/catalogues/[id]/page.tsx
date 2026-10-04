@@ -47,7 +47,7 @@ export default async function CataloguePage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ show?: string; page?: string; q?: string; sort?: string; repriced?: string; changed?: string; unchanged?: string; repriceError?: string }>;
+  searchParams: Promise<{ show?: string; page?: string; q?: string; sort?: string; saved?: string; repriced?: string; changed?: string; unchanged?: string; repriceError?: string }>;
 }) {
   const { id } = await params;
   const viewer = await requireViewer(`/catalogues/${id}`);
@@ -121,10 +121,6 @@ export default async function CataloguePage({
             {watches === 1 ? "code" : "codes"} watched
             {legacy ? "" : " · lines that could not be priced are kept here but not watched"}
           </p>
-          <p className="text-[13px] text-faint" data-testid="history">
-            Saved {when(cat.created_at)}
-            {cat.updated_at !== cat.created_at ? ` · last changed ${when(cat.updated_at)}` : ""}
-          </p>
         </div>
         {/* One primary action: the human review that is waiting. Everything
             else is secondary, so the eye has a single place to go. */}
@@ -151,6 +147,14 @@ export default async function CataloguePage({
         </div>
       </div>
 
+      {sp.saved ? (
+        <p role="status" className="border-l-2 py-2 pl-3 text-[14px] border-accent bg-accent-soft text-accent">
+          Saved as <strong>{cat.name}</strong>.{" "}
+          {watches === 0
+            ? "None of its lines has a code that can be watched yet."
+            : `${watches === 1 ? "Its one code is" : `Its ${watches.toLocaleString()} codes are`} now watched.`}
+        </p>
+      ) : null}
       {sp.repriced ? (
         <p role="status" className="border-l-2 py-2 pl-3 text-[14px] border-accent bg-accent-soft text-accent">
           Re-priced against today&rsquo;s reference data. {sp.changed} of{" "}
@@ -164,7 +168,6 @@ export default async function CataloguePage({
         </p>
       ) : null}
 
-      <ReviewWorkspace items={cat.items} />
       {legacy ? (
         <p className="rounded border-l-2 py-2 pl-3 text-[14px] border-caution bg-caution-soft text-caution-ink">
           <strong>{LEGACY_LABEL}.</strong> This catalogue was saved when only priced lines were kept, so it
@@ -186,6 +189,10 @@ export default async function CataloguePage({
       <details className="border-t border-border pt-4">
         <summary className="cursor-pointer text-[14px] font-medium text-accent">Totals, refund estimate and assumptions</summary>
         <div className="mt-4 space-y-5">
+          <p className="text-[13px] text-faint" data-testid="history">
+            Saved {when(cat.created_at)}
+            {cat.updated_at !== cat.created_at ? ` · last changed ${when(cat.updated_at)}` : ""}
+          </p>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
               label="Entered value"
@@ -286,6 +293,8 @@ export default async function CataloguePage({
           }))}
         />
       )}
+
+      <ReviewWorkspace items={cat.items} />
 
       {pages > 1 ? (
         <nav aria-label="Pages" className="flex flex-wrap items-center gap-3 text-[13px]">

@@ -4,7 +4,7 @@ import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { Lockup } from "@/components/Logo";
 import { ThemeSelect } from "@/components/ThemeSelect";
 import { KeyShortcuts } from "@/components/KeyShortcuts";
-import { NavLink, SignedOutLinks, SiteNav } from "@/components/SiteNav";
+import { NavLink, SignedOutLinks, SiteNav, type NavGroup } from "@/components/SiteNav";
 import { currentViewer } from "@/lib/auth";
 import "./globals.css";
 
@@ -43,17 +43,29 @@ const newsreader = Newsreader({
   variable: "--font-newsreader",
 });
 
-const NAV = [
-  { href: "/classify", label: "Classify" },
-  { href: "/calculator", label: "Duty calculator" },
-  { href: "/changes", label: "Tariff changes" },
-  { href: "/audit", label: "Catalogue audit" },
-];
-
-const SIGNED_IN_NAV = [
-  { href: "/catalogues", label: "Catalogues" },
-  { href: "/alerts", label: "Alerts" },
-];
+/** Navigation follows the work. Signed in, Catalogues comes first, since that
+ *  is where a review is waiting. Review itself is reached from a catalogue,
+ *  because each review belongs to one. */
+function navGroups(signedIn: boolean): NavGroup[] {
+  return [
+    ...(signedIn ? [{ title: "Work", items: [{ href: "/catalogues", label: "Catalogues" }] }] : []),
+    {
+      title: "Analyze",
+      items: [
+        { href: "/classify", label: "Classify" },
+        { href: "/calculator", label: "Duty calculator" },
+        { href: "/audit", label: "Catalogue audit" },
+      ],
+    },
+    {
+      title: "Monitor",
+      items: [
+        { href: "/changes", label: "Tariff changes" },
+        ...(signedIn ? [{ href: "/alerts", label: "Alerts" }] : []),
+      ],
+    },
+  ];
+}
 
 export default async function RootLayout({
   children,
@@ -86,10 +98,8 @@ export default async function RootLayout({
             <Link href="/" aria-label="HTSDesk home">
               <Lockup />
             </Link>
-            <SiteNav
-              items={[...NAV, ...(viewer ? SIGNED_IN_NAV : [])]}
-            />
-            <div className="ml-auto flex items-center gap-4 text-[14px]">
+            <SiteNav groups={navGroups(Boolean(viewer))} />
+            <div role="group" aria-label="Account and appearance" className="ml-auto flex items-center gap-4 text-[14px]">
               <ThemeSelect />
               {viewer ? (
                 <>

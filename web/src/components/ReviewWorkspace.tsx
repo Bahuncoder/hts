@@ -8,8 +8,8 @@ export default function ReviewWorkspace({ items }: { items: Pick<CatalogueItem, 
     <section className="panel space-y-2 p-5" aria-label="Human review">
       <h2 className="serif text-xl">Human review</h2>
       <p className="text-[13px] text-muted">
-        A calculation is not a sign-off. Approve, request changes, reject or assign each of the{" "}
-        {items.length.toLocaleString()} lines separately from what the engine computed.
+        {items.length.toLocaleString()} {items.length === 1 ? "line" : "lines"} can be approved, sent back or
+        rejected on the review page, separately from the estimate.
       </p>
     </section>
   );

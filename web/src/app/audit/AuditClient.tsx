@@ -305,7 +305,7 @@ export default function AuditClient({
         return;
       }
       clearDraft(); // it has served its purpose; do not leave supplier data behind
-      router.push(`/catalogues/${res.id}`);
+      router.push(`/catalogues/${res.id}?saved=1`);
     } catch {
       setSaveError("Could not save just now. Your results are still here; try again.");
     } finally {

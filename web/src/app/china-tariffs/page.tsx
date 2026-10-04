@@ -51,7 +51,7 @@ export default async function ChinaTariffsPage() {
         />
       </section>
 
-      <section className="panel space-y-4 p-6 sm:p-8" aria-labelledby="refund-title">
+      <section className="panel space-y-4 p-6" aria-labelledby="refund-title">
         <p className="eyebrow" style={{ color: "var(--recover)" }}>Struck-down IEEPA duty</p>
         <h2 id="refund-title" className="serif text-3xl tracking-tight">Already paid IEEPA duty? Check it.</h2>
         <p className="max-w-2xl text-[15px] leading-relaxed text-muted">

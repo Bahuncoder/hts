@@ -1,18 +1,14 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { nextQuery, safeNext } from "@/lib/next";
 
-type Item = { href: string; label: string };
-
-/** How the mobile menu groups the destinations. Account actions live in the
- *  header, next to the account link. */
-const MENU_GROUPS: { title: string; hrefs: string[] }[] = [
-  { title: "Analyze", hrefs: ["/classify", "/calculator", "/audit"] },
-  { title: "Monitor", hrefs: ["/changes", "/alerts"] },
-  { title: "Work", hrefs: ["/catalogues"] },
-];
+export type NavItem = { href: string; label: string };
+/** A group of destinations, in the order a person works: the thing they
+ *  return to first, then the tools, then what watches for changes. */
+export type NavGroup = { title: string; items: NavItem[] };
 
 function isActive(pathname: string | null, href: string): boolean {
   if (!pathname) return false;
@@ -46,18 +42,23 @@ export function NavLink({
 /** Primary navigation. At wide desktop sizes it is an inline row. Below that it folds
  *  into a <details> menu, which is keyboard-operable with no script. The menu
  *  is keyed by pathname so it closes itself when a link is followed. */
-export function SiteNav({ items }: { items: Item[] }) {
+export function SiteNav({ groups }: { groups: NavGroup[] }) {
   const pathname = usePathname();
   return (
     <>
       <nav
         aria-label="Main"
-        className="hidden gap-1 xl:flex"
+        className="hidden items-center gap-1 xl:flex"
       >
-        {items.map((n) => (
-          <NavLink key={n.href} href={n.href}>
-            {n.label}
-          </NavLink>
+        {groups.map((g, gi) => (
+          <Fragment key={g.title}>
+            {gi > 0 ? <span aria-hidden="true" className="mx-2 h-5 w-px bg-border" /> : null}
+            {g.items.map((n) => (
+              <NavLink key={n.href} href={n.href}>
+                {n.label}
+              </NavLink>
+            ))}
+          </Fragment>
         ))}
       </nav>
 
@@ -69,14 +70,13 @@ export function SiteNav({ items }: { items: Item[] }) {
           Menu <span aria-hidden="true" className="float-right">＋</span>
         </summary>
         <nav aria-label="Main" className="mt-2 space-y-4">
-          {MENU_GROUPS.map((g) => {
-            const groupItems = items.filter((n) => g.hrefs.includes(n.href));
-            if (!groupItems.length) return null;
+          {groups.map((g) => {
+            if (!g.items.length) return null;
             return (
               <div key={g.title}>
                 <p className="px-1 text-[13px] font-medium text-muted">{g.title}</p>
                 <ul className="flex flex-col">
-                  {groupItems.map((n) => (
+                  {g.items.map((n) => (
                     <li key={n.href}>
                       <NavLink href={n.href} className="block py-2">
                         {n.label}

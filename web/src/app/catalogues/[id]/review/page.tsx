@@ -161,8 +161,9 @@ export default async function Review({
         </p>
         <h1 className="serif text-3xl tracking-tight">Review {cat.name}</h1>
         <p className="text-[14px] text-muted">
-          A calculation is not a sign-off. Record who checked each product, what they decided, and why —
-          separate from what the engine computed.
+          Two separate states. <strong className="font-medium text-ink">Estimate</strong> says whether the duty
+          figure is complete. <strong className="font-medium text-ink">Review</strong> says whether a person has
+          checked the line. A complete estimate can still be waiting for review.
         </p>
       </div>
 

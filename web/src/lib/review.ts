@@ -18,11 +18,13 @@ import { MAX_REVIEW_EVENTS, MAX_REVIEW_NOTE } from "./reviewModel";
 export type ApprovalStatus = "pending" | "approved" | "changes_requested" | "rejected";
 export const APPROVAL_STATUSES: readonly ApprovalStatus[] =
   ["pending", "approved", "changes_requested", "rejected"];
+/** The human review state, named the same way everywhere. It is separate from
+ *  the estimate state (Estimate: Complete / Needs information). */
 export const APPROVAL_LABEL: Record<ApprovalStatus, string> = {
-  pending: "Pending review",
-  approved: "Approved",
-  changes_requested: "Changes requested",
-  rejected: "Rejected",
+  pending: "Review: Pending",
+  approved: "Review: Approved",
+  changes_requested: "Review: Changes requested",
+  rejected: "Review: Rejected",
 };
 export const isApprovalStatus = (v: unknown): v is ApprovalStatus =>
   typeof v === "string" && (APPROVAL_STATUSES as readonly string[]).includes(v);

@@ -222,7 +222,7 @@ export default async function CalculatorPage({
         <p className="mt-0.5 text-[13px] text-muted">Enter it below along with origin and value.</p>
       </div>
 
-      <form action="/calculator" className="panel space-y-6 p-5 sm:p-7">
+      <form action="/calculator" className="panel space-y-6 p-5 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field
             id="hts"

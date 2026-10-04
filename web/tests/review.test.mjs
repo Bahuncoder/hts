@@ -121,7 +121,7 @@ try {
     await page.waitForTimeout(800);
     const body = await page.locator("body").innerText();
     assert.match(body, /Approved \(1\)/, "the summary count did not move");
-    assert.match(body, /marked it Approved/);
+    assert.match(body, /marked it Review: Approved/);
     assert.match(body, /Checked against the supplier invoice\./);
     await ctx.close();
   });
@@ -138,7 +138,7 @@ try {
     await page.goto(`${BASE}/catalogues/cat/review`, { waitUntil: "networkidle" });
     body = await page.locator("body").innerText();
     assert.match(body, /sara@example\.test/, "the assignee did not show in the row");
-    const value = await page.locator('a:has-text("Review")').getAttribute("href");
+    const value = await page.locator('table a:has-text("Review")').first().getAttribute("href");
     assert.ok(value?.includes("item=item1"));
     await ctx.close();
   });

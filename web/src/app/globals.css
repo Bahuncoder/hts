@@ -193,7 +193,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .workspace-main { min-height: 65vh; }
 .eyebrow { font: 500 11px/1.5 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; padding-bottom: 26px; border-bottom: 1px solid var(--border); }
-.page-title { margin-top: 10px; font-family: var(--serif); font-size: clamp(32px, 4vw, 46px); font-weight: 400; letter-spacing: -.035em; line-height: 1.12; text-wrap: balance; }
+.page-title { margin-top: 10px; font-family: var(--serif); font-size: clamp(28px, 3.2vw, 32px); font-weight: 400; letter-spacing: -.035em; line-height: 1.12; text-wrap: balance; }
 .page-description { margin-top: 14px; max-width: 640px; font-size: 15px; line-height: 1.7; color: var(--muted); }
 .panel { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); }
 /* A deliberately dark marketing surface (the --deep trio above), not a
