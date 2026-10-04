@@ -18,7 +18,8 @@
     "test:apikeys": "node tests/apikeys.test.mjs",
     "test:refund-check": "node tests/refundCheck.test.mjs",
     "test:auth-transaction": "node tests/auth-transaction.test.mjs",
-    "test:feature-journey": "node tests/feature-journey.test.mjs"
+    "test:feature-journey": "node tests/feature-journey.test.mjs",
+    "test:a11y": "node tests/a11y.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",

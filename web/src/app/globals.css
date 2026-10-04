@@ -167,6 +167,10 @@ body {
    were not tabular. Same rule as .mono without the typeface change. */
 .tabular { font-variant-numeric: tabular-nums; }
 
+
+/* A link inside running text is distinguished by underline, not colour alone. */
+p > a:not(.btn):not(.nav-item), li > a:not(.btn):not(.nav-item) { text-decoration: underline; text-underline-offset: 3px; }
+
 /* Keyboard focus is always visible. This recolours the browser's own focus
    indicator for contrast on both themes; it never removes it. <main> is only
    focusable so the skip link can land there, so it is the one exception. */

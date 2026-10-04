@@ -338,7 +338,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
 
           <section className="space-y-3">
             <h2 className="text-xl font-semibold tracking-tight">Duty stack</h2>
-            <div className="scroll-x">
+            <div className="scroll-x" tabIndex={0} role="region" aria-label="Duty stack table">
               <table className="w-full min-w-[520px] text-[14px]">
                 <caption className="sr-only">
                   Duty and fee components for HTS {d.hts} from {country} on a
