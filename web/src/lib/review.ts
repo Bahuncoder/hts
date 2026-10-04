@@ -29,7 +29,7 @@ export const isApprovalStatus = (v: unknown): v is ApprovalStatus =>
 
 export type ReviewEvent = {
   id: string;
-  kind: "comment" | "approval" | "assignment";
+  kind: "comment" | "approval" | "assignment" | "correction";
   actor: string;
   approval_status: ApprovalStatus | null;
   assigned_to: string | null;

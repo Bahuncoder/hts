@@ -8,8 +8,12 @@ import {
   isApprovalStatus, itemHistory, type ApprovalStatus,
 } from "@/lib/review";
 import { addCommentAction, assignItemAction, setApprovalAction } from "@/lib/reviewActions";
-import { Card } from "@/components/ui";
-import { money2 } from "@/lib/api";
+import { getDraft } from "@/lib/correction";
+import { confirmCorrectionAction, proposeCorrectionAction } from "@/lib/correctionActions";
+import { Badge, Card, HtsLink } from "@/components/ui";
+import { classify, money2 } from "@/lib/api";
+import { allow, CLASSIFY_LIMIT } from "@/lib/budget";
+import { ORIGINS } from "@/lib/origins";
 import { MAX_REVIEW_NOTE } from "@/lib/reviewModel";
 import EvidenceSnapshot from "@/components/EvidenceSnapshot";
 
@@ -42,7 +46,10 @@ export default async function Review({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ item?: string; notice?: string; q?: string; page?: string; status?: string }>;
+  searchParams: Promise<{
+    item?: string; notice?: string; q?: string; page?: string; status?: string;
+    compare?: string; pick?: string; proposal?: string; error?: string;
+  }>;
 }) {
   const { id } = await params;
   const viewer = await requireViewer(`/catalogues/${id}/review`);
@@ -108,10 +115,40 @@ export default async function Review({
     }
   }
 
+  // A pending correction awaiting confirmation for the open item, if any --
+  // expired or not-found drafts fall back to the edit form below rather than
+  // a dead end.
+  const draft = open && sp.proposal ? await getDraft(viewer.account.id, open.item.id, sp.proposal) : null;
+
+  // "Compare candidates" only makes sense while editing, not while a draft
+  // from a previous attempt is already awaiting confirmation.
+  const comparing = !!(open && !draft && sp.compare);
+  const candidateWait = comparing
+    ? await allow("classify", `account:${viewer.account.id}`, CLASSIFY_LIMIT) : null;
+  const candidateOutcome = comparing && candidateWait === null && open
+    ? await classify(open.item.description) : null;
+
+  // No #row-<id> anchor here, unlike openHref: this always targets the item
+  // already open, and a fragment matching an id already on the page causes
+  // Next's Link to treat the click as an in-page scroll and skip the
+  // navigation entirely -- confirmed empirically, not merely suspected.
+  const correctionHref = (extra: Record<string, string> = {}) => {
+    if (!open) return "";
+    const qp = new URLSearchParams();
+    if (sp.q) qp.set("q", sp.q);
+    if (statusFilter !== "all") qp.set("status", statusFilter);
+    if (at > 1) qp.set("page", String(at));
+    qp.set("item", open.item.id);
+    for (const [k, v] of Object.entries(extra)) qp.set(k, v);
+    return `/catalogues/${cat.id}/review?${qp.toString()}`;
+  };
+
   return (
     <div className="space-y-6">
       {sp.notice === "conflict" && <p role="alert" className="text-caution-ink">The review could not be saved. This view has been refreshed: check for a newer decision. Unclassified or incomplete lines cannot be approved.</p>}
       {sp.notice === "queue_complete" && <p role="status" className="text-accent">Nice work — every item in this view has been reviewed.</p>}
+      {sp.notice === "corrected" && <p role="status" className="text-accent">Correction applied. Review the new figures before approving.</p>}
+      {sp.error && <p role="alert" className="text-caution-ink">{sp.error}</p>}
       <div className="space-y-1">
         <p className="text-[13px] text-muted">
           <Link href={`/catalogues/${cat.id}`} className="hover:underline">{cat.name}</Link> · Human review
@@ -242,6 +279,118 @@ export default async function Review({
                 </div>
 
                 <EvidenceSnapshot json={open.item.evidence_json} />
+
+                <details className="rounded border border-rule p-4">
+                  <summary className="cursor-pointer text-[13px] font-medium text-accent">Correct this line</summary>
+                  <div className="mt-4 space-y-4">
+                    {draft ? (
+                      <div className="space-y-4">
+                        <p className="text-[13px] text-muted">Recalculated — review the change before confirming.</p>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px]">
+                          <div><p className="lbl">HTS</p><p className="mono mt-1">{open.item.hts ?? "Unclassified"} → {draft.line.hts ?? "Unclassified"}</p></div>
+                          <div><p className="lbl">Country</p><p className="mt-1">{open.item.country} → {draft.overrides.country ?? open.item.country}</p></div>
+                          <div><p className="lbl">Value</p><p className="mono mt-1">{money2(open.item.value)} → {money2(draft.overrides.value ?? open.item.value)}</p></div>
+                          <div><p className="lbl">Quantity</p><p className="mono mt-1">{open.item.quantity ?? "—"} → {draft.overrides.quantity ?? open.item.quantity ?? "—"}</p></div>
+                          <div><p className="lbl">Status</p><p className="mt-1">{open.item.status ? STATUS_LABEL[open.item.status] : LEGACY_LABEL} → {STATUS_LABEL[draft.line.status]}</p></div>
+                          <div><p className="lbl">Duty</p><p className="mono mt-1">{open.item.duty !== null ? money2(open.item.duty) : "Unpriced"} → {draft.line.duty !== undefined && draft.line.duty !== null ? money2(draft.line.duty) : "Unpriced"}</p></div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <form action={confirmCorrectionAction}>
+                            <input type="hidden" name="review_version" value={open.item.review_version} />
+                            <input type="hidden" name="item_id" value={open.item.id} />
+                            <input type="hidden" name="catalogue_id" value={cat.id} />
+                            <input type="hidden" name="draft_id" value={sp.proposal} />
+                            <input type="hidden" name="q" value={sp.q ?? ""} />
+                            <input type="hidden" name="status" value={statusFilter} />
+                            <input type="hidden" name="page" value={String(at)} />
+                            <button type="submit" className="btn btn-primary">Confirm correction</button>
+                          </form>
+                          <Link href={correctionHref()} className="btn btn-secondary">Discard</Link>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sp.proposal ? <p className="text-[13px] text-caution-ink">That correction has expired or could not be found. Recalculate again.</p> : null}
+                        <form action={proposeCorrectionAction} className="flex flex-wrap items-end gap-3">
+                          <input type="hidden" name="review_version" value={open.item.review_version} />
+                          <input type="hidden" name="item_id" value={open.item.id} />
+                          <input type="hidden" name="catalogue_id" value={cat.id} />
+                          <input type="hidden" name="q" value={sp.q ?? ""} />
+                          <input type="hidden" name="status" value={statusFilter} />
+                          <input type="hidden" name="page" value={String(at)} />
+                          <label className="min-w-[10rem] text-[13px]">
+                            HTS code
+                            <input name="hts" defaultValue={sp.pick ?? open.item.hts ?? ""} className="mono field-control mt-1 block w-full" placeholder="e.g. 6109.10.00.12" />
+                          </label>
+                          <label className="min-w-[10rem] text-[13px]">
+                            Country of origin
+                            <input name="country" defaultValue={open.item.country} list="correction-origins" autoComplete="off" className="field-control mt-1 block w-full" />
+                            <datalist id="correction-origins">
+                              {ORIGINS.map((o) => <option key={o} value={o} />)}
+                            </datalist>
+                          </label>
+                          <label className="min-w-[8rem] text-[13px]">
+                            Entered value (USD)
+                            <input name="value" defaultValue={open.item.value} className="mono field-control mt-1 block w-full" />
+                          </label>
+                          <label className="min-w-[8rem] text-[13px]">
+                            Quantity
+                            <input name="quantity" defaultValue={open.item.quantity ?? ""} className="mono field-control mt-1 block w-full" />
+                          </label>
+                          <label className="min-w-[8rem] text-[13px]">
+                            Unit
+                            <input name="quantity_unit" defaultValue={open.item.quantity_unit ?? ""} className="field-control mt-1 block w-full" placeholder="e.g. kg" />
+                          </label>
+                          <button type="submit" className="btn btn-primary">Recalculate</button>
+                        </form>
+
+                        <div>
+                          <Link href={sp.compare ? correctionHref() : correctionHref({ compare: "1" })} className="text-[13px] font-medium text-accent hover:underline">
+                            {sp.compare ? "Hide candidates" : "Compare candidates"}
+                          </Link>
+                          {comparing ? (
+                            candidateWait !== null ? (
+                              <p className="mt-3 text-[13px] text-caution-ink">Too many lookups from this account. Try again in {candidateWait} seconds.</p>
+                            ) : !candidateOutcome?.ok ? (
+                              <p className="mt-3 text-[13px] text-caution-ink">Could not fetch candidates. Try again shortly.</p>
+                            ) : candidateOutcome.data.candidates.length === 0 ? (
+                              <p className="mt-3 text-[13px] text-muted">No candidates matched this description.</p>
+                            ) : (
+                              <div className="mt-3 space-y-3">
+                                {candidateOutcome.data.candidates.map((c, i) => (
+                                  <Card key={c.hts}>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                      <span className="text-[13px] text-muted">#{i + 1}</span>
+                                      <HtsLink code={c.hts} />
+                                      <Badge tone={c.confidence === "low" ? "neutral" : "warn"}>{c.confidence} confidence</Badge>
+                                      {c.general_rate ? <span className="tabular ml-auto text-[13px] text-muted">MFN {c.general_rate}</span> : null}
+                                    </div>
+                                    {c.description ? <p className="mt-3 text-[14px]">{c.description}</p> : null}
+                                    {c.rulings?.length ? (
+                                      <div className="mt-3 space-y-1">
+                                        {c.rulings.map((r) => (
+                                          <div key={r.ruling} className="text-[13px]">
+                                            <a href={r.url ?? undefined} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline text-accent">{r.ruling}</a>{" "}
+                                            {r.revoked ? <Badge tone="bad">revoked</Badge> : null}{" "}
+                                            <span className="text-muted">{r.subject}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                    <div className="mt-4 border-t border-border pt-3">
+                                      <Link href={correctionHref({ compare: "1", pick: c.hts })} className="btn btn-secondary">Use this code</Link>
+                                    </div>
+                                  </Card>
+                                ))}
+                              </div>
+                            )
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </details>
+
                 <form action={setApprovalAction} className="flex flex-wrap items-end gap-3">
                   <input type="hidden" name="review_version" value={open.item.review_version} />
                   <input type="hidden" name="item_id" value={open.item.id} />
@@ -292,7 +441,9 @@ export default async function Review({
                             ? <>marked it <span className={TONE[event.approval_status]}>{APPROVAL_LABEL[event.approval_status]}</span></>
                             : event.kind === "assignment"
                               ? <>{event.assigned_to ? <>assigned it to <strong>{event.assigned_to}</strong></> : "unassigned it"}</>
-                              : "commented"}
+                              : event.kind === "correction"
+                                ? "recorded a correction"
+                                : "commented"}
                           {event.comment ? <span className="block pl-1 text-ink">“{event.comment}”</span> : null}
                         </li>
                       ))}
