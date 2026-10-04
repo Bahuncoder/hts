@@ -91,7 +91,7 @@ try {
     await page.goto(`${app.base}/audit`);
     await page.getByLabel("Your catalogue", { exact: true }).fill(csv);
     await page.getByRole("button", { name: "Run audit", exact: true }).click();
-    await page.getByRole("heading", { name: "Review the details." }).waitFor();
+    await page.locator("#results-heading").waitFor();
     assert.match(await page.locator("main").innerText(), /products need attention/);
     await page.getByRole("button", { name: /^Review the \d+ to confirm$/ }).click();
     assert.equal(await page.getByRole("button", { name: /^Needs review/ }).getAttribute("aria-pressed"), "true");
@@ -100,7 +100,7 @@ try {
     await page.goto(`${app.base}/audit`);
     await page.getByLabel("Your catalogue", { exact: true }).fill(csv);
     await page.getByRole("button", { name: "Run audit", exact: true }).click();
-    await page.getByRole("heading", { name: "Review the details." }).waitFor();
+    await page.locator("#results-heading").waitFor();
     assert.equal(await rows().count(), 3);
     await page.getByLabel("Sort results").selectOption("duty");
     assert.match(await rows().first().innerText(), /LARGE/);
@@ -113,6 +113,7 @@ try {
     await page.getByRole("button", { name: /^Needs review \(/ }).click();
     assert.equal(await rows().count(), 1);
     await rows().first().getByRole("button", { name: /Details/ }).click();
+    await page.locator("tr.bg-sunk").getByText("Evidence and sources", { exact: true }).click();
     assert.match(await page.locator("tr.bg-sunk").innerText(), /scope verification/);
     await page.getByRole("button", { name: /^All \(/ }).click();
     await shot("audit-desktop");
@@ -124,7 +125,7 @@ try {
     assert.equal(await page.getByLabel("Your catalogue", { exact: true }).count(), 0, "the form is folded away");
     assert.equal(await page.getByRole("button", { name: "Run audit" }).count(), 0, "one Run button, only while editing");
     await page.evaluate(() => window.scrollTo(0, 0));
-    const heading = await page.getByRole("heading", { name: "Review the details." }).boundingBox();
+    const heading = await page.locator("#results-heading").boundingBox();
     assert.ok(heading.y < 700, `results heading starts at ${heading.y}px; it must be above a 1000px fold with room to read`);
     // Editing reopens it, filled, with Run reachable; Collapse folds it back.
     await bar.getByRole("button", { name: "Edit catalogue" }).click();

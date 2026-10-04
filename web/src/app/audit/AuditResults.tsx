@@ -112,7 +112,16 @@ const NEXT_STEP: Partial<Record<Status, { meaning: string; next: string }>> = {
   },
 };
 
-function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"
+      className={`ml-1 inline-block transition-transform ${open ? "rotate-180" : ""}`}>
+      <path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function Detail({ line }: { line: AuditLine }) {
   const uniq = (xs: string[], not: string[]) => [...new Set(xs)].filter((x) => x && !not.includes(x));
   const reasons = uniq([line.error ?? "", ...(line.review_reasons ?? [])], []);
   const incomplete = uniq(line.incomplete ?? [], reasons);
@@ -124,19 +133,6 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
 
   return (
     <div className="space-y-4 py-3 pl-1 pr-2 text-[13px]">
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-4">
-        <div><dt className="lbl">Row</dt><dd className="mono">{line.row}</dd></div>
-        <div><dt className="lbl">Origin</dt><dd>{line.country || "—"}</dd></div>
-        <div>
-          <dt className="lbl">Value</dt>
-          <dd className="mono">{line.entered_value !== undefined ? money(line.entered_value) : submitted > 0 ? `${money(submitted)} (as entered)` : "—"}</dd>
-        </div>
-        <div>
-          <dt className="lbl">Line duty, excl. MPF</dt>
-          <dd className="mono">{line.duty !== undefined ? money(line.duty) : "not priced"}</dd>
-        </div>
-      </dl>
-
       {failed ? (
         <p className="rounded border-l-2 py-1.5 pl-3 border-danger bg-caution-soft text-danger">
           This line has no figures and is not in the totals.
@@ -150,7 +146,11 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
         </div>
       ) : null}
 
-      <List title={failed ? "What went wrong" : "Why this needs review"} items={reasons} />
+      {failed ? <List title="What went wrong" items={reasons} /> : null}
+      <details className="rounded border border-rule p-3">
+        <summary className="cursor-pointer text-[14px] font-medium text-accent">Evidence and sources</summary>
+        <div className="mt-3 space-y-4">
+      {failed ? null : <List title="Why this needs review" items={reasons} />}
       <List title="Duty is understated because" items={incomplete} />
       <List title="Warnings" items={warnings} />
 
@@ -216,6 +216,8 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
           </ul>
         </div>
       ) : null}
+        </div>
+      </details>
     </div>
   );
 }
@@ -267,21 +269,22 @@ export default function AuditResults({
   return (
     <section className="space-y-5" aria-label="Audit results">
       <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border pt-7">
-        <div><p className="eyebrow">Your audit workspace</p><h2 className="serif mt-2 text-3xl tracking-tight">Review the details.</h2></div>
-        <span className="text-[13px] text-muted">Open a row to see what it means and what to do</span>
-      </div>
-      <div className="space-y-3">
-        <p className="serif text-2xl tracking-tight">
+        <h2 className="serif text-3xl tracking-tight" id="results-heading">
           {unresolved > 0 ? (
             <><span className="mono">{unresolved.toLocaleString()}</span> of <span className="mono">{counts.submitted.toLocaleString()}</span> products need attention</>
           ) : (
             <>All <span className="mono">{counts.submitted.toLocaleString()}</span> products are priced and complete</>
           )}
-        </p>
+        </h2>
+        <span className="text-[13px] text-muted">Open a row to see what it means and what to do</span>
+      </div>
+      <div className="space-y-3">
         <p className="text-[15px]">
           Estimated duty and fees <span className="mono font-medium">{money(summary.duty)}</span>
           <span className="ml-2 text-[13px] text-muted font-sans">
-            {partial ? "partial: products that need attention are not in this figure" : "complete"}
+            {partial
+              ? `includes ${counts.review.toLocaleString()} priced line${counts.review === 1 ? "" : "s"} still to confirm; leaves out ${counts.failed.toLocaleString()} that could not be priced. Lines marked incomplete may understate duty.`
+              : `covers all ${counts.submitted.toLocaleString()} products.`}
           </span>
         </p>
         {unresolved > 0 ? (
@@ -365,11 +368,11 @@ export default function AuditResults({
                     onClick={() => toggle(i)}
                     className="mt-3 inline-flex min-h-[44px] items-center text-[14px] font-medium text-accent hover:underline"
                   >
-                    {expanded ? "Hide details" : "Details"}<span className="sr-only"> for row {l.row}</span>
+                    {expanded ? "Hide details" : "Details"}<Chevron open={expanded} /><span className="sr-only"> for row {l.row}</span>
                   </button>
                   {expanded ? (
                     <div id={detailId} className="mt-3 border-t border-hair pt-3">
-                      <Detail line={l} submitted={inputs[i] ?? 0} />
+                      <Detail line={l} />
                     </div>
                   ) : null}
                 </div>
@@ -434,7 +437,7 @@ export default function AuditResults({
                             onClick={() => toggle(i)}
                             className="text-[12px] hover:underline text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                           >
-                            {expanded ? "Hide details" : "Details"}
+                            {expanded ? "Hide details" : "Details"}<Chevron open={expanded} />
                             <span className="sr-only"> for row {l.row}</span>
                           </button>
                         </div>
@@ -443,7 +446,7 @@ export default function AuditResults({
                     {expanded ? (
                       <tr id={detailId} className="border-b border-hair bg-sunk">
                         <td colSpan={7} className="px-2">
-                          <Detail line={l} submitted={inputs[i] ?? 0} />
+                          <Detail line={l} />
                         </td>
                       </tr>
                     ) : null}

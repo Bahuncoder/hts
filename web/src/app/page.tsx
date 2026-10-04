@@ -45,13 +45,11 @@ export default async function Home() {
       <section aria-labelledby="start-title" className="grid gap-4 md:grid-cols-2">
         <h2 id="start-title" className="sr-only">Where to start</h2>
         <Link href="/classify" className="tool-card">
-          <p className="eyebrow">One product</p>
-          <p className="serif mt-2 text-2xl tracking-tight">Start with its HTS code</p>
+          <p className="serif text-2xl tracking-tight">Find a code for one product <span aria-hidden="true">→</span></p>
           <p className="mt-2 text-sm leading-relaxed text-muted">Describe it, compare the candidate codes, then estimate its duty.</p>
         </Link>
         <Link href="/audit" className="tool-card">
-          <p className="eyebrow">A product spreadsheet</p>
-          <p className="serif mt-2 text-2xl tracking-tight">Audit your whole list</p>
+          <p className="serif text-2xl tracking-tight">Upload a product spreadsheet <span aria-hidden="true">→</span></p>
           <p className="mt-2 text-sm leading-relaxed text-muted">Paste or upload it, check the products that need attention, and save the evidence.</p>
         </Link>
       </section>
