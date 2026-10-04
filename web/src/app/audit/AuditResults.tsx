@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui";
 import { PartialMark, StatusChip } from "@/components/status";
-import { bucketOf, countLines, type AuditLine, type Bucket } from "@/lib/auditModel";
+import { bucketOf, countLines, type AuditLine, type Bucket, type Status } from "@/lib/auditModel";
 import { landedCost, type LandedCostInputs } from "@/lib/landedCost";
 import CostInputs from "@/components/CostInputs";
 
@@ -93,6 +93,25 @@ function List({ title, items }: { title: string; items: string[] }) {
   );
 }
 
+const NEXT_STEP: Partial<Record<Status, { meaning: string; next: string }>> = {
+  low_confidence: {
+    meaning: "The code was matched to past customs rulings for a similar product, but nobody has confirmed it.",
+    next: "Compare the candidate codes, then confirm the one that matches your product's material and use.",
+  },
+  suffix_review: {
+    meaning: "The code is right to the subheading, but its final digits still need confirming.",
+    next: "Confirm the full 10-digit code before you rely on this duty.",
+  },
+  scope_review: {
+    meaning: "A trade-remedy heading might apply, but its scope note could not be matched to this product. The duty total leaves it out.",
+    next: "Check whether your product falls within the heading listed below, with your broker if unsure.",
+  },
+  incomplete: {
+    meaning: "A duty input is missing, so the duty shown is lower than what you may owe.",
+    next: "Add the missing fact (for example a quantity for a per-unit duty, or a claimed program) and run the audit again.",
+  },
+};
+
 function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
   const uniq = (xs: string[], not: string[]) => [...new Set(xs)].filter((x) => x && !not.includes(x));
   const reasons = uniq([line.error ?? "", ...(line.review_reasons ?? [])], []);
@@ -122,6 +141,13 @@ function Detail({ line, submitted }: { line: AuditLine; submitted: number }) {
         <p className="rounded border-l-2 py-1.5 pl-3 border-danger bg-caution-soft text-danger">
           This line has no figures and is not in the totals.
         </p>
+      ) : null}
+
+      {NEXT_STEP[line.status] ? (
+        <div className="rounded border border-rule bg-paper p-4 text-[15px] space-y-2">
+          <p>{NEXT_STEP[line.status]!.meaning}</p>
+          <p className="font-medium">Next step: {NEXT_STEP[line.status]!.next}</p>
+        </div>
       ) : null}
 
       <List title={failed ? "What went wrong" : "Why this needs review"} items={reasons} />
@@ -242,7 +268,7 @@ export default function AuditResults({
     <section className="space-y-5" aria-label="Audit results">
       <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border pt-7">
         <div><p className="eyebrow">Your audit workspace</p><h2 className="serif mt-2 text-3xl tracking-tight">Review the details.</h2></div>
-        <span className="text-xs text-muted">Open a row to inspect evidence and warnings</span>
+        <span className="text-[13px] text-muted">Open a row to see what it means and what to do</span>
       </div>
       <div className="space-y-3">
         <p className="serif text-2xl tracking-tight">
@@ -286,8 +312,8 @@ export default function AuditResults({
 
       <div className="panel space-y-4 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="flex-1 space-y-1.5"><span className="text-xs font-medium">Find a product</span><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search SKU, description, code, or origin" className="field-control" /></label>
-        <label className="space-y-1.5 sm:w-52"><span className="text-xs font-medium">Sort results</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }} className="field-control"><option value="original">Original row order</option><option value="duty">Highest duty first</option><option value="value">Highest value first</option></select></label>
+        <label className="flex-1 space-y-1.5"><span className="text-[13px] font-medium">Find a product</span><input type="search" value={query} onChange={(event) => { setQuery(event.target.value); setPage(0); }} placeholder="Search SKU, description, code, or origin" className="field-control" /></label>
+        <label className="space-y-1.5 sm:w-52"><span className="text-[13px] font-medium">Sort results</span><select value={sort} onChange={(event) => { setSort(event.target.value); setPage(0); }} className="field-control"><option value="original">Original row order</option><option value="duty">Highest duty first</option><option value="value">Highest value first</option></select></label>
       </div>
       <div role="group" aria-label="Filter lines" className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
