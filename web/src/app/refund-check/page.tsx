@@ -1,8 +1,9 @@
 import Link from "next/link";
+import EmptyState from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { requireViewer } from "@/lib/auth";
 import { listRefundChecks } from "@/lib/refundCheck";
-import { Card, Note } from "@/components/ui";
+import { Card } from "@/components/ui";
 import RefundCheckClient from "@/components/RefundCheckClient";
 import { money2 } from "@/lib/api";
 
@@ -25,10 +26,19 @@ export default async function RefundCheckPage() {
       />
 
       {!limits.refundCheck.enabled ? (
-        <Note>
-          Entry Refund Check is not included on your current plan.{" "}
-          <Link href="/pricing" className="font-medium underline">See plans</Link> to upgrade.
-        </Note>
+        <EmptyState
+          title="Entry Refund Check is not on your current plan"
+          action={{ href: "/pricing", label: "See plans" }}
+        >
+          <p>
+            It checks entries you have already filed for two things: struck-down IEEPA duty you may be able to
+            recover, and whether CBP&rsquo;s correction and protest windows are still open.
+          </p>
+          <p>
+            For each entry you will need the product, its HTS code, origin, value, the entry date, the duty paid,
+            and the liquidation date if it has liquidated. Those are the columns the check reads from a CSV.
+          </p>
+        </EmptyState>
       ) : (
         <>
           <RefundCheckClient maxRows={limits.productsPerAudit} />

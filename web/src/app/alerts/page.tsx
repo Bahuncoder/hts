@@ -1,4 +1,5 @@
 import Link from "next/link";
+import EmptyState from "@/components/EmptyState";
 import { requireViewer } from "@/lib/auth";
 import { listAlerts, unreadCount, diffStatus, failedEmailCount } from "@/lib/diff";
 import { listWatched } from "@/lib/catalogues";
@@ -68,39 +69,39 @@ export default async function AlertsPage() {
       </section>
 
       {watched.length === 0 && alerts.length === 0 ? (
-        <Card>
-          <p className="text-[15px] text-muted">
-            You are not watching any codes yet. Save a catalogue from an{" "}
-            <Link href="/audit" className="hover:underline text-accent">
-              audit
-            </Link>{" "}
-            and every code in it is watched automatically.
+        <EmptyState
+          title="No codes watched yet"
+          action={{ href: "/audit", label: "Audit a product list" }}
+        >
+          <p>
+            Save a catalogue from an audit and every code in it is watched automatically. You are told when a
+            tariff action names one of them.
           </p>
-        </Card>
+        </EmptyState>
       ) : alerts.length === 0 ? (
-        <Card>
-          <p className="text-[15px] text-muted">
-            {status?.last_run_at ? (
-              <>
-                No tariff action we have read names your codes as of the last
-                check on{" "}
-                {new Date(status.last_run_at).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                })}
-                . That is the usual answer. We match Federal Register notices
-                that cite HTS numbers, so a change published without naming a
-                code would not appear here.
-              </>
-            ) : (
-              <>
-                Monitoring has not run yet, so an empty list does not mean
-                nothing has changed. Alerts appear here after the first daily
-                check.
-              </>
-            )}
-          </p>
-        </Card>
+        status?.last_run_at ? (
+          <EmptyState
+            title="No tariff action names your codes"
+            secondary={{ href: "#watched-codes", label: "See the codes you watch" }}
+          >
+            <p>
+              As of the last check on{" "}
+              {new Date(status.last_run_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })},
+              nothing we have read names a code you watch. That is the usual answer.
+            </p>
+            <p className="text-[14px]">
+              We match Federal Register notices that cite HTS numbers, so a change published without naming a
+              code would not appear here.
+            </p>
+          </EmptyState>
+        ) : (
+          <EmptyState
+            title="Monitoring has not run yet"
+            secondary={{ href: "#watched-codes", label: "See the codes you watch" }}
+          >
+            <p>Alerts appear here after the first daily check.</p>
+          </EmptyState>
+        )
       ) : (
         <div className="space-y-3">
           {alerts.map((a) => (
@@ -142,7 +143,7 @@ export default async function AlertsPage() {
       )}
 
       {watched.length > 0 ? (
-        <div className="space-y-2 border-t pt-6 border-border">
+        <div id="watched-codes" className="space-y-2 border-t pt-6 border-border">
           <h2 className="text-[15px] font-semibold">Watched codes</h2>
           <div className="flex flex-wrap gap-1.5">
             {watched.map((w) => (

@@ -130,6 +130,7 @@ export default function AuditClient({
   const [mapState, setMapState] = useState<{ headerKey: string; map: ColumnMapping } | null>(null);
   const mapping = mapState && mapState.headerKey === headerKey ? mapState.map : undefined;
   const shownMapping = useMemo(() => mapping ?? detectMapping(text), [mapping, text]);
+  const [rawOpen, setRawOpen] = useState(() => !text);
   const parsed = useMemo(() => (text.trim() ? parseCatalogue(text, mapping) : null), [text, mapping]);
   const needsMapping = !!parsed && !parsed.ok && parsed.problems.some((p) => p.startsWith("Missing"));
   // Opens by itself when a required column is missing. Once the customer
@@ -396,12 +397,10 @@ export default function AuditClient({
           </span>
         </div>
         <div className="space-y-5 p-5 sm:p-6">
-      <div className="space-y-2">
-        <label htmlFor="catalogue-text" className="block text-[15px] font-medium">
-          Your catalogue
-        </label>
+      <div className="space-y-3">
         <p id="catalogue-help" className="text-[14px] text-muted">
-          Paste your products or upload a CSV, one product per row with a description, a country and a value.
+          One product per row, with a description, a country and a value. Upload a CSV, or paste the rows
+          straight from Excel or Google Sheets, header row included.
         </p>
         <details className="text-[13px] text-muted">
           <summary className={`cursor-pointer font-medium text-accent ${focusRing}`}>Column names and format</summary>
@@ -412,17 +411,29 @@ export default function AuditClient({
             </a>
           </p>
         </details>
-        <textarea
-          ref={textRef}
-          id="catalogue-text"
-          aria-describedby="catalogue-help catalogue-preflight"
-          value={text}
-          onChange={(e) => { setText(e.target.value); setAttempted(false); }}
-          rows={7}
-          spellCheck={false}
-          placeholder={"sku,description,country,value,hts\nTS-001,mens knitted cotton t-shirt,China,48000,"}
-          className={`mono w-full rounded-md border p-4 text-[13px] leading-relaxed border-rule bg-paper text-ink ${focusRing}`}
-        />
+        <details
+          open={rawOpen}
+          onToggle={(e) => setRawOpen(e.currentTarget.open)}
+          className="rounded border border-rule p-4"
+        >
+          <summary className={`cursor-pointer text-[14px] font-medium text-accent ${focusRing}`}>
+            Raw CSV text <span className="font-normal text-muted">(advanced)</span>
+          </summary>
+          <label htmlFor="catalogue-text" className="mt-3 block text-[13px] font-medium">
+            Your catalogue
+          </label>
+          <textarea
+            ref={textRef}
+            id="catalogue-text"
+            aria-describedby="catalogue-help catalogue-preflight"
+            value={text}
+            onChange={(e) => { setText(e.target.value); setAttempted(false); }}
+            rows={7}
+            spellCheck={false}
+            placeholder="Paste rows from your spreadsheet here, with the header row first."
+            className={`mono mt-2 w-full rounded-md border p-4 text-[13px] leading-relaxed border-rule bg-paper text-ink ${focusRing}`}
+          />
+        </details>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -435,10 +446,20 @@ export default function AuditClient({
         />
         <label
           htmlFor="catalogue-file"
-          className="btn btn-secondary cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
+          className="btn btn-primary cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
         >
           Upload CSV
         </label>
+        <button
+          type="button"
+          onClick={() => {
+            setRawOpen(true);
+            requestAnimationFrame(() => textRef.current?.focus());
+          }}
+          className={`btn btn-secondary ${focusRing}`}
+        >
+          Paste from spreadsheet
+        </button>
         <button
           type="button"
           onClick={() => { setText(SAMPLE_CSV); setAttempted(false); setFileNote(null); }}
@@ -456,6 +477,39 @@ export default function AuditClient({
           </button>
         ) : null}
       </div>
+
+      {parsed?.ok && parsed.items.length ? (
+        <div className="rounded border border-rule p-4">
+          <p className="text-[14px]">
+            <span className="mono font-semibold">{parsed.items.length.toLocaleString()}</span>{" "}
+            {parsed.items.length === 1 ? "product" : "products"} found. The first rows, as they will be read:
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-faint">
+                  <th scope="col" className="pr-3 font-medium">Row</th>
+                  <th scope="col" className="pr-3 font-medium">Description</th>
+                  <th scope="col" className="pr-3 font-medium">Country</th>
+                  <th scope="col" className="pr-3 font-medium">HTS</th>
+                  <th scope="col" className="font-medium">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {parsed.items.slice(0, 3).map((it) => (
+                  <tr key={it.row} className="border-t border-hair">
+                    <td className="mono py-1 pr-3">{it.row}</td>
+                    <td className="py-1 pr-3">{it.description || "—"}</td>
+                    <td className="py-1 pr-3">{it.country || "—"}</td>
+                    <td className="mono py-1 pr-3">{it.hts || "—"}</td>
+                    <td className="mono py-1">{it.value > 0 ? it.value.toLocaleString() : `unreadable: “${it.rawValue}”`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {headers.length ? (
         <details
@@ -482,31 +536,6 @@ export default function AuditClient({
               </label>
             ))}
           </div>
-          {parsed?.ok && parsed.items.length ? (
-            <div className="mt-4 overflow-x-auto">
-              <p className="mb-2 text-[13px] text-muted">The first rows, as they will be read:</p>
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="text-left text-faint">
-                    <th scope="col" className="pr-3 font-medium">Row</th>
-                    <th scope="col" className="pr-3 font-medium">Description</th>
-                    <th scope="col" className="pr-3 font-medium">Country</th>
-                    <th scope="col" className="font-medium">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed.items.slice(0, 3).map((it) => (
-                    <tr key={it.row} className="border-t border-hair">
-                      <td className="mono py-1 pr-3">{it.row}</td>
-                      <td className="py-1 pr-3">{it.description || "—"}</td>
-                      <td className="py-1 pr-3">{it.country || "—"}</td>
-                      <td className="mono py-1">{it.value > 0 ? it.value.toLocaleString() : `unreadable: “${it.rawValue}”`}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
         </details>
       ) : null}
 

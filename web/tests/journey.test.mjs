@@ -118,7 +118,7 @@ await step("an audit classifies a catalogue and prices it", async () => {
     "TS-01,mens knitted cotton t-shirt short sleeve,China,48000,",
   ].join("\n"));
   await page.click("text=Run audit");
-  await page.waitForSelector("table", { timeout: 90000 });
+  await page.waitForSelector("#results-heading", { timeout: 90000 });
   const body = await text();
   assert.match(body, /entered value/i);
   assert.match(body, /\$168,000|\$168000/);
