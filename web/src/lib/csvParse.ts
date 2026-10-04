@@ -181,9 +181,34 @@ export type ParseResult =
     }
   | { ok: false; problems: string[] };
 
+/** The non-empty header line's cells, trimmed, in file order -- what the
+ *  customer's own columns are called, for choosing a mapping by hand. */
+export function readHeaders(text: string): string[] {
+  const first = parseRows(text).find((r) => r.some((c) => c.trim()));
+  return first ? first.map((h) => h.trim()) : [];
+}
+
+/** Maps each field to a column index in the file. When `mapping` is given it
+ *  replaces header-name detection entirely: a field absent from it is treated
+ *  as not in the file. Without it, headers are matched by ALIASES as before. */
+export type ColumnMapping = Partial<Record<Field, number>>;
+
+/** The mapping header-name detection would choose on its own, so the mapping
+ *  panel can start from it and show the customer what was matched. */
+export function detectMapping(text: string): ColumnMapping {
+  const [head] = parseRows(text).filter((r) => r.some((c) => c.trim()));
+  const out: ColumnMapping = {};
+  (head ?? []).forEach((h, i) => {
+    const norm = normHeader(h);
+    const field = (Object.keys(ALIASES) as Field[]).find((f) => ALIASES[f].includes(norm));
+    if (field && out[field] === undefined) out[field] = i;
+  });
+  return out;
+}
+
 /** Reads the header, then every data row. Blocks (ok: false) only for a
  *  structural problem: a missing or ambiguous required column, or no data. */
-export function parseCatalogue(text: string): ParseResult {
+export function parseCatalogue(text: string, mapping?: ColumnMapping): ParseResult {
   const rows = parseRows(text).filter((r) => r.some((c) => c.trim()));
   if (!rows.length) return { ok: false, problems: ["There is nothing to audit yet. Paste your catalogue or upload a CSV."] };
 
@@ -192,13 +217,20 @@ export function parseCatalogue(text: string): ParseResult {
   const columns = new Map<Field, number>();
   const ignored: string[] = [];
 
-  head.forEach((h, i) => {
-    const norm = normHeader(h);
-    const field = (Object.keys(ALIASES) as Field[]).find((f) => ALIASES[f].includes(norm));
-    if (!field) { if (h.trim()) ignored.push(h.trim()); return; }
-    seen.set(field, [...(seen.get(field) ?? []), h.trim()]);
-    if (!columns.has(field)) columns.set(field, i);
-  });
+  if (mapping) {
+    for (const [f, i] of Object.entries(mapping) as [Field, number][]) {
+      if (i !== undefined && i >= 0 && i < head.length) columns.set(f, i);
+    }
+    head.forEach((h, i) => { if (h.trim() && ![...columns.values()].includes(i)) ignored.push(h.trim()); });
+  } else {
+    head.forEach((h, i) => {
+      const norm = normHeader(h);
+      const field = (Object.keys(ALIASES) as Field[]).find((f) => ALIASES[f].includes(norm));
+      if (!field) { if (h.trim()) ignored.push(h.trim()); return; }
+      seen.set(field, [...(seen.get(field) ?? []), h.trim()]);
+      if (!columns.has(field)) columns.set(field, i);
+    });
+  }
 
   const problems: string[] = [];
   for (const f of REQUIRED) {

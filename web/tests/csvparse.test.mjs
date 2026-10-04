@@ -21,6 +21,23 @@ const ok = (text) => {
   return r;
 };
 
+await check("unrecognised headings are blocked by default and read once the customer maps them", () => {
+  const text = "Product Name,Ctry,Price\nshirt,China,10\nmug,DE,5\n";
+  const blocked = csv.parseCatalogue(text);
+  assert.equal(blocked.ok, false, "no alias matches, so required columns are missing");
+  assert.deepEqual(csv.readHeaders(text), ["Product Name", "Ctry", "Price"]);
+  const mapped = csv.parseCatalogue(text, { description: 0, country: 1, value: 2 });
+  assert.ok(mapped.ok, JSON.stringify(mapped));
+  assert.deepEqual(mapped.items.map((i) => [i.description, i.country, i.value]), [["shirt", "China", 10], ["mug", "DE", 5]]);
+});
+
+await check("an explicit mapping overrides an alias that would otherwise match a different column", () => {
+  const text = "description,country,value,hts\nshirt,China,10,6109.10.00.12\n";
+  const r = csv.parseCatalogue(text, { description: 0, country: 1, value: 2, hts: 0 });
+  assert.ok(r.ok);
+  assert.equal(r.items[0].hts, "shirt", "the mapping's choice wins, not the header name");
+});
+
 await check("every data row is kept, numbered from 1, blank lines skipped, header excluded", () => {
   const r = ok("sku,description,country,value\n\nA,shirt,China,10\n\n   \nB,,China,x\nC,mug,DE,5\n");
   assert.deepEqual(r.items.map((i) => i.row), [1, 2, 3]);

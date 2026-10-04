@@ -73,6 +73,20 @@ try {
       assert.match(text, /Reference edition: fixture/);
     } finally { await p.close(); }
   });
+  await check("a file with unrecognised headings can be matched by hand, and the preview shows what will be read", async () => {
+    await page.goto(`${app.base}/audit`);
+    await page.getByLabel("Your catalogue", { exact: true }).fill("Product Name,Ctry,Price\nmens knitted cotton t-shirt,China,4800\nceramic coffee mug,Germany,1200");
+    await page.waitForTimeout(500);
+    assert.match(await page.locator("body").innerText(), /Missing the “description” column/, "the missing column is named");
+    await page.locator("select").nth(0).selectOption({ label: "Product Name" });
+    await page.locator("select").nth(1).selectOption({ label: "Ctry" });
+    await page.locator("select").nth(2).selectOption({ label: "Price" });
+    await page.waitForTimeout(500);
+    const text = await page.locator("body").innerText();
+    assert.match(text, /2 rows read/, "the two rows are read once mapped");
+    assert.match(text, /mens knitted cotton t-shirt/, "the preview shows the mapped description");
+    assert.doesNotMatch(text, /Missing the “description” column/, "the problem clears once mapped");
+  });
   await check("audit retains row identity when searching and sorting", async () => {
     await page.goto(`${app.base}/audit`);
     await page.getByLabel("Your catalogue", { exact: true }).fill(csv);

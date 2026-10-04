@@ -8,7 +8,10 @@ import { projectLine, type AuditLine } from "@/lib/auditModel";
 import { LIMITS } from "@/lib/plans";
 import { DraftNotice, useSavedDraft } from "@/components/DraftNotice";
 import { clearDraft, countRows, writeDraft } from "@/lib/draft";
-import { EXPECTED_FORMAT, SAMPLE_CSV, TEMPLATE_CSV, parseCatalogue } from "@/lib/csvParse";
+import {
+  EXPECTED_FORMAT, FIELD_LABEL, REQUIRED, SAMPLE_CSV, TEMPLATE_CSV, detectMapping, parseCatalogue,
+  readHeaders, type ColumnMapping, type Field,
+} from "@/lib/csvParse";
 import AuditResults, { type AuditSummary } from "./AuditResults";
 import { EMPTY_COSTS } from "@/lib/landedCost";
 
@@ -109,7 +112,27 @@ export default function AuditClient({
     return () => clearInterval(id);
   }, [busy]);
 
-  const parsed = useMemo(() => (text.trim() ? parseCatalogue(text) : null), [text]);
+  // A customer's own column choices, kept only while the header line they were
+  // made against is still the one in the box: a new file starts from detection.
+  const headers = useMemo(() => readHeaders(text), [text]);
+  const headerKey = headers.join("\u0001");
+  const [mapState, setMapState] = useState<{ headerKey: string; map: ColumnMapping } | null>(null);
+  const mapping = mapState && mapState.headerKey === headerKey ? mapState.map : undefined;
+  const shownMapping = useMemo(() => mapping ?? detectMapping(text), [mapping, text]);
+  const parsed = useMemo(() => (text.trim() ? parseCatalogue(text, mapping) : null), [text, mapping]);
+  const needsMapping = !!parsed && !parsed.ok && parsed.problems.some((p) => p.startsWith("Missing"));
+  // Opens by itself when a required column is missing. Once the customer
+  // toggles it, or edits a column, their choice holds: fixing one column must
+  // not close the rest from under them.
+  const [mapToggled, setMapToggled] = useState<boolean | null>(null);
+  const mapOpen = mapToggled ?? needsMapping;
+  const mappableFields = [...REQUIRED, ...(Object.keys(FIELD_LABEL) as Field[]).filter((f) => !REQUIRED.includes(f))];
+  const setColumn = (field: Field, value: string) => {
+    setMapToggled(true);
+    const next: ColumnMapping = { ...shownMapping };
+    if (value === "") delete next[field]; else next[field] = Number(value);
+    setMapState({ headerKey, map: next });
+  };
   const isSample = text === SAMPLE_CSV;
   const entryCount = Math.max(1, Math.min(100_000, Math.floor(Number(entries)) || 1));
   const overLimit = parsed?.ok && parsed.items.length > maxRows;
@@ -150,7 +173,7 @@ export default function AuditClient({
   async function runAudit() {
     setAttempted(true);
     if (busy) return;
-    const p = parseCatalogue(text);
+    const p = parseCatalogue(text, mapping);
     if (!p.ok || p.items.length > maxRows) return; // the problems are already on screen, in an alert
 
     setBusy(true);
@@ -387,6 +410,59 @@ export default function AuditClient({
           </button>
         ) : null}
       </div>
+
+      {headers.length ? (
+        <details
+          open={mapOpen}
+          onToggle={(e) => setMapToggled((e.currentTarget as HTMLDetailsElement).open)}
+          className="rounded border border-rule p-4 text-[14px]"
+        >
+          <summary className={`cursor-pointer font-medium text-accent ${focusRing}`}>Match your columns</summary>
+          <p className="mt-2 text-[13px] text-muted">
+            Choose which of your columns holds each value. A column you leave as “Not in my file” is not used.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {mappableFields.map((f) => (
+              <label key={f} className="block text-[13px]">
+                {FIELD_LABEL[f]}{REQUIRED.includes(f) ? " (required)" : ""}
+                <select
+                  value={shownMapping[f] === undefined ? "" : String(shownMapping[f])}
+                  onChange={(e) => setColumn(f, e.target.value)}
+                  className="field-control mt-1 block w-full"
+                >
+                  <option value="">Not in my file</option>
+                  {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i + 1}`}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+          {parsed?.ok && parsed.items.length ? (
+            <div className="mt-4 overflow-x-auto">
+              <p className="mb-2 text-[13px] text-muted">The first rows, as they will be read:</p>
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-left text-faint">
+                    <th scope="col" className="pr-3 font-medium">Row</th>
+                    <th scope="col" className="pr-3 font-medium">Description</th>
+                    <th scope="col" className="pr-3 font-medium">Country</th>
+                    <th scope="col" className="font-medium">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.items.slice(0, 3).map((it) => (
+                    <tr key={it.row} className="border-t border-hair">
+                      <td className="mono py-1 pr-3">{it.row}</td>
+                      <td className="py-1 pr-3">{it.description || "—"}</td>
+                      <td className="py-1 pr-3">{it.country || "—"}</td>
+                      <td className="mono py-1">{it.value > 0 ? it.value.toLocaleString() : `unreadable: “${it.rawValue}”`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </details>
+      ) : null}
 
       <div id="catalogue-preflight" role={attempted && problems.length ? "alert" : "status"} className="space-y-2 text-[14px]">
         {fileNote ? <p className="text-muted">{fileNote}</p> : null}
