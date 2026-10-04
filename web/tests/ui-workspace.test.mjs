@@ -140,7 +140,7 @@ try {
   await check("changing shipping assumptions prevents saving an outdated result", async () => {
     const save = page.getByRole("button", { name: "Save and watch these codes" });
     assert.equal(await save.isDisabled(), false);
-    await page.getByRole("button", { name: "Edit catalogue" }).click();
+    await page.getByTestId("import-summary").getByRole("button", { name: "Edit catalogue", exact: true }).click();
     await page.locator("summary").filter({ hasText: /^Assumptions: / }).click();
     await page.getByLabel("Transport", { exact: true }).selectOption("air");
     assert.equal(await save.isDisabled(), true);
@@ -152,7 +152,7 @@ try {
   await check("changing a column choice after an audit makes its results outdated", async () => {
     const save = page.getByRole("button", { name: "Save and watch these codes" });
     assert.equal(await save.isDisabled(), false);
-    await page.getByRole("button", { name: "Edit catalogue" }).click();
+    await page.getByTestId("import-summary").getByRole("button", { name: "Edit catalogue", exact: true }).click();
     const mapper = page.locator("details").filter({ hasText: "Match your columns" });
     if (!(await mapper.evaluate((el) => el.open))) await mapper.locator("summary").click();
     await mapper.locator("select").first().selectOption({ label: "Not in my file" });

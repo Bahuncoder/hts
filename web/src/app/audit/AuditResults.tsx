@@ -144,7 +144,7 @@ function Detail({ line, onEdit }: { line: AuditLine; onEdit: () => void }) {
           <p>{NEXT_STEP[line.status]!.meaning}</p>
           <p className="font-medium">Next step: {NEXT_STEP[line.status]!.next}</p>
           {line.status !== "ready" ? (
-            <button type="button" onClick={onEdit} className="btn btn-secondary">Correct this product</button>
+            <button type="button" onClick={onEdit} className="btn btn-secondary">Edit catalogue inputs</button>
           ) : null}
         </div>
       ) : null}
@@ -285,7 +285,7 @@ export default function AuditResults({
           <a href="#save-results" className="btn btn-secondary">Save these results ↓</a>
         </span>
       </div>
-      <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-6">
         <div>
           <p className="text-[13px] text-muted">Estimated duty and fees</p>
           <p className="mono text-3xl font-semibold">{money(summary.duty)}</p>
