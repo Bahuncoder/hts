@@ -49,6 +49,20 @@ export default async function Home() {
         />
       </section>
 
+      <section aria-labelledby="start-title" className="grid gap-4 md:grid-cols-2">
+        <h2 id="start-title" className="sr-only">Where to start</h2>
+        <Link href="/classify" className="panel p-6 hover:border-accent">
+          <p className="eyebrow">One product</p>
+          <p className="serif mt-2 text-2xl tracking-tight">Start with its HTS code</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">Describe it, compare the candidate codes, then estimate its duty.</p>
+        </Link>
+        <Link href="/audit" className="panel p-6 hover:border-accent">
+          <p className="eyebrow">A product spreadsheet</p>
+          <p className="serif mt-2 text-2xl tracking-tight">Audit your whole list</p>
+          <p className="mt-2 text-sm leading-relaxed text-muted">Paste or upload it, check the products that need attention, and save the evidence.</p>
+        </Link>
+      </section>
+
       <ToolsGrid heading="A clearer way to work." tools={tools} />
 
       <div className="relative left-1/2 right-1/2 mx-[-50vw] w-screen bg-deep">

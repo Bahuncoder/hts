@@ -3,7 +3,7 @@ import { requireViewer } from "@/lib/auth";
 import { toggleAlertEmailsAction } from "@/lib/actions";
 import { AccountDraftBanner, SignOutForm } from "@/components/DraftNotice";
 import { emailEnabled } from "@/lib/email";
-import { listWatched } from "@/lib/catalogues";
+import { listCatalogues, listWatched } from "@/lib/catalogues";
 import { recentForAccount } from "@/lib/audit";
 import { Card } from "@/components/ui";
 import { PLAN_COPY, PLAN_PRICE_MONTHLY, windowLabel } from "@/lib/plans";
@@ -36,6 +36,8 @@ export default async function AccountPage() {
   const { account, limits, plan } = viewer;
   const alertEmailsOn = account.alert_emails !== 0;
   const watchedCount = (await listWatched(account.id)).length;
+  const catalogues = await listCatalogues(account.id);
+  const needing = catalogues.filter((c) => c.needs_review > 0);
   const activity = await recentForAccount(account.id, 10);
   const hasCustomer = billingEnabled() && Boolean((await subscriptionFor(account.id)).stripe_customer_id);
 
@@ -50,6 +52,35 @@ export default async function AccountPage() {
       </div>
 
       <AccountDraftBanner />
+
+      <section className="panel space-y-4 p-5 sm:p-6" aria-labelledby="your-work">
+        <h2 id="your-work" className="serif text-2xl tracking-tight">Your work</h2>
+        {needing.length ? (
+          <ul className="space-y-3">
+            {needing.slice(0, 5).map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-hair pt-3 first:border-t-0 first:pt-0">
+                <div>
+                  <p className="text-[15px] font-medium">{c.name}</p>
+                  <p className="text-[13px] text-muted">
+                    <span className="mono">{c.needs_review.toLocaleString()}</span> of{" "}
+                    <span className="mono">{c.items.toLocaleString()}</span> products need attention
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Link href={`/catalogues/${c.id}/review`} className="btn btn-primary">Continue review</Link>
+                  <Link href={`/catalogues/${c.id}`} className="btn btn-secondary">Open</Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[14px] text-muted">
+            Nothing is waiting on you. {catalogues.length
+              ? "Every saved catalogue is priced and complete."
+              : <>Audit a product list to start, from the <Link href="/audit" className="text-accent hover:underline">catalogue audit</Link>.</>}
+          </p>
+        )}
+      </section>
 
       <div className="space-y-3 border-b border-border pb-6">
         <h2 className="text-[15px] font-semibold">Plan</h2>
