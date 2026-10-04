@@ -48,7 +48,7 @@ function LandedCostPanel({ goods, duty, inputs, onChange, partial }: { goods: nu
   try { result = landedCost(goods, duty, inputs); } catch (e) { error = (e as Error).message; }
   return <section className="mt-5 rounded border border-rule bg-paper p-4" aria-label="Landed cost estimate">
     <button type="button" className="flex w-full items-center justify-between text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
-      <span><span className="eyebrow">Scenario tool</span><span className="mt-1 block text-[16px] font-semibold">Estimate landed cost</span></span>
+      <span><span className="block text-[13px] font-medium text-muted">Optional</span><span className="block text-[16px] font-semibold">Estimate landed cost</span></span>
       <span className="text-sm text-muted">{open ? "Hide" : "Add import costs"} <span aria-hidden="true">{open ? "↑" : "↓"}</span></span>
     </button>
     {open ? <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_280px]">
@@ -69,7 +69,7 @@ function Metric({
 }) {
   return (
     <div role="group" aria-label={label} className="metric-card">
-      <div className="text-[12px] uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-[13px] font-medium text-muted">{label}</div>
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className={`mono text-2xl font-semibold ${tone === "recover" ? "text-recover" : ""}`}>
           {value}
@@ -85,7 +85,7 @@ function List({ title, items }: { title: string; items: string[] }) {
   if (!items.length) return null;
   return (
     <div>
-      <h4 className="lbl mb-1">{title}</h4>
+      <h4 className="mb-1 text-[14px] font-medium text-ink">{title}</h4>
       <ul className="list-disc space-y-0.5 pl-5 text-[13px]">
         {items.map((t, i) => <li key={i}>{t}</li>)}
       </ul>
@@ -156,7 +156,7 @@ function Detail({ line }: { line: AuditLine }) {
 
       {scope.length ? (
         <div>
-          <h4 className="lbl mb-1">Trade-remedy headings awaiting scope confirmation</h4>
+          <h4 className="mb-1 text-[14px] font-medium text-ink">Trade-remedy headings awaiting scope confirmation</h4>
           <p className="mono text-[13px]">
             {scope.map((h, i) => (
               <span key={h}>{i ? ", " : ""}<Link href={`/hts/${h}`} className="hover:underline text-accent">{h}</Link></span>
@@ -167,7 +167,7 @@ function Detail({ line }: { line: AuditLine }) {
 
       {suggested.length ? (
         <div>
-          <h4 className="lbl mb-1">Classifier candidates</h4>
+          <h4 className="mb-1 text-[14px] font-medium text-ink">Classifier candidates</h4>
           <ol className="space-y-2">
             {suggested.map((c) => (
               <li key={c.hts} className="rounded border p-2 border-border">
@@ -204,7 +204,7 @@ function Detail({ line }: { line: AuditLine }) {
 
       {alternatives.length ? (
         <div>
-          <h4 className="lbl mb-1">Sibling statistical lines with different rates</h4>
+          <h4 className="mb-1 text-[14px] font-medium text-ink">Sibling statistical lines with different rates</h4>
           <ul className="space-y-1">
             {alternatives.map((a) => (
               <li key={a.hts} className="flex flex-wrap gap-x-3">
@@ -276,15 +276,21 @@ export default function AuditResults({
             <>All <span className="mono">{counts.submitted.toLocaleString()}</span> products are priced and complete</>
           )}
         </h2>
-        <span className="text-[13px] text-muted">Open a row to see what it means and what to do</span>
+        <span className="flex flex-wrap items-center gap-4 text-[13px] text-muted">
+          Open a row to see what it means and what to do
+          <a href="#save-results" className="btn btn-secondary">Save these results ↓</a>
+        </span>
       </div>
       <div className="space-y-3">
         <p className="text-[15px]">
           Estimated duty and fees <span className="mono font-medium">{money(summary.duty)}</span>
           <span className="ml-2 text-[13px] text-muted font-sans">
-            {partial
-              ? `includes ${counts.review.toLocaleString()} priced line${counts.review === 1 ? "" : "s"} still to confirm; leaves out ${counts.failed.toLocaleString()} that could not be priced. Lines marked incomplete may understate duty.`
-              : `covers all ${counts.submitted.toLocaleString()} products.`}
+            {partial ? (
+              <>
+                <span className="md:hidden">includes {counts.review.toLocaleString()} still to confirm, excludes {counts.failed.toLocaleString()} unpriced.</span>
+                <span className="hidden md:inline">includes {counts.review.toLocaleString()} priced line{counts.review === 1 ? "" : "s"} still to confirm; leaves out {counts.failed.toLocaleString()} that could not be priced. Lines marked incomplete may understate duty.</span>
+              </>
+            ) : `covers all ${counts.submitted.toLocaleString()} products.`}
           </span>
         </p>
         {unresolved > 0 ? (
@@ -357,7 +363,7 @@ export default function AuditResults({
                     <div className="shrink-0"><StatusChip status={l.status} /></div>
                   </div>
                   <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
-                    <div><dt className="text-faint">HTS</dt><dd className="mono">{l.hts ?? "—"}</dd></div>
+                    <div><dt className="text-faint">HTS</dt><dd className="mono whitespace-nowrap text-[12px]">{l.hts ?? "—"}</dd></div>
                     <div><dt className="text-faint">Value</dt><dd className="mono">{money(value)}</dd></div>
                     <div><dt className="text-faint">Duty</dt><dd className="mono">{l.duty !== undefined ? money(l.duty) : "—"}</dd></div>
                   </dl>
@@ -485,12 +491,11 @@ export default function AuditResults({
 
       <div className="space-y-5 border-t pt-5 border-border">
         <p className="text-[13px] font-medium text-muted">Totals for this audit</p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="panel grid grid-cols-2 divide-x divide-y divide-border lg:grid-cols-4 [&_.metric-card]:border-0 [&_.metric-card]:bg-transparent [&_.metric-card]:p-4">
         <Metric
           label="Entered value"
           value={money(summary.entered_value)}
           sub={`${summary.priced.toLocaleString()} of ${counts.submitted.toLocaleString()} lines priced`}
-          partial={partial ? unresolved : undefined}
         />
         <Metric
           label="Duty and fees"
@@ -503,7 +508,6 @@ export default function AuditResults({
           value={money(summary.potentially_refundable)}
           sub="Estimate: IEEPA duties struck down, not a filed claim"
           tone="recover"
-          partial={partial ? unresolved : undefined}
         />
         <Metric
           label="Needs attention"
