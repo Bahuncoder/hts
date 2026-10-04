@@ -87,6 +87,15 @@ try {
     assert.match(text, /mens knitted cotton t-shirt/, "the preview shows the mapped description");
     assert.doesNotMatch(text, /Missing the “description” column/, "the problem clears once mapped");
   });
+  await check("the results headline offers one action to the lines that need attention", async () => {
+    await page.goto(`${app.base}/audit`);
+    await page.getByLabel("Your catalogue", { exact: true }).fill(csv);
+    await page.getByRole("button", { name: "Run audit", exact: true }).click();
+    await page.getByRole("heading", { name: "Review the details." }).waitFor();
+    assert.match(await page.locator("main").innerText(), /products need attention/);
+    await page.getByRole("button", { name: /^Review the \d+ to confirm$/ }).click();
+    assert.equal(await page.getByRole("button", { name: /^Needs review/ }).getAttribute("aria-pressed"), "true");
+  });
   await check("audit retains row identity when searching and sorting", async () => {
     await page.goto(`${app.base}/audit`);
     await page.getByLabel("Your catalogue", { exact: true }).fill(csv);

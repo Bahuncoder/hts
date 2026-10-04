@@ -244,6 +244,26 @@ export default function AuditResults({
         <div><p className="eyebrow">Your audit workspace</p><h2 className="serif mt-2 text-3xl tracking-tight">Review the details.</h2></div>
         <span className="text-xs text-muted">Open a row to inspect evidence and warnings</span>
       </div>
+      <div className="space-y-3">
+        <p className="serif text-2xl tracking-tight">
+          {unresolved > 0 ? (
+            <><span className="mono">{unresolved.toLocaleString()}</span> of <span className="mono">{counts.submitted.toLocaleString()}</span> products need attention</>
+          ) : (
+            <>All <span className="mono">{counts.submitted.toLocaleString()}</span> products are priced and complete</>
+          )}
+        </p>
+        {unresolved > 0 ? (
+          <button
+            type="button"
+            onClick={() => { setFilter(counts.review > 0 ? "review" : "failed"); setPage(0); }}
+            className="btn btn-primary"
+          >
+            {counts.review > 0
+              ? `Review the ${counts.review.toLocaleString()} to confirm`
+              : `See the ${counts.failed.toLocaleString()} that could not be priced`}
+          </button>
+        ) : null}
+      </div>
       <p className="text-[15px] font-medium" data-testid="reconciliation">
         Submitted <span className="mono">{counts.submitted.toLocaleString()}</span>
         {" · "}Ready <span className="mono">{counts.ready.toLocaleString()}</span>

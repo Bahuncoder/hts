@@ -367,12 +367,18 @@ export default function AuditClient({
         <label htmlFor="catalogue-text" className="block text-[15px] font-medium">
           Your catalogue
         </label>
-        <p id="catalogue-help" className="text-[13px] text-muted">
-          {EXPECTED_FORMAT}{" "}
-          <a href={templateHref} download="htsdesk-template.csv" className={`hover:underline text-accent ${focusRing}`}>
-            Download template
-          </a>
+        <p id="catalogue-help" className="text-[14px] text-muted">
+          Paste your products or upload a CSV, one product per row with a description, a country and a value.
         </p>
+        <details className="text-[13px] text-muted">
+          <summary className={`cursor-pointer font-medium text-accent ${focusRing}`}>Column names and format</summary>
+          <p className="mt-2">
+            {EXPECTED_FORMAT}{" "}
+            <a href={templateHref} download="htsdesk-template.csv" className={`hover:underline text-accent ${focusRing}`}>
+              Download template
+            </a>
+          </p>
+        </details>
         <textarea
           ref={textRef}
           id="catalogue-text"

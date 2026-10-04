@@ -204,7 +204,29 @@ export default async function Review({
           {!slice.length ? (
             <p className="py-6 text-[14px] text-muted">No lines match this search.</p>
           ) : (
-            <Card>
+            <>
+              <ul className="space-y-3 md:hidden" aria-label={`Products in ${cat.name}`}>
+                {slice.map(({ item, review }) => (
+                  <li key={item.id} className={`panel p-4 ${item.id === openId ? "border-accent" : ""}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="mono text-[12px] text-faint">Row {item.row_number ?? "—"}</p>
+                        <p className="mt-1 text-[15px] font-medium">{item.description || "—"}</p>
+                        <p className="mt-1 text-[13px] text-muted">
+                          {item.country} · <span className="mono">{item.hts ?? "Unclassified"}</span>
+                        </p>
+                      </div>
+                      <span className={`shrink-0 text-[13px] font-medium ${TONE[review.approval_status]}`}>
+                        {APPROVAL_LABEL[review.approval_status]}
+                      </span>
+                    </div>
+                    <Link href={openHref(item.id)} className="mt-2 inline-flex min-h-[44px] items-center text-[14px] font-medium text-accent hover:underline">
+                      Open product
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            <Card className="hidden md:block">
               <div className="scroll-x">
                 <table className="data-table w-full min-w-[720px] text-[14px]">
                   <caption className="sr-only">Products in {cat.name} with their review status. Page {at} of {pages}.</caption>
@@ -241,6 +263,7 @@ export default async function Review({
                 </table>
               </div>
             </Card>
+            </>
           )}
 
           {pages > 1 ? (

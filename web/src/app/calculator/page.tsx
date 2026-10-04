@@ -255,6 +255,11 @@ export default async function CalculatorPage({
               className={`tabular ${inputClass}`}
             />
           </Field>
+        </div>
+
+        <details className="rounded-md border border-border p-4" open={Boolean(program || rawQuantity)}>
+          <summary className="cursor-pointer text-[14px] font-medium">Quantity or preference program (only if they apply)</summary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field
             id="program"
             label="Preference program (optional)"
@@ -272,9 +277,6 @@ export default async function CalculatorPage({
               className={inputClass}
             />
           </Field>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             id="quantity"
             label="Quantity (only for per-unit duties)"
@@ -308,7 +310,8 @@ export default async function CalculatorPage({
               </datalist>
             </div>
           </Field>
-        </div>
+          </div>
+        </details>
 
         <details className="rounded-md border border-border p-4" open={Boolean(rawMetal || vehicleUse || endUse)}>
           <summary className="cursor-pointer text-[14px] font-medium">About the goods (optional)</summary>
