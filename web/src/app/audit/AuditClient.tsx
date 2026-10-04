@@ -30,6 +30,8 @@ type Run = {
   ranAt: Date;
   /** The catalogue text this was run from. */
   text: string;
+  /** The column mapping it was read with, as a comparable key. */
+  mappingKey: string;
   sample: boolean;
   entries: number;
   transport: "vessel" | "air";
@@ -116,6 +118,7 @@ export default function AuditClient({
   // made against is still the one in the box: a new file starts from detection.
   const headers = useMemo(() => readHeaders(text), [text]);
   const headerKey = headers.join("\u0001");
+  const mapKey = (m: ColumnMapping) => JSON.stringify(Object.entries(m).sort());
   const [mapState, setMapState] = useState<{ headerKey: string; map: ColumnMapping } | null>(null);
   const mapping = mapState && mapState.headerKey === headerKey ? mapState.map : undefined;
   const shownMapping = useMemo(() => mapping ?? detectMapping(text), [mapping, text]);
@@ -150,18 +153,21 @@ export default function AuditClient({
       try { url = new URL(a.href, window.location.href); } catch { return; }
       if (url.origin !== window.location.origin) return;
       if (url.pathname !== "/signup" && url.pathname !== "/login") return;
-      writeDraft({ text, entries: entryCount, transport, rows: rowCount });
+      writeDraft({ text, entries: entryCount, transport, rows: rowCount, mapping });
     };
     const events = ["click", "auxclick", "contextmenu"] as const;
     for (const ev of events) document.addEventListener(ev, onLink, true);
     return () => { for (const ev of events) document.removeEventListener(ev, onLink, true); };
-  }, [signedIn, isSample, text, entryCount, transport, rowCount]);
+  }, [signedIn, isSample, text, entryCount, transport, rowCount, mapping]);
 
   function restoreDraft() {
     if (!draft) return;
     setText(draft.text);
     setEntries(String(draft.entries));
     setTransport(draft.transport);
+    if (draft.mapping) {
+      setMapState({ headerKey: readHeaders(draft.text).join("\u0001"), map: draft.mapping });
+    }
     setAttempted(false);
     setFileNote("Restored your earlier catalogue. Check it, then run the audit when you are ready.");
     setEditing(true);
@@ -218,13 +224,13 @@ export default function AuditClient({
       }
       setRun({
         response: payload, inputs: p.items.map((i) => i.value),
-        ranAt: new Date(), text, sample: isSample, entries: entryCount, transport,
+        ranAt: new Date(), text, mappingKey, sample: isSample, entries: entryCount, transport,
       });
       setSaveError(null);
       setEditing(false);
       focusAfter.current = "bar";
       if (!signedIn && !isSample) {
-        writeDraft({ text, entries: entryCount, transport, rows: p.items.length });
+        writeDraft({ text, entries: entryCount, transport, rows: p.items.length, mapping });
       }
     } catch (e) {
       const timedOut = e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError");
@@ -298,7 +304,8 @@ export default function AuditClient({
   }
 
   const problems = parsed && !parsed.ok ? parsed.problems : [];
-  const stale = run !== null && (run.text !== text || run.entries !== entryCount || run.transport !== transport);
+  const mappingKey = mapKey(shownMapping);
+  const stale = run !== null && (run.text !== text || run.entries !== entryCount || run.transport !== transport || run.mappingKey !== mappingKey);
   const templateHref = `data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE_CSV)}`;
 
   const preflight = parsed?.ok ? parsed : null;

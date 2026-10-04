@@ -32,6 +32,9 @@ export type Draft = {
   savedAt: number;
   /** Data rows in the text, for the notice. */
   rows: number;
+  /** The customer's own column choices, when they made any. Absent means
+   *  header detection, as before. */
+  mapping?: Record<string, number>;
 };
 
 /** Fired on the window after this tab changes the draft, so components in the
@@ -57,6 +60,7 @@ export function parseDraft(raw: string | null, now = Date.now()): Draft | null {
     if (d.transport !== "vessel" && d.transport !== "air") return null;
     if (typeof d.entries !== "number" || !Number.isFinite(d.entries)) return null;
     if (typeof d.rows !== "number" || !Number.isFinite(d.rows)) return null;
+    const mapping = parseMapping(d.mapping);
     const age = now - d.savedAt;
     if (age > DRAFT_TTL_MS || age < -5 * 60_000) return null; // expired, or from a clock far in the future
     return {
@@ -65,10 +69,22 @@ export function parseDraft(raw: string | null, now = Date.now()): Draft | null {
       transport: d.transport,
       savedAt: d.savedAt,
       rows: Math.max(0, Math.floor(d.rows)),
+      ...(mapping ? { mapping } : {}),
     };
   } catch {
     return null;
   }
+}
+
+/** A stored column mapping: field name to a non-negative column index. Anything
+ *  else is dropped, so a damaged draft degrades to header detection. */
+function parseMapping(v: unknown): Record<string, number> | undefined {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof n === "number" && Number.isInteger(n) && n >= 0) out[k] = n;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** The raw stored string, for `useSyncExternalStore`. Never throws. */
@@ -124,6 +140,7 @@ export function writeDraft(input: {
   entries: number;
   transport: "vessel" | "air";
   rows?: number;
+  mapping?: Record<string, number>;
 }): boolean {
   if (!input.text.trim() || input.text.length > MAX_TEXT) return false;
   const draft: Draft = {
@@ -132,6 +149,7 @@ export function writeDraft(input: {
     transport: input.transport,
     savedAt: Date.now(),
     rows: input.rows ?? countRows(input.text),
+    ...(input.mapping && parseMapping(input.mapping) ? { mapping: input.mapping } : {}),
   };
   try {
     const s = store();

@@ -1,6 +1,6 @@
 # Build status
 
-Last updated 2026-09-24. The independent audit in `PROJECT-AUDIT.md` (2026-09-19)
+Last updated 2026-10-04. The independent audit in `PROJECT-AUDIT.md` (2026-09-19)
 is the last full audit; everything below it in this file reflects work done since.
 This is the single place readiness is stated; if it disagrees with another
 document, this one has been updated more recently or the other is wrong.
@@ -38,6 +38,11 @@ plans specifically — see the new row below.
 | Programmatic API (Starter/Growth) | Per-account bearer keys (`web/src/lib/apiKeys.ts`; secret shown once, only a sha256 hash stored), `POST /api/v1/audit` metered independently of web-UI usage (own `usage_event` scope, own lease) so an automated integration and manual web use never compete for the same budget. Per-request item ceiling matches the engine's real hard limit (1,000) on every plan. Key rotation via a per-plan key limit; revocation is immediate. Documented at `/docs/api` |
 | Alerts | outbox with exact-id claims, bounded retries, cursor paging with lookback, failures never advance the cursor |
 | Public cost controls | request/item budgets per client or account, one audit in flight per caller, streamed body cap |
+| Review workspace | Saved-catalogue review queue with status filter (all, pending, approved, changes requested, rejected), search, and pagination at 100 lines. Per-line approve, request changes, reject, assign and comment, each guarded by the line's version so a stale form cannot land. "Record decision and review next" moves to the next pending line in the current filter, across pages. On phones an open line fills the screen with a link back to the same queue position. The decision control sits beside the list on wide screens rather than below every row |
+| Correction and recalculation | A reviewer can change a saved line's HTS code, origin, entered value, quantity or quantity unit. The engine prices the change once, and the result is held as a draft for one hour. Confirming writes the facts and price in one version-guarded update, reopens an approved line to pending, and records a before/after history entry. Catalogue-level MPF, dataset revision and assumptions are never overwritten by a single-line result, and totals-complete is recomputed. Alternative codes come from the same classifier as /classify, with its confidence labels |
+| Spreadsheet column mapping | When a required column (description, country, value) cannot be found by its heading, the audit page lets the customer choose each column or leave it out, and previews the first rows as they will be read. Changing the mapping marks the existing results outdated, the same as changing the shipping assumptions. The choice survives sign-up through the draft. Mapping is per file and is not saved to the account. Cells cannot be edited in the preview |
+| Saved catalogue views | Search, sort and pagination on saved catalogues. The landed-cost editor sits below the review summary and products, collapsed by default |
+| Public landing pages | Homepage and China-tariffs page share one duty-example card and tool grid. The evidence section is a full-width dark band showing live reference counts. Pricing copy no longer promises feature parity across plans |
 | Sign-in | email/password, plus optional "Continue with Google" (authorization-code flow, state-cookie CSRF check, unverified emails refused) when `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set; unset, the button does not render and the route 404s |
 | Accounts store | libSQL (Turso in production, embedded file in development) |
 | Landed cost | currency conversion for additional costs (goods and duty stay USD; a dated rate and source are recorded with the save, never a fetched live rate) and per-product allocation (by goods value or equally, largest-remainder cents so shares always sum exactly) |
@@ -56,9 +61,11 @@ plans specifically — see the new row below.
 | `tests/test_classify_eval.py` | 3 | a held-out ruling cannot vote for itself; reasoning cannot run in evaluation |
 | `web` `npm run test:integration` | 86 | real routes over scratch databases with fake engine/mail servers |
 | browser suites (`make test-journey`, `test-security`, `test-authflow`, `test-review`) | 67 | customer journey, cross-account access, throttling, CSV/XSS, reset and verify, the audit review workspace and saved catalogues |
-| browser suites (`make test-ui`, `test-draft`, `test-contrast`) | 42 | workspace UI and self-hosted fonts (10), audit-survives-sign-up draft and `?next=` allowlist (21), measured WCAG contrast in light/dark (11) |
+| browser suites (`make test-ui`, `test-draft`, `test-contrast`) | 45 | workspace UI and self-hosted fonts, including column mapping and its effect on outdated results (12), audit-survives-sign-up draft, including the column mapping, and `?next=` allowlist (22), measured WCAG contrast in light/dark (11) |
 | `web` `npm run test:google` | 12 | Google sign-in against a fake Google: new/existing account, unverified email, cancelled consent, CSRF and single-use state, feature-off gating |
 | `web/tests/auth-races.test.mjs` (now part of `test:integration`) | 8 | throttling, token redemption and a credential reset under genuine `Promise.all` concurrency, including across independent DB connections, not sequential calls |
+| `web/tests/correction.test.mjs` | 8 | propose then confirm updates facts, price and version and records a before/after event; a stale version fails at propose time before any engine call and at confirm time without applying the draft; an expired or missing draft fails clearly; catalogue MPF, dataset revision and assumptions are untouched; totals-complete and the watched-code swap follow the new HTS |
+| `web/tests/csvparse.test.mjs` | 23 | reading, aliases, the template and sample, and column mapping: unrecognised headings are blocked by default and read once mapped, and an explicit mapping overrides an alias |
 | `web` `npm run test:reprice` | 1 (end-to-end) | a real browser: audit with stated entries/transport, save, approve two lines, re-price against a fake engine whose second response deliberately differs — a rate move is picked up and reopens its approval, an unchanged line and its approval are untouched, a never-classified line is resolved with fresh evidence, an already-classified line keeps its existing evidence, entries/transport are resubmitted from what was saved rather than the audit form's defaults |
 
 The Python suites need `data/` for `test_api`, `test_refresh` and the
@@ -312,8 +319,16 @@ silently measuring its own no-key fallback and reporting that as "reasoning."
 - The classifier's exact-line accuracy is low (above).
 - Alerts replay 7 days behind the cursor; a document ingested more than a week
   after its publication date is still missed.
-- Not built: entry-summary (CBP 7501) ingest, duty drawback, team seats, API
-  access.
+- Not built: entry-summary (CBP 7501) ingest, duty drawback, team seats and
+  shared catalogues (assignment is a free-text label, with no invitations or
+  permissions), savings analysis, and a classification binder export. The last
+  three are listed in `IN_BUILD` in `web/src/lib/plans.ts`.
+- A correction's alternative codes come from the same retrieval classifier
+  whose exact 10-digit top-1 accuracy is 15.5% (above). The candidate list is
+  as good as that retrieval, and a correction is not an approval: approval is
+  a separate, later action.
+- Column mapping is per file, and its preview is read-only. Rows that cannot
+  be read still go to the engine and come back marked, as before.
 
 ## Release gate
 

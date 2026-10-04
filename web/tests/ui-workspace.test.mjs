@@ -139,6 +139,19 @@ try {
     await page.waitForFunction(() => !Array.from(document.querySelectorAll("button")).find((b) => b.textContent.includes("Save and watch"))?.disabled);
     assert.equal(await save.isDisabled(), false);
   });
+  await check("changing a column choice after an audit makes its results outdated", async () => {
+    const save = page.getByRole("button", { name: "Save and watch these codes" });
+    assert.equal(await save.isDisabled(), false);
+    await page.getByRole("button", { name: "Edit catalogue" }).click();
+    const mapper = page.locator("details").filter({ hasText: "Match your columns" });
+    if (!(await mapper.evaluate((el) => el.open))) await mapper.locator("summary").click();
+    await mapper.locator("select").first().selectOption({ label: "Not in my file" });
+    assert.equal(await save.isDisabled(), true, "a changed mapping must block saving the old results");
+    assert.match(await page.locator("main").innerText(), /changed the catalogue or shipping assumptions/);
+    await mapper.locator("select").first().selectOption({ label: "description" });
+    await page.getByRole("button", { name: "Run audit", exact: true }).click();
+    await page.waitForFunction(() => !Array.from(document.querySelectorAll("button")).find((b) => b.textContent.includes("Save and watch"))?.disabled);
+  });
   await check("mobile and dark layouts contain overflow within the results table", async () => {
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });

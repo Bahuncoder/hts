@@ -243,6 +243,19 @@ try {
     assert.match(await page.locator("summary").filter({ hasText: /^Assumptions: / }).innerText(), /4 formal entries, air shipment/);
   });
 
+  await check("a restored draft brings back the customer's column choices, not just their text", async () => {
+    const page = await newPage({ token: await seededSession("mapper") });
+    await page.goto(`${app.base}/audit`, { waitUntil: "networkidle" });
+    const text = "Product Name,Ctry,Price\nmens knitted cotton t-shirt,China,4800";
+    await setStored(page, validDraft({ text, rows: 1, mapping: { description: 0, country: 1, value: 2 } }));
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Restore it" }).click();
+    await page.waitForTimeout(500);
+    const body = await page.locator("main").innerText();
+    assert.match(body, /1 rows? read/, "the mapped rows are read after restoring");
+    assert.doesNotMatch(body, /Missing the “description” column/, "the restored mapping supplies the description column");
+  });
+
   await check("a save deletes a draft that was never restored", async () => {
     const page = await newPage({ token: await seededSession("saver") });
     await page.goto(`${app.base}/audit`, { waitUntil: "networkidle" });
