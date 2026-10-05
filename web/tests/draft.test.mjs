@@ -330,7 +330,7 @@ try {
 
   await check("signing out deletes the draft", async () => {
     const page = await newPage({ token: await seededSession("leaver") });
-    await page.goto(`${app.base}/account`, { waitUntil: "networkidle" });
+    await page.goto(`${app.base}/account#security`, { waitUntil: "networkidle" });
     await setStored(page, validDraft());
     await page.reload({ waitUntil: "networkidle" });
     await page.getByTestId("draft-notice").waitFor();
@@ -355,7 +355,7 @@ try {
     await page.waitForURL(/\/audit$/);
     assert.equal(await page.getByTestId("draft-notice").count(), 0);
     await runAudit(page); // signed in, still no storage
-    await page.goto(`${app.base}/account`, { waitUntil: "networkidle" });
+    await page.goto(`${app.base}/account#security`, { waitUntil: "networkidle" });
     assert.equal(await page.getByTestId("draft-notice").count(), 0);
     await Promise.all([
       page.waitForURL((u) => !u.pathname.startsWith("/account")),

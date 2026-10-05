@@ -91,6 +91,7 @@ await step("signup creates an account and lands on it", async () => {
   page = account.page;
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  await page.goto(`${BASE}/account#plan`, { waitUntil: "networkidle" });
   const body = await text();
   assert.match(body, /Plan and limits/, "a new account sees its plan and limits");
   assert.match(body, /\bFree\b/, "a new account is shown on the Free plan");
@@ -180,7 +181,7 @@ await step("catalogue exports as CSV with a sensible filename", async () => {
 // --- account control --------------------------------------------------------
 
 await step("alert emails can be turned off from the account", async () => {
-  await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/account#preferences`, { waitUntil: "networkidle" });
   const before = await text();
   assert.match(before, /Tariff alert emails/);
   const btn = page.locator("button", { hasText: /Turn alert emails/ }).first();
@@ -192,7 +193,7 @@ await step("alert emails can be turned off from the account", async () => {
 });
 
 await step("signing out ends the session", async () => {
-  await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/account#security`, { waitUntil: "networkidle" });
   await Promise.all([
     page.waitForURL((u) => !u.pathname.startsWith("/account"), { timeout: 20000 }),
     page.getByRole("button", { name: "Sign out", exact: true }).click(),
@@ -214,8 +215,8 @@ await step("signing back in restores the catalogue", async () => {
 });
 
 await step("a wrong password is refused with one message", async () => {
-  await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
-  await page.click("text=Sign out").catch(() => {});
+  await page.goto(`${BASE}/account#security`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Sign out", exact: true }).click().catch(() => {});
   await page.waitForTimeout(800);
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   await page.fill('input[name="email"]', account.email);

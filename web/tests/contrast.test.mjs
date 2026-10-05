@@ -267,9 +267,9 @@ try {
     await q.reload({ waitUntil: "networkidle" });
     await q.getByTestId("draft-notice").waitFor();
     await inAllModes(q, "/audit (draft notice)", ['[data-testid="draft-notice"]', '[data-testid="draft-notice"] .btn-primary', '[data-testid="draft-notice"] .btn-secondary']);
-    await go(q, "/account");
+    await go(q, "/account#plan");
     await q.getByTestId("draft-notice").waitFor();
-    await inAllModes(q, "/account", ['[data-testid="draft-notice"]', ".settings-label", ".settings-limits dt", "h2", "footer p"]);
+    await inAllModes(q, "/account#plan", ['[data-testid="draft-notice"]', ".settings-label", ".settings-limits dt", "h2", "footer p"]);
     await q.evaluate(() => localStorage.removeItem("htsdesk.draft.v1"));
   });
 

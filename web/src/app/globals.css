@@ -277,6 +277,11 @@ input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .settings-nav a:hover, .settings-nav a:focus-visible { background: var(--accent-soft); color: var(--accent); }
 .settings-nav a.settings-nav-current { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .settings-content { display: grid; gap: 24px; min-width: 0; }
+/* One section at a time: the section a menu link names is shown; with none
+   named, Profile is. The rest are hidden, not scrolled past. */
+#settings-sections > .settings-panel { display: none; }
+#settings-sections:not(:has(.settings-panel:target)) > #profile,
+#settings-sections > .settings-panel:target { display: block; }
 .settings-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; scroll-margin-top: 24px; }
 .settings-section-heading { padding: 22px 24px; border-bottom: 1px solid var(--border); }
 .settings-section-heading h2 { font-size: 18px; font-weight: 600; }

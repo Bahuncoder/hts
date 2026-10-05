@@ -55,7 +55,7 @@ export default async function AccountPage() {
           { id: "preferences", label: "Preferences" },
           { id: "security", label: "Security and activity" },
         ]} />
-        <div className="settings-content">
+        <div id="settings-sections" className="settings-content">
           <section id="profile" className="settings-panel" aria-labelledby="profile-title">
             <div className="settings-section-heading"><h2 id="profile-title">Profile</h2><p>Your sign-in email and saved work.</p></div>
             <div className="settings-row"><div><p className="settings-label">Email address</p><p className="mt-1 break-all text-[15px]">{account.email}</p></div></div>
