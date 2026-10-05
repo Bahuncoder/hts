@@ -55,7 +55,11 @@ export default async function CalculatorPage({
   const vehicleUse = ["passenger", "heavy", "none"].includes(one(sp.vehicle) ?? "") ? (one(sp.vehicle) as string) : "";
   const endUse = ["civil aircraft", "pharmaceutical"].includes(one(sp.enduse) ?? "") ? (one(sp.enduse) as string) : "";
   const q = (one(sp.q) ?? "").trim();
-  const findOpen = one(sp.find) === "1" || Boolean(q);
+  // mode says what the visitor is doing: finding a code, or entering one. Only
+  // Calculate sends no mode, so only Calculate runs the estimate.
+  const mode = one(sp.mode) ?? "";
+  const findOpen = mode === "find" || Boolean(q);
+  const browsing = mode === "find" || mode === "code";
 
   const scenario: Record<string, string> = {
     hts,
@@ -99,7 +103,7 @@ export default async function CalculatorPage({
     }
   }
   const quote =
-    hts && !inputProblem && value !== null
+    hts && !inputProblem && value !== null && !browsing
       ? await getQuote({
           hts,
           country,
@@ -123,7 +127,7 @@ export default async function CalculatorPage({
   const lookupCode = digits.length === 10
     ? `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}.${digits.slice(8, 10)}`
     : hts;
-  const codeCheck = hts && health.ok
+  const codeCheck = hts && health.ok && mode !== "find"
     ? await getHts(lookupCode, country || "China", value ?? 10000)
     : null;
 
@@ -144,8 +148,8 @@ export default async function CalculatorPage({
           stay the calculation, not "Find a code". */}
       <button type="submit" form="calc-form" hidden tabIndex={-1} aria-hidden="true" />
       <nav aria-label="How do you want to start?" className="flex flex-wrap gap-2">
-        <button type="submit" form="calc-form" aria-current={findOpen ? undefined : "true"} className={`btn ${findOpen ? "btn-secondary" : "btn-selected"}`}>I know my code</button>
-        <button type="submit" form="calc-form" name="find" value="1" aria-current={findOpen ? "true" : undefined} className={`btn ${findOpen ? "btn-selected" : "btn-secondary"}`}>Find a code</button>
+        <button type="submit" form="calc-form" formNoValidate name="mode" value="code" aria-current={findOpen ? undefined : "true"} className={`btn ${findOpen ? "btn-secondary" : "btn-selected"}`}>I know my code</button>
+        <button type="submit" form="calc-form" formNoValidate name="mode" value="find" aria-current={findOpen ? "true" : undefined} className={`btn ${findOpen ? "btn-selected" : "btn-secondary"}`}>Find a code</button>
       </nav>
       {findOpen ? (
         <div id="find-code" className="max-w-2xl">
@@ -153,6 +157,7 @@ export default async function CalculatorPage({
               {Object.entries(scenario).map(([k, v]) =>
                 v ? <input key={k} type="hidden" name={k} value={v} /> : null,
               )}
+              <input type="hidden" name="mode" value="find" />
               <div>
                 <h2 className="text-[18px] font-semibold">Don&rsquo;t know your HTS code?</h2>
                 <p className="mt-0.5 text-[13px] text-muted">Describe the product and we&rsquo;ll suggest candidates.</p>
@@ -207,7 +212,7 @@ export default async function CalculatorPage({
             {matches.data.results.slice(0, 8).map((r) => (
               <li key={r.hts}>
                 <Link
-                  href={href({ hts: r.hts, q: "" })}
+                  href={href({ hts: r.hts, q: "", mode: "code" })}
                   className="tabular font-medium hover:underline text-accent"
                 >
                   {r.hts}
