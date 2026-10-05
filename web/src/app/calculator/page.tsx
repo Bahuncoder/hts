@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import Link from "next/link";
-import { getHealth, getQuote, money2, search, type Quote } from "@/lib/api";
+import { getHealth, getHts, getQuote, money2, search, type HtsDetail, type Quote } from "@/lib/api";
 import { Card, Note, Stat } from "@/components/ui";
 import { Field, RadioGroup, inputClass } from "@/components/Field";
 import { ORIGINS } from "@/lib/origins";
@@ -124,6 +124,18 @@ export default async function CalculatorPage({
           endUse: endUse || undefined,
         })
       : null;
+
+  // Before the duty is relied on, say what the tariff calls this code, so a
+  // wrong digit is caught here rather than in the estimate.
+  // The tariff is written with dots (6109.10.00.12); a bare 10-digit code is
+  // formatted the same way before the lookup.
+  const digits = hts.replace(/\D/g, "");
+  const lookupCode = digits.length === 10
+    ? `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6, 8)}.${digits.slice(8, 10)}`
+    : hts;
+  const codeCheck = hts && health.ok
+    ? await getHts(lookupCode, country || "China", value ?? 10000)
+    : null;
 
   // --- find a code -----------------------------------------------------
   const searchProblem =
@@ -400,6 +412,20 @@ export default async function CalculatorPage({
       </form>
 
       {inputProblem ? <Note role="alert">{inputProblem}</Note> : null}
+      {/* The estimate's own failure notice already says a code is not found, so
+          these only show when that notice is not already there. */}
+      {!(quote && !quote.ok) && codeCheck && !codeCheck.ok && codeCheck.kind === "not_found" ? (
+        <Note role="alert">
+          We do not recognise <span className="mono">{hts}</span> as a tariff code. Check the digits, or use Find a code.
+        </Note>
+      ) : null}
+      {!(quote && !quote.ok) && codeCheck?.ok && !codeCheck.data.is_leaf ? (
+        <Note role="alert">
+          <span className="mono">{codeCheck.data.hts}</span> is a heading, not a full code. Choose the code that
+          matches your product before you rely on the duty.
+        </Note>
+      ) : null}
+      {codeCheck?.ok && codeCheck.data.is_leaf ? <CodeConfirmation detail={codeCheck.data} /> : null}
       {quote && !quote.ok ? (
         <FailureNotice
           failure={quote}
@@ -540,6 +566,20 @@ function Estimate({
       {result.warnings.map((w) => (
         <Note key={w}>{w}</Note>
       ))}
+    </section>
+  );
+}
+
+/** What the tariff calls the code the visitor entered, so they can confirm it
+ *  is the right one before the duty is shown. */
+function CodeConfirmation({ detail }: { detail: HtsDetail }) {
+  return (
+    <section aria-label="Confirm this code" className="space-y-1 border-l-2 border-accent bg-accent-soft py-3 pl-4 pr-4">
+      <p className="text-[13px] font-medium text-muted">The tariff calls this code</p>
+      <p className="mono text-[15px] font-medium">{detail.hts}</p>
+      <p className="text-[15px]">{detail.description}</p>
+      {detail.full_path ? <p className="text-[13px] text-muted">{detail.full_path}</p> : null}
+      <p className="text-[13px] text-muted">General rate: <span className="mono">{detail.rates.general}</span></p>
     </section>
   );
 }
