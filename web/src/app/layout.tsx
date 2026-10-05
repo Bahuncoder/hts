@@ -79,6 +79,9 @@ export default async function RootLayout({
     <html
       lang="en"
       className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable}`}
+      // The theme script in <head> sets data-theme before React hydrates, so this
+      // one attribute differs from the server HTML by design.
+      suppressHydrationWarning
     >
       <head>
         <script
