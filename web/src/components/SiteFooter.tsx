@@ -31,8 +31,8 @@ export default function SiteFooter() {
   return (
     <footer className="site-footer mt-16 border-t border-border bg-sunk">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
-          <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-10 md:grid-cols-[1.4fr_repeat(3,1fr)] md:gap-10">
+          <div className="col-span-2 space-y-4 md:col-span-1">
             <Link href="/" aria-label="HTSDesk home" className="inline-block">
               <Lockup mark={26} word={17} />
             </Link>

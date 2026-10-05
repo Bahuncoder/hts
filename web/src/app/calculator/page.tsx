@@ -56,16 +56,6 @@ export default async function CalculatorPage({
   const endUse = ["civil aircraft", "pharmaceutical"].includes(one(sp.enduse) ?? "") ? (one(sp.enduse) as string) : "";
   const q = (one(sp.q) ?? "").trim();
   const findOpen = one(sp.find) === "1" || Boolean(q);
-  // "Find a code" keeps whatever the visitor already entered, so changing
-  // path does not reset the scenario.
-  const keepScenario = new URLSearchParams();
-  for (const [k, v] of [
-    ["hts", hts], ["country", country], ["value", rawValue], ["quantity", rawQuantity],
-    ["unit", quantityUnit], ["metal", rawMetal], ["vehicle", vehicleUse], ["enduse", endUse],
-    ["program", program], ["transport", transport === "air" ? "air" : ""], ["entry", entry === "informal" ? "informal" : ""],
-  ] as const) if (v) keepScenario.set(k, v);
-  keepScenario.set("find", "1");
-  const findHref = `/calculator?${keepScenario.toString()}#find-code`;
 
   const scenario: Record<string, string> = {
     hts,
@@ -145,17 +135,17 @@ export default async function CalculatorPage({
   return (
     <div className="space-y-8">
       <PageHeader eyebrow="Duty calculator" title="Know your duty exposure" description="Build an estimate for one customs entry. Choose the origin and shipping assumptions, then explore every duty and fee." />
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted">
-        <span className="text-[12px] text-faint">{edition ? `Reference data: ${edition}` : health.ok ? null : "Reference data is temporarily unavailable"}</span>
-        {hts || country || rawValue || q ? <Link href="/calculator" className="font-medium text-accent hover:underline">Start over</Link> : null}
-      </div>
 
       {/* A second GET form. It carries the scenario as hidden fields so
           searching for a code does not throw the visitor's inputs away. Shown
           first: most visitors arrive without an HTS code in hand. */}
+      {/* Both choices submit the main form, so anything typed in it is kept.
+          The hidden first button is the one Enter presses in the fields: it must
+          stay the calculation, not "Find a code". */}
+      <button type="submit" form="calc-form" hidden tabIndex={-1} aria-hidden="true" />
       <nav aria-label="How do you want to start?" className="flex flex-wrap gap-2">
-        <a href="#code-form" aria-current={findOpen ? undefined : "true"} className={`btn ${findOpen ? "btn-secondary" : "btn-selected"}`}>I know my code</a>
-        <a href={findHref} aria-current={findOpen ? "true" : undefined} className={`btn ${findOpen ? "btn-selected" : "btn-secondary"}`}>Find a code</a>
+        <button type="submit" form="calc-form" aria-current={findOpen ? undefined : "true"} className={`btn ${findOpen ? "btn-secondary" : "btn-selected"}`}>I know my code</button>
+        <button type="submit" form="calc-form" name="find" value="1" aria-current={findOpen ? "true" : undefined} className={`btn ${findOpen ? "btn-selected" : "btn-secondary"}`}>Find a code</button>
       </nav>
       {findOpen ? (
         <div id="find-code" className="max-w-2xl">
@@ -234,7 +224,7 @@ export default async function CalculatorPage({
         <p className="mt-0.5 text-[13px] text-muted">Enter it below along with origin and value.</p>
       </div>
 
-      <form action="/calculator" className="panel space-y-6 p-5 sm:p-6">
+      <form id="calc-form" action="/calculator" className="panel space-y-6 p-5 sm:p-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field
             id="hts"
@@ -293,6 +283,22 @@ export default async function CalculatorPage({
               className={`tabular ${inputClass}`}
             />
           </Field>
+        </div>
+        <div className="space-y-3">
+          {/* The estimate's own failure notice already says a code is not found, so
+              these only show when that notice is not already there. */}
+              {!(quote && !quote.ok) && codeCheck && !codeCheck.ok && codeCheck.kind === "not_found" ? (
+            <Note role="alert">
+              We do not recognise <span className="mono">{hts}</span> as a tariff code. Check the digits, or use Find a code.
+            </Note>
+          ) : null}
+              {!(quote && !quote.ok) && codeCheck?.ok && !codeCheck.data.is_leaf ? (
+            <Note role="alert">
+              <span className="mono">{codeCheck.data.hts}</span> is a heading, not a full code. Choose the code that
+              matches your product before you rely on the duty.
+            </Note>
+          ) : null}
+              {codeCheck?.ok && codeCheck.data.is_leaf ? <CodeConfirmation detail={codeCheck.data} /> : null}
         </div>
 
         <details className="border-t border-border pt-4" open={Boolean(program || rawQuantity)}>
@@ -403,29 +409,18 @@ export default async function CalculatorPage({
           />
         </div>
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-        >
-          Calculate
-        </button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button type="submit" className="btn btn-primary">
+            Calculate
+          </button>
+          <div className="flex flex-wrap items-center gap-4 text-[12px] text-faint">
+            <span>{edition ? `Reference data: ${edition}` : health.ok ? null : "Reference data is temporarily unavailable"}</span>
+            {hts || country || rawValue || q ? <Link href="/calculator" className="hover:text-ink hover:underline">Start over</Link> : null}
+          </div>
+        </div>
       </form>
 
       {inputProblem ? <Note role="alert">{inputProblem}</Note> : null}
-      {/* The estimate's own failure notice already says a code is not found, so
-          these only show when that notice is not already there. */}
-      {!(quote && !quote.ok) && codeCheck && !codeCheck.ok && codeCheck.kind === "not_found" ? (
-        <Note role="alert">
-          We do not recognise <span className="mono">{hts}</span> as a tariff code. Check the digits, or use Find a code.
-        </Note>
-      ) : null}
-      {!(quote && !quote.ok) && codeCheck?.ok && !codeCheck.data.is_leaf ? (
-        <Note role="alert">
-          <span className="mono">{codeCheck.data.hts}</span> is a heading, not a full code. Choose the code that
-          matches your product before you rely on the duty.
-        </Note>
-      ) : null}
-      {codeCheck?.ok && codeCheck.data.is_leaf ? <CodeConfirmation detail={codeCheck.data} /> : null}
       {quote && !quote.ok ? (
         <FailureNotice
           failure={quote}
@@ -579,7 +574,7 @@ function CodeConfirmation({ detail }: { detail: HtsDetail }) {
       <p className="mono text-[15px] font-medium">{detail.hts}</p>
       <p className="text-[15px]">{detail.description}</p>
       {detail.full_path ? <p className="text-[13px] text-muted">{detail.full_path}</p> : null}
-      <p className="text-[13px] text-muted">General rate: <span className="mono">{detail.rates.general}</span></p>
+      {detail.rates.general ? <p className="text-[13px] text-muted">General rate: <span className="mono">{detail.rates.general}</span></p> : null}
     </section>
   );
 }
