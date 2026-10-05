@@ -101,6 +101,11 @@ export default async function CataloguesPage({
                   <div>
                     <div className="lbl">Duty and fees</div>
                     <div className="mono text-[16px]">{money(c.duty + (c.mpf ?? 0))}</div>
+                    {c.totals_complete === 0 || c.needs_review > 0 ? (
+                      <div className="mt-1 inline-block rounded border px-1.5 py-0.5 text-[12px] font-medium border-caution bg-caution-soft text-caution-ink" title="This total leaves out lines that are not yet priced or confirmed.">
+                        Partial estimate
+                      </div>
+                    ) : null}
                   </div>
                   <div>
                     <div className="lbl">Needs information</div>
