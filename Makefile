@@ -98,6 +98,12 @@ test-refresh:
 test-freshness:
 	@python3 tests/test_freshness.py
 
+alerts:
+	@python3 -m ops.alerts
+
+test-alerts:
+	@python3 tests/test_alerts.py
+
 test-classify-eval:
 	@python3 tests/test_classify_eval.py
 

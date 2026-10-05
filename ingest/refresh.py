@@ -113,13 +113,19 @@ def prune(releases: Path, active: Path) -> None:
 
 
 def write_refresh_status(ok: bool, message: str = "") -> None:
-    """Record the outcome where the health check can read it. A failure here
-    must not hide the refresh's own error, so it is reported and passed over."""
+    """Record the outcome where the health check can read it, and tell the
+    operator when it failed. Neither may hide the refresh's own error."""
     try:
         from ops.freshness import write_status
         write_status(ok, message)
     except OSError as exc:
         print(f"could not record refresh status: {exc}", file=sys.stderr)
+    if not ok:
+        try:
+            from ops.alerts import main as send_alerts
+            send_alerts()
+        except Exception as exc:  # the alert is best effort; the refresh error still propagates
+            print(f"could not send the refresh alert: {type(exc).__name__}", file=sys.stderr)
 
 
 def main() -> None:
