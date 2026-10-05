@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { Lockup } from "@/components/Logo";
-import { ThemeSelect } from "@/components/ThemeSelect";
+import SiteFooter from "@/components/SiteFooter";
 import { KeyShortcuts } from "@/components/KeyShortcuts";
-import { NavLink, SignedOutLinks, SiteNav, type NavGroup } from "@/components/SiteNav";
+import { AccountMenu, SignedOutLinks, SiteNav, type NavGroup } from "@/components/SiteNav";
 import { currentViewer } from "@/lib/auth";
 import "./globals.css";
 
@@ -96,16 +96,15 @@ export default async function RootLayout({
           Skip to main content
         </a>
         <header className="site-header">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-4 sm:px-8">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-9 gap-y-3 px-5 py-3 sm:px-8 min-h-[68px]">
             <Link href="/" aria-label="HTSDesk home">
-              <Lockup />
+              <Lockup mark={32} word={20} />
             </Link>
             <SiteNav groups={navGroups(Boolean(viewer))} />
-            <div role="group" aria-label="Account and appearance" className="ml-auto flex items-center gap-4 text-[14px]">
-              <ThemeSelect />
+            <div className="ml-auto flex items-center gap-4 text-[14px]">
               {viewer ? (
                 <>
-                  <NavLink href="/account">Account</NavLink>
+                  <AccountMenu />
                 </>
               ) : (
                 <SignedOutLinks />
@@ -118,31 +117,7 @@ export default async function RootLayout({
           {children}
         </main>
 
-        <footer className="mt-16 px-4 py-8 text-[13px] border-t border-border text-faint">
-          <div className="mx-auto max-w-7xl space-y-2">
-            <p>
-              Rates are derived from the USITC Harmonized Tariff Schedule, the
-              Chapter 99 U.S. Notes and the Federal Register.
-            </p>
-            <p>
-              HTSDesk is decision support, not customs advice. The importer of
-              record&rsquo;s duty of reasonable care under 19 U.S.C. §1484
-              cannot be delegated — confirm classifications with your broker
-              before entry.
-            </p>
-            <p className="flex flex-wrap gap-x-4 gap-y-1 pt-1">
-              <Link href="/terms" className="hover:underline">
-                Terms
-              </Link>
-              <Link href="/privacy" className="hover:underline">
-                Privacy
-              </Link>
-              <a href="mailto:hello@htsdesk.com" className="hover:underline">
-                hello@htsdesk.com
-              </a>
-            </p>
-          </div>
-        </footer>
+        <SiteFooter />
       </body>
     </html>
   );

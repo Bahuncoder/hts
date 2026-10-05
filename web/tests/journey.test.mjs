@@ -92,9 +92,9 @@ await step("signup creates an account and lands on it", async () => {
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   const body = await text();
-  assert.match(body, /Your allowance/, "a new account sees its allowance");
+  assert.match(body, /Plan and limits/, "a new account sees its plan and limits");
   assert.match(body, /\bFree\b/, "a new account is shown on the Free plan");
-  assert.match(body, /See plans/i, "a free account is offered a way to see paid plans");
+  assert.match(body, /Explore plans/i, "a free account is offered a way to see paid plans");
 });
 
 await step("signing up again while signed in does not create a second account", async () => {
@@ -182,7 +182,7 @@ await step("catalogue exports as CSV with a sensible filename", async () => {
 await step("alert emails can be turned off from the account", async () => {
   await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
   const before = await text();
-  assert.match(before, /Alert emails/);
+  assert.match(before, /Tariff alert emails/);
   const btn = page.locator("button", { hasText: /Turn alert emails/ }).first();
   const label = await btn.innerText();
   await btn.click();

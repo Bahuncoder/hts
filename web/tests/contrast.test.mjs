@@ -269,7 +269,7 @@ try {
     await inAllModes(q, "/audit (draft notice)", ['[data-testid="draft-notice"]', '[data-testid="draft-notice"] .btn-primary', '[data-testid="draft-notice"] .btn-secondary']);
     await go(q, "/account");
     await q.getByTestId("draft-notice").waitFor();
-    await inAllModes(q, "/account", ['[data-testid="draft-notice"]', ".lbl", "h2", "table td", "footer p"]);
+    await inAllModes(q, "/account", ['[data-testid="draft-notice"]', ".settings-label", ".settings-limits dt", "h2", "footer p"]);
     await q.evaluate(() => localStorage.removeItem("htsdesk.draft.v1"));
   });
 
@@ -301,7 +301,7 @@ try {
   });
 
   await check("the detector itself: the previous --faint (#6b7a75) is caught on the same page", async () => {
-    await go(p, "/");
+    await go(p, "/audit");
     const style = await p.addStyleTag({ content: ":root, :root[data-theme] { --faint: #6b7a75 !important; }" });
     await p.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     const r = await p.evaluate(sweep, { named: [] });

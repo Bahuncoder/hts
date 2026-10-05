@@ -1,80 +1,29 @@
-/** The HTSDesk mark: four indents descending to the statistical line.
- *
- *  An HTS code is a hierarchy read as a number — chapter, heading,
- *  subheading, statistical line — and that is what the mark draws. The last
- *  rung is copper because the last rung is where the money is decided.
- *  At favicon size the third rung drops out and the mark still reads.
- */
-export function Mark({
-  size = 23,
-  tone = "accent",
-}: {
+/** A bold H inside a clipped document: classification, evidence, and a desk. */
+export function Mark({ size = 28, tone = "accent" }: {
   size?: number;
   tone?: "accent" | "deep" | "solid";
 }) {
-  const base =
-    tone === "deep"
-      ? "#5fc0a5"
-      : tone === "solid"
-        ? "#ffffff"
-        : "var(--accent)";
-  const flag =
-    tone === "deep"
-      ? "#e08a4e"
-      : tone === "solid"
-        ? "#f0a06a"
-        : "var(--recover)";
+  const base = tone === "deep" ? "#5fc0a5" : tone === "solid" ? "#ffffff" : "var(--accent)";
+  const ink = tone === "deep" || tone === "solid" ? "#10201c" : "var(--paper)";
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 104 76"
-      fill="none"
-      aria-hidden="true"
-    >
-      <rect x="0" y="4" width="96" height="11" rx="1.5" fill={base} />
-      <rect
-        x="14"
-        y="24"
-        width="74"
-        height="11"
-        rx="1.5"
-        fill={base}
-        opacity="0.74"
-      />
-      <rect
-        x="28"
-        y="44"
-        width="52"
-        height="11"
-        rx="1.5"
-        fill={base}
-        opacity="0.5"
-      />
-      <rect x="42" y="64" width="30" height="11" rx="1.5" fill={flag} />
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
+      <path d="M8 2H23L30 9V24C30 27.314 27.314 30 24 30H8C4.686 30 2 27.314 2 24V8C2 4.686 4.686 2 8 2Z" fill={base} />
+      <path d="M8 9H12V14H20V9H24V23H20V18H12V23H8V9Z" fill={ink} />
     </svg>
   );
 }
 
-export function Wordmark({ size = 17 }: { size?: number }) {
+export function Wordmark({ size = 18 }: { size?: number }) {
   return (
-    <span
-      style={{ fontSize: size, fontWeight: 600, letterSpacing: "-0.015em" }}
-    >
-      HTS<span style={{ color: "var(--muted)", fontWeight: 450 }}>Desk</span>
+    <span style={{ fontSize: size, fontWeight: 600, letterSpacing: "-0.035em", lineHeight: 1 }}>
+      HTSDesk
     </span>
   );
 }
 
-export function Lockup({
-  mark = 23,
-  word = 17,
-}: {
-  mark?: number;
-  word?: number;
-}) {
+export function Lockup({ mark = 28, word = 18 }: { mark?: number; word?: number }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 9, whiteSpace: "nowrap" }}>
       <Mark size={mark} />
       <Wordmark size={word} />
     </span>

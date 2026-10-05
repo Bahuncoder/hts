@@ -60,6 +60,27 @@ try {
     assert.match(await page.locator("#evidence-title").locator("xpath=../..").innerText(), /19,949/);
     await shot("home-desktop");
   });
+  await check("header groups tools and monitoring, and keeps appearance in Account", async () => {
+    await page.goto(app.base);
+    const header = page.locator("header");
+    const tools = header.locator("summary").filter({ hasText: /^Tools$/ });
+    await tools.click();
+    await header.getByRole("link", { name: "Duty calculator", exact: true }).waitFor();
+    await tools.press("Escape");
+    assert.equal(await tools.locator("..").getAttribute("open"), null);
+    const account = header.locator("summary").filter({ hasText: /^Account$/ });
+    await account.click();
+    await header.getByLabel("Theme", { exact: true }).selectOption("dark");
+    assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+    await header.getByLabel("Theme", { exact: true }).selectOption("system"); // leave no stored theme behind for later checks
+    await page.locator("h1").click();
+    assert.equal(await account.locator("..").getAttribute("open"), null);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await header.locator("summary").filter({ hasText: /^Menu/ }).click();
+    await header.getByRole("link", { name: "Duty calculator", exact: true }).waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+  });
   await check("home shows no 'Unavailable' figures when the engine returns no row counts", async () => {
     const p = await ctx.newPage();
     try {

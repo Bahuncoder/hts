@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { nextQuery, safeNext } from "@/lib/next";
+import { ThemeSelect } from "@/components/ThemeSelect";
 
 export type NavItem = { href: string; label: string };
 /** A group of destinations, in the order a person works: the thing they
@@ -39,54 +40,76 @@ export function NavLink({
   );
 }
 
-/** Primary navigation. At wide desktop sizes it is an inline row. Below that it folds
- *  into a <details> menu, which is keyboard-operable with no script. The menu
- *  is keyed by pathname so it closes itself when a link is followed. */
+/** Native disclosures retain keyboard support; dismiss on outside click or focus exit. */
+function HeaderDropdown({ label, active = false, children }: {
+  label: string; active?: boolean; children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  const pathname = usePathname();
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) ref.current.open = false;
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+  return (
+    <details key={pathname} ref={ref} className="header-dropdown"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && event.currentTarget.open) {
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector<HTMLElement>("summary")?.focus();
+        }
+      }}
+      onBlur={(event) => {
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) event.currentTarget.open = false;
+      }}>
+      <summary className={`nav-item header-trigger ${active ? "header-trigger-active" : ""}`}>
+        {label}<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="m3 4.5 3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </summary>
+      <div className="header-dropdown-panel">{children}</div>
+    </details>
+  );
+}
+
+export function AccountMenu() {
+  const pathname = usePathname();
+  return (
+    <HeaderDropdown label="Account" active={isActive(pathname, "/account")}>
+      <NavLink href="/account" className="header-menu-link">Account settings</NavLink>
+      <NavLink href="/pricing" className="header-menu-link">Plans and billing</NavLink>
+      <div className="header-appearance"><ThemeSelect id="account-theme" /></div>
+    </HeaderDropdown>
+  );
+}
+
 export function SiteNav({ groups }: { groups: NavGroup[] }) {
   const pathname = usePathname();
   return (
     <>
-      <nav
-        aria-label="Main"
-        className="hidden items-center gap-1 xl:flex"
-      >
-        {groups.map((g, gi) => (
-          <Fragment key={g.title}>
-            {gi > 0 ? <span aria-hidden="true" className="mx-2 h-5 w-px bg-border" /> : null}
-            {g.items.map((n) => (
-              <NavLink key={n.href} href={n.href}>
-                {n.label}
-              </NavLink>
-            ))}
-          </Fragment>
+      <nav aria-label="Main" className="hidden items-center gap-2 lg:flex">
+        {groups.map((group) => group.title === "Work" ? group.items.map((item) => (
+          <NavLink key={item.href} href={item.href}>{item.label}</NavLink>
+        )) : (
+          <HeaderDropdown key={group.title} label={group.title === "Analyze" ? "Tools" : "Monitoring"}
+            active={group.items.some((item) => isActive(pathname, item.href))}>
+            {group.items.map((item) => <NavLink key={item.href} href={item.href} className="header-menu-link">{item.label}</NavLink>)}
+          </HeaderDropdown>
         ))}
       </nav>
-
-      <details
-        key={pathname}
-        className="order-last basis-full text-[14px] xl:hidden"
-      >
-        <summary className="cursor-pointer list-none rounded border px-3 py-1.5 font-medium border-border [&::-webkit-details-marker]:hidden">
+      <details key={pathname} className="order-last basis-full text-[14px] lg:hidden">
+        <summary className="cursor-pointer list-none rounded border px-3 py-2 font-medium border-border [&::-webkit-details-marker]:hidden">
           Menu <span aria-hidden="true" className="float-right">＋</span>
         </summary>
-        <nav aria-label="Main" className="mt-2 space-y-4">
-          {groups.map((g) => {
-            if (!g.items.length) return null;
-            return (
-              <div key={g.title}>
-                <p className="px-1 text-[13px] font-medium text-muted">{g.title}</p>
-                <ul className="flex flex-col">
-                  {g.items.map((n) => (
-                    <li key={n.href}>
-                      <NavLink href={n.href} className="block py-2">
-                        {n.label}
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
+        <nav aria-label="Main" className="mt-2 space-y-4 pb-2">
+          {groups.map((group) => (
+            <div key={group.title}>
+              <p className="px-3 text-[13px] font-medium text-muted">{group.title === "Analyze" ? "Tools" : group.title === "Monitor" ? "Monitoring" : group.title}</p>
+              <ul className="flex flex-col">{group.items.map((item) => (
+                <li key={item.href}><NavLink href={item.href} className="header-menu-link">{item.label}</NavLink></li>
+              ))}</ul>
+            </div>
+          ))}
         </nav>
       </details>
     </>
