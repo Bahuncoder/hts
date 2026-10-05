@@ -195,7 +195,7 @@ await step("signing out ends the session", async () => {
   await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
   await Promise.all([
     page.waitForURL((u) => !u.pathname.startsWith("/account"), { timeout: 20000 }),
-    page.click("text=Sign out"),
+    page.getByRole("button", { name: "Sign out", exact: true }).click(),
   ]);
   await page.goto(`${BASE}/account`, { waitUntil: "networkidle" });
   assert.match(page.url(), /\/login/, "a signed-out visitor must not reach the account");

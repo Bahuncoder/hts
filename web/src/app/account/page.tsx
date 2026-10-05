@@ -10,6 +10,7 @@ import { billingEnabled } from "@/lib/stripe";
 import { subscriptionFor } from "@/lib/store";
 import { PortalButton } from "@/components/BillingButtons";
 import { ThemeSelect } from "@/components/ThemeSelect";
+import SettingsNav from "@/components/SettingsNav";
 
 export const metadata = { title: "Account" };
 export const dynamic = "force-dynamic";
@@ -45,23 +46,25 @@ export default async function AccountPage() {
     <div className="settings-page">
       <div className="settings-heading">
         <div><h1 className="serif text-3xl tracking-tight">Account settings</h1><p className="mt-2 text-[15px] text-muted">Manage your plan, preferences, and account.</p></div>
-        <span className="settings-plan-badge">{PLAN_COPY[plan].name} plan</span>
       </div>
       <AccountDraftBanner />
       <div className="settings-layout">
-        <nav aria-label="Settings sections" className="settings-nav">
-          <a href="#profile">Profile</a><a href="#plan">Plan and limits</a><a href="#preferences">Preferences</a><a href="#security">Security and activity</a>
-        </nav>
+        <SettingsNav sections={[
+          { id: "profile", label: "Profile" },
+          { id: "plan", label: "Plan and limits" },
+          { id: "preferences", label: "Preferences" },
+          { id: "security", label: "Security and activity" },
+        ]} />
         <div className="settings-content">
           <section id="profile" className="settings-panel" aria-labelledby="profile-title">
             <div className="settings-section-heading"><h2 id="profile-title">Profile</h2><p>Your sign-in email and saved work.</p></div>
-            <div className="settings-row"><div><p className="settings-label">Email address</p><p className="mt-1 break-all text-[15px]">{account.email}</p></div><SignOutForm /></div>
+            <div className="settings-row"><div><p className="settings-label">Email address</p><p className="mt-1 break-all text-[15px]">{account.email}</p></div></div>
             <div className="settings-row"><div><p className="settings-label">Your work</p><p className="mt-1 text-[14px] text-muted">{catalogues.length.toLocaleString()} saved catalogues · {needing.length.toLocaleString()} with estimates needing attention</p></div><Link href="/catalogues" className="btn btn-secondary">Open catalogues</Link></div>
             {needing.length > 0 && <ul className="settings-work-list">{needing.slice(0, 5).map((c) => <li key={c.id}><div><p className="text-[14px] font-medium">{c.name}</p><p className="text-[13px] text-muted">{c.needs_review.toLocaleString()} products need attention</p></div><Link href={`/catalogues/${c.id}/review`} className="text-[14px] font-medium text-accent">Continue review →</Link></li>)}</ul>}
           </section>
           <section id="plan" className="settings-panel" aria-labelledby="plan-title">
             <div className="settings-section-heading"><h2 id="plan-title">Plan and limits</h2><p>Your current subscription and included allowances.</p></div>
-            <div className="settings-row"><div><p className="text-[18px] font-semibold">{PLAN_COPY[plan].name}<span className="ml-2 text-[14px] font-normal text-muted">{PLAN_PRICE_MONTHLY[plan] > 0 ? `$${PLAN_PRICE_MONTHLY[plan].toLocaleString()}/month` : "No subscription charge"}</span></p><p className="mt-1 text-[14px] text-muted">{PLAN_COPY[plan].blurb}</p></div><div className="flex flex-wrap gap-2">{hasCustomer && <PortalButton />}<Link href="/pricing" className="btn btn-secondary">{plan === "free" ? "Explore plans" : "Change plan"}</Link></div></div>
+            <div className="settings-row"><div><p className="text-[18px] font-semibold">{PLAN_COPY[plan].name}{" "}<span className="ml-2 text-[14px] font-normal text-muted">{PLAN_PRICE_MONTHLY[plan] > 0 ? `$${PLAN_PRICE_MONTHLY[plan].toLocaleString()}/month` : "No subscription charge"}</span></p><p className="mt-1 text-[14px] text-muted">{PLAN_COPY[plan].blurb}</p></div><div className="flex flex-wrap gap-2">{hasCustomer && <PortalButton />}<Link href="/pricing" className="btn btn-secondary">{plan === "free" ? "Explore plans" : "Change plan"}</Link></div></div>
             <dl className="settings-limits">{[
               ["Products per audit", limits.productsPerAudit],
               [`Audits per ${windowLabel(limits.auditRequests.windowMs)}`, limits.auditRequests.max],
@@ -78,6 +81,7 @@ export default async function AccountPage() {
           </section>
           <section id="security" className="settings-panel" aria-labelledby="security-title">
             <div className="settings-section-heading"><h2 id="security-title">Security and activity</h2><p>Review sign-ins and changes to your account.</p></div>
+            <div className="settings-row"><div><p className="settings-label">This device</p><p className="mt-1 text-[14px] text-muted">Ends your session in this browser.</p></div><SignOutForm /></div>
             <div className="settings-row"><div><p className="settings-label">Password recovery</p><p className="mt-1 max-w-lg text-[14px] text-muted">Request an email to reset your password. Completing a reset signs out other devices.</p></div><Link href="/forgot" className="btn btn-secondary">Reset password</Link></div>
             <div className="settings-activity"><h3 className="settings-label">Recent activity</h3>{activity.length === 0 ? <p className="mt-3 text-[14px] text-muted">No recent activity recorded.</p> : <ul>{activity.map((row) => <li key={row.id}><div><p className="text-[14px]">{EVENT_LABEL[row.event] ?? row.event}</p>{row.client && <p className="mt-1 break-all text-[12px] text-muted">{row.client}</p>}</div><time dateTime={row.at} className="text-[12px] text-muted">{new Date(row.at).toLocaleString("en-US", {month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC"})} UTC</time></li>)}</ul>}</div>
           </section>

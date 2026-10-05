@@ -275,6 +275,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
 .settings-nav { position: sticky; top: 24px; display: grid; gap: 4px; }
 .settings-nav a { padding: 10px 12px; border-radius: 6px; font-size: 14px; color: var(--muted); }
 .settings-nav a:hover, .settings-nav a:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.settings-nav a.settings-nav-current { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .settings-content { display: grid; gap: 24px; min-width: 0; }
 .settings-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; scroll-margin-top: 24px; }
 .settings-section-heading { padding: 22px 24px; border-bottom: 1px solid var(--border); }

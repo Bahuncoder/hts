@@ -30,9 +30,8 @@ export default async function Home() {
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Link href="/audit" className="btn btn-primary">Audit your catalogue <span aria-hidden="true">→</span></Link>
             <Link href="/classify" className="btn btn-secondary">Classify one product</Link>
-            <Link href="/pricing" className="inline-flex min-h-[44px] items-center rounded-full border border-border bg-accent-soft px-4 text-[14px] font-medium text-accent">Free to start</Link>
           </div>
-          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Try the tools without an account; a free account saves your catalogues and watches your codes. <Link href="/pricing" className="font-medium text-accent hover:underline">See plans</Link>.</p>
+          <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-muted">Free to start: try the tools without an account. A free account saves your catalogues and watches your codes. <Link href="/pricing" className="font-medium text-accent hover:underline">See plans</Link>.</p>
           <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-muted">Sourcing from China? <Link href="/china-tariffs" className="font-medium text-accent hover:underline">See how Section 301 and IEEPA duty stack, and check what may be refundable</Link>.</p>
         </div>
         <DutyExampleCard

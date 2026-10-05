@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Lockup } from "@/components/Logo";
-import { ThemeSelect } from "@/components/ThemeSelect";
 
 const COLUMNS = [
   {
@@ -58,7 +57,7 @@ export default function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-10 flex flex-col gap-6 border-t border-border pt-6 md:flex-row md:items-end md:justify-between">
+        <div className="mt-10 border-t border-border pt-6">
           <div className="max-w-3xl space-y-2 text-[13px] leading-relaxed text-muted">
             <p>
               Rates are derived from the USITC Harmonized Tariff Schedule, the Chapter 99 U.S. Notes and the
@@ -73,7 +72,6 @@ export default function SiteFooter() {
             </p>
           </div>
 
-          <ThemeSelect id="footer-theme" label="Appearance" showLabel />
         </div>
       </div>
     </footer>
