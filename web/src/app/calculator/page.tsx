@@ -147,7 +147,7 @@ export default async function CalculatorPage({
           The hidden first button is the one Enter presses in the fields: it must
           stay the calculation, not "Find a code". */}
       <button type="submit" form="calc-form" hidden tabIndex={-1} aria-hidden="true" />
-      <nav aria-label="How do you want to start?" className="flex flex-wrap gap-2">
+      <nav aria-label="How do you want to start?" className="-mt-3 flex flex-wrap gap-2">
         <button type="submit" form="calc-form" formNoValidate name="mode" value="code" aria-current={findOpen ? undefined : "true"} className={`btn ${findOpen ? "btn-secondary" : "btn-selected"}`}>I know my code</button>
         <button type="submit" form="calc-form" formNoValidate name="mode" value="find" aria-current={findOpen ? "true" : undefined} className={`btn ${findOpen ? "btn-selected" : "btn-secondary"}`}>Find a code</button>
       </nav>
@@ -224,7 +224,7 @@ export default async function CalculatorPage({
         </Card>
       ) : null}
 
-      <div id="code-form">
+      <div id="code-form" className="-mt-3">
         <h2 className="sr-only">I know my code</h2>
         <p className="mt-0.5 text-[13px] text-muted">Enter it below along with origin and value.</p>
       </div>
