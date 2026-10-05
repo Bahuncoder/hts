@@ -137,7 +137,7 @@ export default async function CalculatorPage({
   const matches = q && !searchProblem ? await search(q) : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader eyebrow="Duty calculator" title="Know your duty exposure" description="Build an estimate for one customs entry. Choose the origin and shipping assumptions, then explore every duty and fee." />
 
       {/* A second GET form. It carries the scenario as hidden fields so

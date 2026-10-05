@@ -18,7 +18,7 @@ export default async function RefundCheckPage() {
   const { limits } = viewer;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Your import workspace"
         title="Entry Refund Check"

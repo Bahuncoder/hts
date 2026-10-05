@@ -201,7 +201,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
   if (!res.ok) {
     const retry = `/hts/${encodeURIComponent(code)}?country=${encodeURIComponent(country)}`;
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         <h1 className="tabular text-3xl font-semibold tracking-tight">
           {code}
         </h1>
@@ -253,7 +253,7 @@ export default async function HtsPage({ params, searchParams }: Props) {
         : "Rates move several times a week. Watch this code to see tariff actions that name it in Alerts in the app.";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="tabular text-3xl font-semibold tracking-tight">

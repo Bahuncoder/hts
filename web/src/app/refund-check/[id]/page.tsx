@@ -18,7 +18,7 @@ export default async function RefundCheckDetailPage({ params }: { params: Promis
   const total = check.items.reduce((sum, it) => sum + it.struck_down_refundable, 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader eyebrow="Saved refund check" title={check.name} description={`Checked ${new Date(check.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })} · ${check.items.length} ${check.items.length === 1 ? "entry" : "entries"}`}>
         <a href={`/api/refund-checks/evidence?id=${check.id}`} className="btn btn-secondary">Export evidence</a>
         <form action={deleteRefundCheckAction}>

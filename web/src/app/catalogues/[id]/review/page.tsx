@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireViewer } from "@/lib/auth";
 import { getCatalogue } from "@/lib/catalogues";
 import { LEGACY_LABEL, STATUS_LABEL } from "@/lib/auditModel";
+import { StatusChip } from "@/components/status";
 import {
   APPROVAL_LABEL, APPROVAL_STATUSES, approvalCounts, catalogueReviewState,
   isApprovalStatus, itemHistory, type ApprovalStatus,
@@ -248,7 +249,7 @@ export default async function Review({
                       <th scope="col">Calculation</th>
                       <th scope="col">Review</th>
                       <th scope="col">Assigned to</th>
-                      <th scope="col" className="sr-only">Open</th>
+                      <th scope="col"><span className="sr-only">Open</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -258,7 +259,7 @@ export default async function Review({
                         <td>{item.description || "—"}</td>
                         <td>{item.country}</td>
                         <td className="mono">{item.hts ?? "Unclassified"}</td>
-                        <td>{item.status ? STATUS_LABEL[item.status] : LEGACY_LABEL}</td>
+                        <td><StatusChip status={item.status} /></td>
                         <td className={TONE[review.approval_status]}>{APPROVAL_LABEL[review.approval_status]}</td>
                         <td>{review.assigned_to || "—"}</td>
                         <td>

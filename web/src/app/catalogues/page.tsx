@@ -5,7 +5,6 @@ import { countCatalogueWatches, listCatalogues } from "@/lib/catalogues";
 import { deleteCatalogueAction } from "@/lib/actions";
 import { money } from "@/lib/api";
 import { Card } from "@/components/ui";
-import { PartialMark } from "@/components/status";
 
 export const metadata = { title: "Catalogues" };
 export const dynamic = "force-dynamic";
@@ -25,7 +24,7 @@ export default async function CataloguesPage({
   const doomedWatches = doomed ? await countCatalogueWatches(viewer.account.id, doomed.id) : 0;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <PageHeader eyebrow="Your saved workspace" title="Catalogues" description="Keep your reviewed estimates in one place. Priced codes are watched for tariff actions, with new matches available in your alerts.">
         <Link href="/audit" className="btn btn-primary">Audit a catalogue <span aria-hidden="true">＋</span></Link>
       </PageHeader>
@@ -102,12 +101,9 @@ export default async function CataloguesPage({
                   <div>
                     <div className="lbl">Duty and fees</div>
                     <div className="mono text-[16px]">{money(c.duty + (c.mpf ?? 0))}</div>
-                    {c.totals_complete === 0 ? (
-                      <div className="mt-1"><PartialMark unresolved={c.needs_review} /></div>
-                    ) : null}
                   </div>
                   <div>
-                    <div className="lbl">Needs review</div>
+                    <div className="lbl">Needs information</div>
                     <div className="mono text-[16px]">{c.needs_review.toLocaleString()}</div>
                   </div>
                   {c.refundable > 0 ? (

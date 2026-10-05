@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AuditPage() {
   const viewer = await currentViewer();
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <AuditClient
         signedIn={Boolean(viewer)}
         maxRows={(viewer ? viewer.limits : LIMITS.anonymous).productsPerAudit}

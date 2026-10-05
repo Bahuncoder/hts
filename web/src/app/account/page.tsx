@@ -59,7 +59,7 @@ export default async function AccountPage() {
           <section id="profile" className="settings-panel" aria-labelledby="profile-title">
             <div className="settings-section-heading"><h2 id="profile-title">Profile</h2><p>Your sign-in email and saved work.</p></div>
             <div className="settings-row"><div><p className="settings-label">Email address</p><p className="mt-1 break-all text-[15px]">{account.email}</p></div></div>
-            <div className="settings-row"><div><p className="settings-label">Your work</p><p className="mt-1 text-[14px] text-muted">{catalogues.length.toLocaleString()} saved catalogues · {needing.length.toLocaleString()} with estimates needing attention</p></div><Link href="/catalogues" className="btn btn-secondary">Open catalogues</Link></div>
+            <div className="settings-row"><div><p className="settings-label">Your work</p><p className="mt-1 text-[14px] text-muted">{catalogues.length.toLocaleString()} saved {catalogues.length === 1 ? "catalogue" : "catalogues"} · {needing.length.toLocaleString()} with estimates needing attention</p></div><Link href="/catalogues" className="btn btn-secondary">Open catalogues</Link></div>
             {needing.length > 0 && <ul className="settings-work-list">{needing.slice(0, 5).map((c) => <li key={c.id}><div><p className="text-[14px] font-medium">{c.name}</p><p className="text-[13px] text-muted">{c.needs_review.toLocaleString()} products need attention</p></div><Link href={`/catalogues/${c.id}/review`} className="text-[14px] font-medium text-accent">Continue review →</Link></li>)}</ul>}
           </section>
           <section id="plan" className="settings-panel" aria-labelledby="plan-title">

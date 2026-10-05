@@ -38,7 +38,7 @@ export default async function ChangesPage({
     : all;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader eyebrow="Tariff intelligence" title="See what is changing." description="Explore tariff actions published in the Federal Register over the last 90 days. Filter by HTS code to find the changes relevant to your goods." />
 
       <form action="/changes" className="panel max-w-2xl p-5" role="search">

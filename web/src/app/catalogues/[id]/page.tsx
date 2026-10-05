@@ -110,7 +110,7 @@ export default async function CataloguePage({
   const pendingReview = approval.pending;
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1.5">
           <Link href="/catalogues" className="text-[13px] hover:underline text-faint">
