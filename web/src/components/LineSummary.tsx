@@ -53,7 +53,7 @@ export function LineFilterTabs({
 }
 
 export function LineSummary({
-  headingId, submitted, unresolved, duty, partial, review, failed, ready, action, aside,
+  headingId, submitted, unresolved, duty, partial, review, failed, ready, pendingReview, action, aside,
 }: {
   headingId?: string;
   submitted: number;
@@ -64,18 +64,31 @@ export function LineSummary({
   review: number;
   failed: number;
   ready: number;
+  /** Saved catalogues only: products still awaiting a human decision. */
+  pendingReview?: number;
   action?: ReactNode;
   aside?: ReactNode;
 }) {
+  const desktopHeading = unresolved > 0 ? (
+    <><span className="mono">{n(unresolved)}</span> of <span className="mono">{n(submitted)}</span> products need attention</>
+  ) : (
+    <>All <span className="mono">{n(submitted)}</span> products are priced and complete</>
+  );
   return (
     <section className="space-y-5" aria-label="Summary">
       <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border pt-7">
         <h2 className="serif text-3xl tracking-tight" id={headingId}>
-          {unresolved > 0 ? (
-            <><span className="mono">{n(unresolved)}</span> of <span className="mono">{n(submitted)}</span> products need attention</>
-          ) : (
-            <>All <span className="mono">{n(submitted)}</span> products are priced and complete</>
-          )}
+          {pendingReview !== undefined ? (
+            <>
+              <span className="md:hidden">
+                <span className="mono">{n(ready)}</span> complete {ready === 1 ? "estimate" : "estimates"}
+                <span className="mt-1 block text-[15px] font-normal text-muted">
+                  <span className="mono">{n(pendingReview)}</span> pending review
+                </span>
+              </span>
+              <span className="hidden md:inline">{desktopHeading}</span>
+            </>
+          ) : desktopHeading}
         </h2>
         {aside ? <span className="flex flex-wrap items-center gap-4 text-[13px] text-muted">{aside}</span> : null}
       </div>

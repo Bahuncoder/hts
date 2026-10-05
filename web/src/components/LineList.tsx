@@ -23,6 +23,8 @@ export type ListLine = {
   value: number | null;
   duty: number | null;
   status: Status | null;
+  /** The human review state, e.g. "Review: Pending", for saved lines. */
+  review?: string | null;
   scopeUnverified?: boolean;
   /** Read-only reasons, shown under Details when there is no custom detail. */
   notes?: string[];
@@ -86,7 +88,10 @@ export default function LineList({
                   <p className="mono mt-1 text-[14px] font-medium">{l.sku || "no SKU"}</p>
                   <p className="text-[14px] text-muted">{l.description || "—"}</p>
                 </div>
-                <div className="shrink-0"><EstimateCell line={l} /></div>
+                <div className="flex shrink-0 flex-col items-start gap-1">
+                  <EstimateCell line={l} />
+                  {l.review ? <p className="text-[12px] text-muted">{l.review}</p> : null}
+                </div>
               </div>
               <dl className="mt-3 grid grid-cols-3 gap-2 text-[13px]">
                 <div><dt className="text-faint">HTS</dt><dd className="mono whitespace-nowrap text-[12px]">{l.hts ?? "—"}</dd></div>
@@ -159,6 +164,7 @@ export default function LineList({
                     <td className="py-2 pl-2">
                       <div className="flex flex-col items-start gap-1">
                         <EstimateCell line={l} />
+                        {l.review ? <span className="text-[12px] text-muted">{l.review}</span> : null}
                         {hasDetail(l) ? (
                           <button
                             type="button"

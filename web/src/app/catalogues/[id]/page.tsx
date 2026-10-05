@@ -13,8 +13,9 @@ import { money2 } from "@/lib/api";
 import { Card } from "@/components/ui";
 import { PartialMark } from "@/components/status";
 import LineList from "@/components/LineList";
+import LineControls from "@/components/LineControls";
 import { LEGACY_LABEL, bucketOf, countLines, isPriced, reviewNotes } from "@/lib/auditModel";
-import { approvalCounts } from "@/lib/review";
+import { APPROVAL_LABEL, approvalCounts } from "@/lib/review";
 import { LineFilterTabs, LineSummary, LINE_FILTERS, type LineFilterId } from "@/components/LineSummary";
 
 export const dynamic = "force-dynamic";
@@ -176,6 +177,7 @@ export default async function CataloguePage({
         </p>
       ) : (
         <LineSummary
+          pendingReview={pendingReview}
           submitted={counts.submitted}
           unresolved={counts.unresolved}
           duty={totals.duty}
@@ -248,26 +250,7 @@ export default async function CataloguePage({
         hrefFor={(id) => href(id)}
       />
 
-      <form method="get" action={`/catalogues/${cat.id}`} className="flex flex-wrap items-end gap-3">
-        {show !== "all" ? <input type="hidden" name="show" value={show} /> : null}
-        <label className="min-w-[16rem] flex-1 text-[13px]">
-          Search
-          <input data-search
-            type="search" name="q" defaultValue={sp.q ?? ""} className="field-control mt-1 block w-full"
-            placeholder="SKU, description, origin, or HTS code"
-          />
-        </label>
-        <label className="text-[13px]">
-          Sort
-          <select name="sort" defaultValue={sort} className="field-control mt-1 block w-full">
-            <option value="unresolved">Needs attention first</option>
-            <option value="original">Original row order</option>
-            <option value="duty">Highest duty first</option>
-            <option value="value">Highest value first</option>
-          </select>
-        </label>
-        <button type="submit" className="btn btn-secondary">Apply</button>
-      </form>
+      <LineControls basePath={`/catalogues/${cat.id}`} show={show} sort={sort} q={sp.q ?? ""} />
 
       {!slice.length ? (
         <p className="py-6 text-[14px] text-muted">No lines match this filter.</p>
@@ -285,6 +268,7 @@ export default async function CataloguePage({
             value: i.status && !isPriced(i.status) && !i.value ? null : i.value,
             duty: i.duty,
             status: i.status,
+            review: APPROVAL_LABEL[i.review_status],
             scopeUnverified: i.scope_unverified === 1,
             notes: reviewNotes({
               error: i.error, review_reasons: i.review,

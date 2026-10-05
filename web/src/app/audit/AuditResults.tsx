@@ -112,6 +112,7 @@ function Detail({ line, onEdit, onSave, amount }: {
   onSave: (changes: Partial<Record<Field, string>>) => void;
   amount: number;
 }) {
+  const [editOpen, setEditOpen] = useState(false);
   const uniq = (xs: string[], not: string[]) => [...new Set(xs)].filter((x) => x && !not.includes(x));
   const reasons = uniq([line.error ?? "", ...(line.review_reasons ?? [])], []);
   const incomplete = uniq(line.incomplete ?? [], reasons);
@@ -134,12 +135,23 @@ function Detail({ line, onEdit, onSave, amount }: {
           <p>{NEXT_STEP[line.status]!.meaning}</p>
           <p className="font-medium">Next step: {NEXT_STEP[line.status]!.next}</p>
           {line.status !== "ready" ? (
-            <button type="button" onClick={onEdit} className="btn btn-secondary">Edit catalogue inputs</button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => setEditOpen(true)} className="btn btn-primary">
+                Change this product&rsquo;s facts
+              </button>
+              <button type="button" onClick={onEdit} className="text-[14px] text-muted underline">
+                Edit the whole catalogue instead
+              </button>
+            </div>
           ) : null}
         </div>
       ) : null}
 
-      <details className="border-t border-border pt-3">
+      <details
+        open={editOpen}
+        onToggle={(e) => setEditOpen(e.currentTarget.open)}
+        className="border-t border-border pt-3"
+      >
         <summary className="cursor-pointer text-[14px] font-medium text-accent">Change this product&rsquo;s facts</summary>
         <form
           className="mt-3 grid gap-3 sm:grid-cols-2"
