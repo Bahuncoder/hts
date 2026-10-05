@@ -102,7 +102,7 @@ try {
       args: ["legacy-token", "old", new Date(Date.now() + 3_600_000).toISOString()] });
     const res = await fetch(`${app.base}/account`, { headers: { cookie: "htsdesk_session=legacy-token" } });
     assert.equal(res.status, 200);
-    assert.match(await res.text(), /Your allowance/);
+    assert.match(await res.text(), /Plan and limits/);
   });
 
   await check("catalogue review columns are added in place and legacy rows are untouched", async () => {

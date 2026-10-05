@@ -206,7 +206,9 @@ def _():
     if code == 429:
         return
     assert code == 200, code
-    assert body == {"status": "ok"}, body
+    # Anonymous callers learn only the status, which can be "stale" when the
+    # data is out of date (ops/freshness.py); the detail is for keyed callers.
+    assert set(body) == {"status"} and body["status"] in ("ok", "stale", "degraded"), body
     assert "counts" not in body, "row counts disclosed without a key"
     assert "reasoning_enabled" not in body, "code path disclosed without a key"
 

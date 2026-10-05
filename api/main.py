@@ -34,6 +34,7 @@ from core.countries import UnknownCountry
 from core.engine import TariffEngine
 from core.hts import InvalidHts, NotStatisticalLine
 from store.db import connect, get_meta, index_coverage
+from ops.freshness import SOURCES as FRESHNESS_SOURCES, assess as assess_freshness, read_status as read_refresh_status
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -215,10 +216,18 @@ def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
     caller gets them; everyone else gets liveness, which is all a health check
     needs. Both report "degraded" if the precedent index is empty, since a
     populated ruling table with an empty index looks healthy and is not.
+
+    Both report "stale" when the data is older than its threshold or the last
+    refresh failed (ops/freshness.py). Monitoring should alert on any status
+    other than "ok"; the keyed response says which source is stale and why.
     """
     has_precedent = conn.execute("SELECT 1 FROM ruling_fts LIMIT 1").fetchone()
+    freshness = assess_freshness(
+        {key: get_meta(conn, key) for key in FRESHNESS_SOURCES}, read_refresh_status())
     if not keyed:
-        return {"status": "ok" if has_precedent else "degraded"}
+        if not has_precedent:
+            return {"status": "degraded"}
+        return {"status": "ok" if freshness["fresh"] else "stale"}
 
     counts = {
         t: conn.execute(f"SELECT count(*) c FROM {t}").fetchone()["c"]
@@ -229,8 +238,13 @@ def health(conn=Depends(db), keyed: bool = Depends(guard("cheap"))):
                       and coverage["hts_indexed"] == coverage["leaves"])
     db_revision = get_meta(conn, "dataset_revision") or ""
     loaded = _engine.revision if _engine is not None else None
+    if not index_complete:
+        status = "degraded"
+    else:
+        status = "ok" if freshness["fresh"] else "stale"
     return {
-        "status": "ok" if index_complete else "degraded",
+        "status": status,
+        "freshness": freshness,
         "hts_edition": get_meta(conn, "hts_edition"),
         "built_at": get_meta(conn, "built_at"),
         "cross_ingested_at": get_meta(conn, "cross_ingested_at"),

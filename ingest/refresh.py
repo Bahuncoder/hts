@@ -112,6 +112,16 @@ def prune(releases: Path, active: Path) -> None:
             shutil.rmtree(old, ignore_errors=True)
 
 
+def write_refresh_status(ok: bool, message: str = "") -> None:
+    """Record the outcome where the health check can read it. A failure here
+    must not hide the refresh's own error, so it is reported and passed over."""
+    try:
+        from ops.freshness import write_status
+        write_status(ok, message)
+    except OSError as exc:
+        print(f"could not record refresh status: {exc}", file=sys.stderr)
+
+
 def main() -> None:
     data = ROOT / "data"
     releases = data / "releases"
@@ -151,14 +161,16 @@ def main() -> None:
         # Exits non-zero, publishing nothing, if validation fails.
         subprocess.run([sys.executable, str(ROOT / "ingest" / "build.py"),
                         "--release", str(release)], check=True)
-    except BaseException:
+    except BaseException as exc:
         shutil.rmtree(release, ignore_errors=True)
+        write_refresh_status(False, f"{type(exc).__name__}: {exc}")
         raise
 
     prune(releases, release)
 
     from ingest.fedreg import poll
     asyncio.run(poll(30))
+    write_refresh_status(True)
     print("refresh complete")
 
 

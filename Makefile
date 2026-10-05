@@ -95,6 +95,9 @@ test-regimes:
 test-refresh:
 	@python3 tests/test_refresh.py
 
+test-freshness:
+	@python3 tests/test_freshness.py
+
 test-classify-eval:
 	@python3 tests/test_classify_eval.py
 
