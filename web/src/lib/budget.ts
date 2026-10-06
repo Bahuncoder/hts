@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import type { Client } from "@libsql/client";
 import { db } from "./store";
 import type { Window } from "./plans";
 
@@ -40,12 +41,15 @@ const API_ITEMS = "api_items";
 const REFUND_CHECK_REQUESTS = "refund_check_requests";
 const REFUND_CHECK_ITEMS = "refund_check_items";
 
+type Conn = Pick<Client, "execute">;
+
 /** Seconds until `cost` more work fits inside `limit`, or 0 if it fits now.
- *  Infinity when `cost` alone exceeds the whole allowance. */
-async function waitFor(scope: string, subject: string, limit: Limit, cost: number): Promise<number> {
+ *  Infinity when `cost` alone exceeds the whole allowance. Reads through `conn`
+ *  so a caller can run it inside its own write transaction. */
+async function waitFor(conn: Conn, scope: string, subject: string, limit: Limit, cost: number): Promise<number> {
   if (cost > limit.max) return Infinity;
   const now = Date.now();
-  const rs = await (await db()).execute({
+  const rs = await conn.execute({
     sql: "SELECT at, cost FROM usage_event WHERE scope = ? AND subject = ? AND at >= ? ORDER BY at",
     args: [scope, subject, new Date(now - limit.windowMs).toISOString()],
   });
@@ -61,47 +65,77 @@ async function waitFor(scope: string, subject: string, limit: Limit, cost: numbe
   return Math.ceil(limit.windowMs / 1000);
 }
 
-async function record(scope: string, subject: string, at: string, cost: number) {
-  await (await db()).execute({
-    sql: "INSERT INTO usage_event(scope, subject, at, cost) VALUES(?,?,?,?)",
-    args: [scope, subject, at, cost],
-  });
-}
-
 export type Charge =
   | { ok: true; refund: () => Promise<void> }
   | { ok: false; retryAfter: number; over: "requests" | "items"; tooLarge: boolean };
 
 /** Checks both budgets and, if the call fits, charges it: one request and
- *  `items` items. A refused call is not charged. Call while holding the
- *  subject's lease so two calls cannot both pass the check.
- *
- *  Takes the resolved budget directly, not a Tier: a signed-in caller's real
- *  ceiling depends on their plan (lib/plans.ts's PLAN_LIMITS), which a static
- *  Record<Tier, ...> cannot express -- only the caller (which already knows
- *  the viewer's resolved limits) can build the right budget. */
-export async function chargeAudit(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
+ *  `items` items, recorded in one write transaction. The check and the
+ *  inserts are one step, so two callers cannot both read the same remaining
+ *  allowance and both proceed -- whatever leases they hold. A refused call is
+ *  not charged. The refund deletes exactly the rows this call wrote. */
+// Charges in one process run one after another. The write transaction below
+// serialises callers across processes; this queue stops two callers in the same
+// process from opening competing transactions on one connection, which the
+// local SQLite client rejects as "database is locked".
+let chargeQueue: Promise<unknown> = Promise.resolve();
+function queued<T>(task: () => Promise<T>): Promise<T> {
+  const run = chargeQueue.then(task, task);
+  chargeQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function chargeInScopes(requestScope: string, itemScope: string, subject: string,
+                              budget: AuditBudget, items: number): Promise<Charge> {
+  return queued(() => chargeOnce(requestScope, itemScope, subject, budget, items));
+}
+
+async function chargeOnce(requestScope: string, itemScope: string, subject: string,
+                          budget: AuditBudget, items: number): Promise<Charge> {
   await sweep();
-  const requestWait = await waitFor(REQUESTS, subject, budget.requests, 1);
-  const itemWait = await waitFor(ITEMS, subject, budget.items, items);
-  if (requestWait || itemWait) {
-    const over = itemWait >= requestWait && itemWait ? "items" : "requests";
-    const wait = Math.max(requestWait, itemWait);
-    return { ok: false, over, tooLarge: !Number.isFinite(wait),
-             retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
+  const client = await db();
+  const tx = await client.transaction("write");
+  let requestRow: number | bigint | undefined, itemRow: number | bigint | undefined;
+  try {
+    const requestWait = await waitFor(tx, requestScope, subject, budget.requests, 1);
+    const itemWait = await waitFor(tx, itemScope, subject, budget.items, items);
+    if (requestWait || itemWait) {
+      await tx.rollback();
+      const over = itemWait >= requestWait && itemWait ? "items" : "requests";
+      const wait = Math.max(requestWait, itemWait);
+      return { ok: false, over, tooLarge: !Number.isFinite(wait),
+               retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
+    }
+    const at = new Date().toISOString();
+    const r = await tx.execute({
+      sql: "INSERT INTO usage_event(scope, subject, at, cost) VALUES(?,?,?,?)",
+      args: [requestScope, subject, at, 1],
+    });
+    requestRow = r.lastInsertRowid;
+    const i = await tx.execute({
+      sql: "INSERT INTO usage_event(scope, subject, at, cost) VALUES(?,?,?,?)",
+      args: [itemScope, subject, at, items],
+    });
+    itemRow = i.lastInsertRowid;
+    await tx.commit();
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    throw err;
   }
-  const at = new Date().toISOString();
-  await record(REQUESTS, subject, at, 1);
-  await record(ITEMS, subject, at, items);
   return {
     ok: true,
     refund: async () => {
       await (await db()).execute({
-        sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
-        args: [subject, at, REQUESTS, ITEMS],
+        sql: "DELETE FROM usage_event WHERE rowid IN (?, ?)",
+        args: [Number(requestRow), Number(itemRow)],
       });
     },
   };
+}
+
+/** Audit calls for the web UI (api/audit/route.ts, reprice.ts, corrections). */
+export async function chargeAudit(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
+  return chargeInScopes(REQUESTS, ITEMS, subject, budget, items);
 }
 
 /** Same shape as chargeAudit, for the programmatic API (lib/apiKeys.ts,
@@ -109,52 +143,12 @@ export async function chargeAudit(subject: string, budget: AuditBudget, items: n
  *  this budget independent of the web UI's -- see the constants' own comment
  *  for why. */
 export async function chargeApi(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
-  await sweep();
-  const requestWait = await waitFor(API_REQUESTS, subject, budget.requests, 1);
-  const itemWait = await waitFor(API_ITEMS, subject, budget.items, items);
-  if (requestWait || itemWait) {
-    const over = itemWait >= requestWait && itemWait ? "items" : "requests";
-    const wait = Math.max(requestWait, itemWait);
-    return { ok: false, over, tooLarge: !Number.isFinite(wait),
-             retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
-  }
-  const at = new Date().toISOString();
-  await record(API_REQUESTS, subject, at, 1);
-  await record(API_ITEMS, subject, at, items);
-  return {
-    ok: true,
-    refund: async () => {
-      await (await db()).execute({
-        sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
-        args: [subject, at, API_REQUESTS, API_ITEMS],
-      });
-    },
-  };
+  return chargeInScopes(API_REQUESTS, API_ITEMS, subject, budget, items);
 }
 
 /** Same shape again, for Entry Refund Check (lib/refundCheck.ts). */
 export async function chargeRefundCheck(subject: string, budget: AuditBudget, items: number): Promise<Charge> {
-  await sweep();
-  const requestWait = await waitFor(REFUND_CHECK_REQUESTS, subject, budget.requests, 1);
-  const itemWait = await waitFor(REFUND_CHECK_ITEMS, subject, budget.items, items);
-  if (requestWait || itemWait) {
-    const over = itemWait >= requestWait && itemWait ? "items" : "requests";
-    const wait = Math.max(requestWait, itemWait);
-    return { ok: false, over, tooLarge: !Number.isFinite(wait),
-             retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
-  }
-  const at = new Date().toISOString();
-  await record(REFUND_CHECK_REQUESTS, subject, at, 1);
-  await record(REFUND_CHECK_ITEMS, subject, at, items);
-  return {
-    ok: true,
-    refund: async () => {
-      await (await db()).execute({
-        sql: "DELETE FROM usage_event WHERE subject = ? AND at = ? AND scope IN (?, ?)",
-        args: [subject, at, REFUND_CHECK_REQUESTS, REFUND_CHECK_ITEMS],
-      });
-    },
-  };
+  return chargeInScopes(REFUND_CHECK_REQUESTS, REFUND_CHECK_ITEMS, subject, budget, items);
 }
 
 /** Records one hit and returns null, or returns seconds to wait when the
@@ -167,7 +161,7 @@ export async function allow(scope: string, subject: string, limit: Limit): Promi
       WHERE (SELECT coalesce(sum(cost),0) FROM usage_event WHERE scope = ? AND subject = ? AND at >= ?) < ?`,
     args: [scope, subject, new Date(now).toISOString(), scope, subject, new Date(now - limit.windowMs).toISOString(), limit.max],
   });
-  return result.rowsAffected ? null : (await waitFor(scope, subject, limit, 1)) || 1;
+  return result.rowsAffected ? null : (await waitFor(await db(), scope, subject, limit, 1)) || 1;
 }
 
 /** One in-flight audit per subject. Returns a release function, or null when
