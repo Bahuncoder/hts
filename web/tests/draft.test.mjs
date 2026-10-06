@@ -1,16 +1,17 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** An audit survives sign-up: the client-side draft, its privacy limits and the
  *  safe `?next=` return, driven in a real browser against the production build.
  *
  *  Production build on 3351, a fake engine on 3352 (tests/auditfixture.mjs), a
- *  scratch accounts database. No mail provider is configured, so sign-up
- *  creates the account at once and follows `next`.
+ *  scratch accounts database and local mail catcher. Signup verifies email
+ *  ownership before sign-in follows `next`.
  *
  *  Run: node tests/draft.test.mjs   (run with HTSDESK_ACCOUNTS_DB unset)
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { chromium } from "playwright-core";
-import { fakeServer, json, readBody, seedAccount, startApp, suite } from "./harness.mjs";
+import { fakeServer, fakeMailbox, json, readBody, seedAccount, startApp, suite } from "./harness.mjs";
 import { auditResponse } from "./auditfixture.mjs";
 import { loadLib } from "./tsload.mjs";
 
@@ -26,9 +27,10 @@ const fake = await fakeServer(3352, async (req, res) => {
   }
   return json(res, 404, { detail: "not found" });
 });
+const mail = await fakeMailbox(3353);
 const app = await startApp({
   port: 3351,
-  env: { HTSDESK_API: "http://127.0.0.1:3352", HTSDESK_API_KEY: "k", HTSDESK_SIGNING_SECRET: "test-signing" },
+  env: { RESEND_API_KEY: "fake-mail-key", RESEND_API_URL: mail.url, SITE_URL: "http://127.0.0.1:3351", HTSDESK_API: "http://127.0.0.1:3352", HTSDESK_API_KEY: "k", HTSDESK_SIGNING_SECRET: "test-signing" },
 });
 const db = app.db();
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
@@ -57,7 +59,7 @@ async function seededSession(id) {
   await seedAccount(db, { id });
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-    args: [token, id, new Date(Date.now() + 3_600_000).toISOString()] });
+    args: [sessionTokenHash(token), id, new Date(Date.now() + 3_600_000).toISOString()] });
   return token;
 }
 
@@ -72,13 +74,25 @@ async function runAudit(page, text = CSV) {
   await page.locator('[data-testid="reconciliation"]').waitFor({ timeout: 20000 });
 }
 
-/** Signs up through the UI (no mail provider: the account exists at once). */
+/** Signs up, confirms ownership through the local mail catcher, then signs in. */
 async function signUpOn(page, email, next) {
   await page.goto(`${app.base}/signup${next ? `?next=${encodeURIComponent(next)}` : ""}`, { waitUntil: "networkidle" });
   await page.fill("input[name=email]", email);
   await page.fill("input[name=password]", PASSWORD);
   await page.click("button[type=submit]");
+  await page.getByText("Check your inbox", { exact: false }).waitFor();
+  const message = mail.messages.findLast(m => m.to.includes(email));
+  const link = message.text.match(/https?:\/\/\S+verify\S*/)?.[0];
+  assert.ok(link);
+  await page.goto(link);
+  await page.getByRole("button", { name: "Verify email" }).click();
+  await page.waitForURL(/\/login/);
+  await page.goto(`${app.base}/login${next ? `?next=${encodeURIComponent(next)}` : ""}`);
+  await page.fill("input[name=email]", email);
+  await page.fill("input[name=password]", PASSWORD);
+  await page.click("button[type=submit]");
 }
+
 const uniq = (tag) => `${tag}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.test`;
 
 try {
@@ -200,9 +214,7 @@ try {
     await page.waitForURL(/\/signup\?next=/);
     assert.equal(await page.locator("input[name=next]").inputValue(), "/audit", "next is carried in the form");
     const audits = engine.audits;
-    await page.fill("input[name=email]", uniq("flow"));
-    await page.fill("input[name=password]", PASSWORD);
-    await page.click("button[type=submit]");
+    await signUpOn(page, uniq("flow"), "/audit");
     await page.waitForURL(/\/audit$/);
 
     const notice = page.getByTestId("draft-notice");

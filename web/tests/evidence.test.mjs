@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { startApp, seedAccount } from "./harness.mjs";
@@ -7,7 +8,7 @@ try {
   await seedAccount(db, { id: "owner" });
   await seedAccount(db, { id: "other" });
   const now = new Date().toISOString();
-  for (const id of ["owner", "other"]) await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: [id + "-session", id, "2099-01-01T00:00:00.000Z"] });
+  for (const id of ["owner", "other"]) await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: [sessionTokenHash(id + "-session"), id, "2099-01-01T00:00:00.000Z"] });
   await db.execute({ sql: "INSERT INTO catalogue(id,account_id,name,created_at,updated_at,totals_complete,mpf) VALUES(?,?,?,?,?,?,?)", args: ["cat", "owner", "<script>alert(1)</script>", now, now, null, 0] });
   const owner = { cookie: "htsdesk_session=owner-session" };
   const other = { cookie: "htsdesk_session=other-session" };

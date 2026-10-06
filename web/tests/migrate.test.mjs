@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** An accounts database created before the outbox and diff-cursor columns
  *  existed, and back when HTSDesk first sold paid plans (so it already holds
  *  `subscription` and `webhook_event` tables, in their pre-hardening shape),
@@ -99,7 +100,7 @@ try {
     // been deployed to production), so a legacy `active` row should be
     // honored as a genuine active subscription, not second-guessed to free.
     await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-      args: ["legacy-token", "old", new Date(Date.now() + 3_600_000).toISOString()] });
+      args: [sessionTokenHash("legacy-token"), "old", new Date(Date.now() + 3_600_000).toISOString()] });
     const res = await fetch(`${app.base}/account`, { headers: { cookie: "htsdesk_session=legacy-token" } });
     assert.equal(res.status, 200);
     assert.match(await res.text(), /Plan and limits/);

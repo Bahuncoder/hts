@@ -339,7 +339,14 @@ async function migrate(c: Client): Promise<void> {
   await addColumns(c, "account", {
     alert_emails: "INTEGER NOT NULL DEFAULT 1",
     email_verified_at: "TEXT",
+    google_subject: "TEXT",
   });
+  await c.execute("CREATE UNIQUE INDEX IF NOT EXISTS account_google_subject ON account(google_subject) WHERE google_subject IS NOT NULL");
+  // Invalidate recoverable legacy session credentials on upgrade. New rows
+  // are SHA-256 digests with an explicit format marker, never browser secrets.
+  await c.execute("DELETE FROM session WHERE token NOT LIKE 'sha256:%'");
+  await addColumns(c, "usage_event", { reservation_id: "TEXT" });
+  await c.execute("CREATE INDEX IF NOT EXISTS usage_reservation ON usage_event(reservation_id)");
   // email_status stays NULL until an alert is finished: sent, skipped_opt_out,
   // skipped_no_provider or failed_permanent. (Older rows may carry
   // skipped_plan, from when alert emails were a paid feature; it is history
@@ -426,6 +433,11 @@ export type Subscription = {
 
 export async function accountByEmail(email: string) {
   const rs = await run("SELECT * FROM account WHERE email = ?", [email]);
+  return rs.rows[0] as unknown as (Account & { password_hash: string }) | undefined;
+}
+
+export async function accountByGoogleSubject(subject: string) {
+  const rs = await run("SELECT * FROM account WHERE google_subject = ?", [subject]);
   return rs.rows[0] as unknown as (Account & { password_hash: string }) | undefined;
 }
 
@@ -671,11 +683,13 @@ export type ApiKey = {
 
 export async function insertApiKey(row: {
   id: string; account_id: string; name: string; prefix: string; hash: string; created_at: string;
-}): Promise<void> {
-  await run(
-    "INSERT INTO api_key(id, account_id, name, prefix, hash, created_at) VALUES(?,?,?,?,?,?)",
-    [row.id, row.account_id, row.name, row.prefix, row.hash, row.created_at],
+}, maxKeys: number): Promise<boolean> {
+  const result = await run(
+    `INSERT INTO api_key(id, account_id, name, prefix, hash, created_at)
+      SELECT ?,?,?,?,?,? WHERE (SELECT count(*) FROM api_key WHERE account_id = ? AND revoked_at IS NULL) < ?`,
+    [row.id, row.account_id, row.name, row.prefix, row.hash, row.created_at, row.account_id, maxKeys],
   );
+  return result.rowsAffected === 1;
 }
 
 export async function apiKeyByHash(hash: string): Promise<ApiKey | undefined> {

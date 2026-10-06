@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Measured WCAG contrast of the text the pages actually render, in light and
  *  dark, in a real browser against the production build.
  *
@@ -54,7 +55,7 @@ const { check, finish } = suite();
 await seedAccount(db, { id: "contrast" });
 const token = crypto.randomBytes(16).toString("hex");
 await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-  args: [token, "contrast", new Date(Date.now() + 3_600_000).toISOString()] });
+  args: [sessionTokenHash(token), "contrast", new Date(Date.now() + 3_600_000).toISOString()] });
 await db.execute({ sql: `INSERT INTO alert(id,account_id,document_number,title,publication_date,html_url,digits,hts,created_at,email_status,emailed_at,email_attempts)
   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
   args: [crypto.randomUUID(), "contrast", "2026-0001", "Notice naming a watched code", "2026-08-10",

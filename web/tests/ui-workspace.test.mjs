@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** UI regression checks against a production build and scratch accounts only.
  * Run: node tests/ui-workspace.test.mjs
  * Optional HTSDESK_SHOTS writes desktop/mobile screenshots for review.
@@ -28,7 +29,7 @@ const app = await startApp({ port: 3378, env: { HTSDESK_API: "http://127.0.0.1:3
 const db = app.db();
 await seedAccount(db, { id: "ui-reviewer" });
 const token = crypto.randomBytes(32).toString("hex");
-await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)", args: [token, "ui-reviewer", new Date(Date.now() + 3600000).toISOString()] });
+await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)", args: [sessionTokenHash(token), "ui-reviewer", new Date(Date.now() + 3600000).toISOString()] });
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());

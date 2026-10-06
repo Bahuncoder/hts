@@ -12,9 +12,14 @@
  */
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
-import { startApp } from "./harness.mjs";
+import { startApp, fakeMailbox } from "./harness.mjs";
 
-const app = await startApp({ port: 3486 });
+const mail = await fakeMailbox(3488);
+process.env.HTSDESK_MAILBOX = mail.path;
+const app = await startApp({ port: 3486, env: {
+  RESEND_API_KEY: "fake-mail-key", RESEND_API_URL: mail.url,
+  SITE_URL: "http://127.0.0.1:3486",
+} });
 // helpers.mjs reads HTSDESK_TEST_WEB at import time, so this must be set
 // before it is first imported (dynamically, not statically, for that reason).
 process.env.HTSDESK_TEST_WEB = app.base;

@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Re-pricing a saved catalogue: resubmits each line's own code/description
  *  and stated facts to the engine again, in place. Drives the real browser
  *  UI (save, approve, re-price) against a fake engine whose second response
@@ -82,7 +83,7 @@ const db = app.db();
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
 try {
   await seedAccount(db, { id: "owner" });
-  await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: ["owner-session", "owner", "2099-01-01T00:00:00.000Z"] });
+  await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: [sessionTokenHash("owner-session"), "owner", "2099-01-01T00:00:00.000Z"] });
   const context = await browser.newContext();
   await context.addCookies([{ name: "htsdesk_session", value: "owner-session", domain: "127.0.0.1", path: "/" }]);
   const page = await context.newPage();

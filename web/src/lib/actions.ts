@@ -57,7 +57,11 @@ export async function signUpAction(_prev: FormState, form: FormData): Promise<Fo
     return { notice: "Check your inbox — we have sent you a link to finish signing in." };
   }
 
-  // No provider configured. An account must still be creatable, so the
+  if (process.env.NODE_ENV === "production") {
+    return { error: "Email verification is unavailable. Please try again later or continue with Google." };
+  }
+
+  // Development only. An account must still be creatable, so the
   // duplicate case is visible; the throttle above is what keeps the resulting
   // oracle from being harvested.
   if (existing) {
@@ -381,7 +385,7 @@ export async function completeVerifyAction(token: string): Promise<
 
 // --- API keys -----------------------------------------------------------------
 
-import { createApiKey, listApiKeys, revokeApiKeyForAccount } from "./apiKeys";
+import { ApiKeyLimitError, createApiKey, revokeApiKeyForAccount } from "./apiKeys";
 
 /** A one-time secret reveal is a different shape than FormState's
  *  error/notice: `created` is only ever set on the single response that
@@ -395,11 +399,12 @@ export async function createApiKeyAction(_prev: ApiKeyFormState, form: FormData)
     return { error: "API access is not included on your plan. See /pricing to upgrade." };
   }
   const name = String(form.get("name") ?? "").trim().slice(0, 100) || "Unnamed key";
-  const active = (await listApiKeys(viewer.account.id)).filter((k) => !k.revoked_at).length;
-  if (active >= viewer.limits.api.maxKeys) {
-    return { error: `You have reached the maximum of ${viewer.limits.api.maxKeys} keys. Revoke one before creating another.` };
+  let created;
+  try { created = await createApiKey(viewer.account.id, name, viewer.limits.api.maxKeys); }
+  catch (error) {
+    if (error instanceof ApiKeyLimitError) return { error: error.message };
+    throw error;
   }
-  const created = await createApiKey(viewer.account.id, name);
   await audit("api_key_created", { accountId: viewer.account.id, email: viewer.account.email, detail: name });
   revalidatePath("/account/api-keys");
   return { created };

@@ -19,11 +19,12 @@
     "test:refund-check": "node tests/refundCheck.test.mjs",
     "test:auth-transaction": "node tests/auth-transaction.test.mjs",
     "test:feature-journey": "node tests/feature-journey.test.mjs",
-    "test:a11y": "node tests/a11y.test.mjs"
+    "test:a11y": "node tests/a11y.test.mjs",
+    "test:security": "node tests/security-audit-2026-10-06.mjs && node tests/origin.test.mjs && node tests/lint-glob.test.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
-    "next": "16.3.5",
+    "next": "16.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "stripe": "^22.6.2"
@@ -34,9 +35,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.4.0",
     "playwright-core": "^1.62.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "fast-glob": "file:tooling/next-glob"
   }
 }

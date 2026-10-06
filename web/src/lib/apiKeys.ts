@@ -29,15 +29,18 @@ export function hashApiKeySecret(secret: string): string {
 
 export type CreatedApiKey = { id: string; secret: string; prefix: string };
 
+export class ApiKeyLimitError extends Error {}
+
 /** Returns the raw secret -- shown to the caller exactly once. It is never
  *  stored and cannot be recovered afterward. */
-export async function createApiKey(accountId: string, name: string): Promise<CreatedApiKey> {
+export async function createApiKey(accountId: string, name: string, maxKeys = 10): Promise<CreatedApiKey> {
   const secret = generateApiKeySecret();
   const id = crypto.randomUUID();
-  await insertApiKey({
+  const inserted = await insertApiKey({
     id, account_id: accountId, name, prefix: secret.slice(0, PREFIX_LEN),
     hash: hashApiKeySecret(secret), created_at: new Date().toISOString(),
-  });
+  }, maxKeys);
+  if (!inserted) throw new ApiKeyLimitError(`You have reached the maximum of ${maxKeys} keys. Revoke one before creating another.`);
   return { id, secret, prefix: secret.slice(0, PREFIX_LEN) };
 }
 

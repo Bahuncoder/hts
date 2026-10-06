@@ -10,6 +10,15 @@ try {
   const salt = crypto.randomBytes(16);
   const hash = `scrypt$${salt.toString("hex")}$${crypto.scryptSync(before, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex")}`;
   await db.execute({ sql: "INSERT INTO account(id,email,password_hash,created_at) VALUES(?,?,?,?)", args: ["owner", "owner@example.test", hash, new Date().toISOString()] });
+  const blocked = await browser.newContext();
+  const signup = await blocked.newPage();
+  await signup.goto(app.base + "/signup");
+  await signup.getByLabel("Email", { exact: true }).fill("unverified@example.test");
+  await signup.getByLabel("New password", { exact: true }).fill("a-long-enough-test-passphrase");
+  await signup.getByRole("button", { name: "Create account", exact: true }).click();
+  await signup.getByRole("alert").filter({ hasText: "Email verification is unavailable" }).waitFor();
+  assert.equal((await db.execute("SELECT count(*) AS n FROM account WHERE email='unverified@example.test'")).rows[0].n, 0);
+  await blocked.close();
   const old = await browser.newContext();
   const oldPage = await old.newPage();
   await oldPage.goto(app.base + "/login", { waitUntil: "networkidle" });

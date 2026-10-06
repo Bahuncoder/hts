@@ -88,9 +88,8 @@ await check("signup does not reveal whether an address is registered", async () 
   if (emailMode) {
     assert.equal(a, bMsg, "the response differs by whether the account exists");
   } else {
-    // Documented fallback: without email an account must still be creatable,
-    // so the duplicate is visible and the throttle is what limits harvesting.
-    assert.match(bMsg, /already exists/i);
+    assert.equal(a, bMsg);
+    assert.match(bMsg, /verification is unavailable/i);
   }
 });
 

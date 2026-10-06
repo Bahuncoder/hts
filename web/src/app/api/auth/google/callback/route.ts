@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { googleEnabled, googleProfile } from "@/lib/googleAuth";
-import { accountByEmail } from "@/lib/store";
-import { markEmailVerified, signUp, startSession } from "@/lib/auth";
+import { accountByEmail, accountByGoogleSubject } from "@/lib/store";
+import { hashPassword, signUp, startSession, validEmail } from "@/lib/auth";
+import { linkGoogleCredential } from "@/lib/credentialStore";
 import { audit } from "@/lib/audit";
 import { safeNext } from "@/lib/next";
 import { STATE_COOKIE, REDIRECT_PATH } from "../route";
@@ -53,12 +54,15 @@ export async function GET(request: Request) {
   if (!profile.emailVerified) return fail(site, "oauth_unverified");
 
   const email = profile.email.trim().toLowerCase();
-  const existing = await accountByEmail(email);
+  if (!validEmail(email)) return fail(site, "oauth");
+  const existing = await accountByGoogleSubject(profile.subject) ?? await accountByEmail(email);
   let accountId: string, passwordHash: string;
   if (existing) {
     accountId = existing.id;
-    passwordHash = existing.password_hash;
-    if (!existing.email_verified_at) await markEmailVerified(accountId);
+    const linkedHash = await linkGoogleCredential(accountId, existing.password_hash, profile.subject,
+      existing.email_verified_at ? existing.password_hash : hashPassword(crypto.randomBytes(32).toString("base64url")));
+    if (!linkedHash) return fail(site, "oauth");
+    passwordHash = linkedHash;
     await audit("signin", { accountId, email, detail: "via Google" });
   } else {
     // An inert, unguessable placeholder: nobody is ever meant to type this.
@@ -67,7 +71,9 @@ export async function GET(request: Request) {
     const placeholder = crypto.randomBytes(32).toString("base64url");
     const created = await signUp(email, placeholder, { verified: true });
     accountId = created.id;
-    passwordHash = created.passwordHash;
+    const linkedHash = await linkGoogleCredential(accountId, created.passwordHash, profile.subject, created.passwordHash);
+    if (!linkedHash) return fail(site, "oauth");
+    passwordHash = linkedHash;
     await audit("signup", { accountId, email, detail: "via Google" });
   }
 

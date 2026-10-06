@@ -51,7 +51,7 @@ async function exchangeCode(code: string, redirectUri: string): Promise<string> 
   return body.access_token;
 }
 
-export type GoogleProfile = { email: string; emailVerified: boolean; name: string | null };
+export type GoogleProfile = { subject: string; email: string; emailVerified: boolean; name: string | null };
 
 async function fetchProfile(accessToken: string): Promise<GoogleProfile> {
   const res = await fetch(USERINFO_URL(), {
@@ -59,9 +59,11 @@ async function fetchProfile(accessToken: string): Promise<GoogleProfile> {
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new GoogleAuthError(`userinfo failed: ${res.status}`);
-  const body = await res.json() as { email?: string; email_verified?: boolean; verified_email?: boolean; name?: string };
+  const body = await res.json() as { sub?: string; email?: string; email_verified?: boolean; verified_email?: boolean; name?: string };
   if (typeof body.email !== "string") throw new GoogleAuthError("no email in userinfo response");
+  if (typeof body.sub !== "string" || !body.sub || body.sub.length > 255) throw new GoogleAuthError("no valid subject in userinfo response");
   return {
+    subject: body.sub,
     email: body.email,
     // Google's OIDC userinfo endpoint uses email_verified; the older
     // People-API-style response used verified_email. Accept either.

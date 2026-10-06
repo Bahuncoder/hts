@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Accessibility, console and layout checks across every route at desktop and
  *  phone width, using the axe-core already in node_modules. Fails on any
  *  violation, console error, sideways overflow or failed route.
@@ -37,7 +38,7 @@ try {
   await fetch(`${BASE}/api/admin/diff`, { headers: { "x-admin-token": "admin-test-token" } });
   const now = new Date().toISOString();
   await db.execute({ sql: "INSERT INTO account(id,email,password_hash,created_at,alert_emails) VALUES(?,?,?,?,1)", args: ["owner", "owner@example.test", "scrypt$0$0", now] });
-  await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: ["owner-session", "owner", "2099-01-01T00:00:00.000Z"] });
+  await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: [sessionTokenHash("owner-session"), "owner", "2099-01-01T00:00:00.000Z"] });
   await db.execute({ sql: "INSERT INTO catalogue(id,account_id,name,created_at,updated_at,totals_complete,mpf,entries,by_vessel) VALUES(?,?,?,?,?,?,?,?,?)", args: ["cat", "owner", "Spring import", now, now, 0, 0, 1, 1] });
   await fetch(`${BASE}/catalogues/cat/review`, { headers: { cookie: "htsdesk_session=owner-session" } });
   const rows = [

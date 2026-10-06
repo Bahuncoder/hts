@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Full browser workflow against production routes and an isolated fake engine. */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -19,7 +20,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH 
 try {
   await seedAccount(db, { id: "owner" });
   await seedAccount(db, { id: "other" });
-  for (const id of ["owner", "other"]) await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: [id + "-session", id, "2099-01-01T00:00:00.000Z"] });
+  for (const id of ["owner", "other"]) await db.execute({ sql: "INSERT INTO session VALUES(?,?,?)", args: [sessionTokenHash(id + "-session"), id, "2099-01-01T00:00:00.000Z"] });
   const context = await browser.newContext();
   await context.addCookies([{ name: "htsdesk_session", value: "owner-session", domain: "127.0.0.1", path: "/" }]);
   const page = await context.newPage();

@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Alert email outbox, through the real admin delivery route.
  *
  *  Production build on 3202 with a scratch database, a fake engine (no new
@@ -156,7 +157,7 @@ try {
     const session = async (account) => {
       const token = crypto.randomBytes(16).toString("hex");
       await db.execute({ sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-        args: [token, account, new Date(Date.now() + 3_600_000).toISOString()] });
+        args: [sessionTokenHash(token), account, new Date(Date.now() + 3_600_000).toISOString()] });
       return token;
     };
     const page = async (account) => {

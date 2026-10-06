@@ -69,66 +69,37 @@ export type Charge =
   | { ok: true; refund: () => Promise<void> }
   | { ok: false; retryAfter: number; over: "requests" | "items"; tooLarge: boolean };
 
-/** Checks both budgets and, if the call fits, charges it: one request and
- *  `items` items, recorded in one write transaction. The check and the
- *  inserts are one step, so two callers cannot both read the same remaining
- *  allowance and both proceed -- whatever leases they hold. A refused call is
- *  not charged. The refund deletes exactly the rows this call wrote. */
-// Charges in one process run one after another. The write transaction below
-// serialises callers across processes; this queue stops two callers in the same
-// process from opening competing transactions on one connection, which the
-// local SQLite client rejects as "database is locked".
-let chargeQueue: Promise<unknown> = Promise.resolve();
-function queued<T>(task: () => Promise<T>): Promise<T> {
-  const run = chargeQueue.then(task, task);
-  chargeQueue = run.catch(() => undefined);
-  return run;
-}
-
+/** Both budget predicates and both charge rows belong to one atomic INSERT.
+ * SQLite serializes this statement across connections without holding a
+ * transaction open across JS awaits. Refunds use an unrepeatable reservation ID. */
 async function chargeInScopes(requestScope: string, itemScope: string, subject: string,
                               budget: AuditBudget, items: number): Promise<Charge> {
-  return queued(() => chargeOnce(requestScope, itemScope, subject, budget, items));
-}
-
-async function chargeOnce(requestScope: string, itemScope: string, subject: string,
-                          budget: AuditBudget, items: number): Promise<Charge> {
   await sweep();
   const client = await db();
-  const tx = await client.transaction("write");
-  let requestRow: number | bigint | undefined, itemRow: number | bigint | undefined;
-  try {
-    const requestWait = await waitFor(tx, requestScope, subject, budget.requests, 1);
-    const itemWait = await waitFor(tx, itemScope, subject, budget.items, items);
-    if (requestWait || itemWait) {
-      await tx.rollback();
-      const over = itemWait >= requestWait && itemWait ? "items" : "requests";
-      const wait = Math.max(requestWait, itemWait);
-      return { ok: false, over, tooLarge: !Number.isFinite(wait),
-               retryAfter: Number.isFinite(wait) ? wait : Math.ceil(budget.items.windowMs / 1000) };
-    }
-    const at = new Date().toISOString();
-    const r = await tx.execute({
-      sql: "INSERT INTO usage_event(scope, subject, at, cost) VALUES(?,?,?,?)",
-      args: [requestScope, subject, at, 1],
-    });
-    requestRow = r.lastInsertRowid;
-    const i = await tx.execute({
-      sql: "INSERT INTO usage_event(scope, subject, at, cost) VALUES(?,?,?,?)",
-      args: [itemScope, subject, at, items],
-    });
-    itemRow = i.lastInsertRowid;
-    await tx.commit();
-  } catch (err) {
-    await tx.rollback().catch(() => {});
-    throw err;
+  const reservationId = crypto.randomUUID();
+  const now = Date.now();
+  const at = new Date(now).toISOString();
+  const inserted = await client.execute({
+    sql: `INSERT INTO usage_event(scope,subject,at,cost,reservation_id)
+      SELECT scope,?,?,cost,? FROM (SELECT ? AS scope,1 AS cost UNION ALL SELECT ?,?)
+      WHERE (SELECT coalesce(sum(cost),0) FROM usage_event WHERE scope = ? AND subject = ? AND at >= ?) <= ?
+        AND (SELECT coalesce(sum(cost),0) FROM usage_event WHERE scope = ? AND subject = ? AND at >= ?) <= ?`,
+    args: [subject, at, reservationId, requestScope, itemScope, items,
+      requestScope, subject, new Date(now - budget.requests.windowMs).toISOString(), budget.requests.max - 1,
+      itemScope, subject, new Date(now - budget.items.windowMs).toISOString(), budget.items.max - items],
+  });
+  if (inserted.rowsAffected !== 2) {
+    const requestWait = await waitFor(client, requestScope, subject, budget.requests, 1);
+    const itemWait = await waitFor(client, itemScope, subject, budget.items, items);
+    const wait = Math.max(requestWait, itemWait);
+    return { ok: false, over: itemWait >= requestWait && itemWait ? "items" : "requests",
+      tooLarge: !Number.isFinite(wait),
+      retryAfter: Number.isFinite(wait) ? Math.max(1, wait) : Math.ceil(budget.items.windowMs / 1000) };
   }
   return {
     ok: true,
     refund: async () => {
-      await (await db()).execute({
-        sql: "DELETE FROM usage_event WHERE rowid IN (?, ?)",
-        args: [Number(requestRow), Number(itemRow)],
-      });
+      await (await db()).execute({ sql: "DELETE FROM usage_event WHERE reservation_id = ?", args: [reservationId] });
     },
   };
 }

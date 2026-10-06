@@ -6,6 +6,7 @@ import {
   clearSubscriptionIfCurrent, finishWebhookEvent,
 } from "@/lib/store";
 import type Stripe from "stripe";
+import { readCapped } from "@/lib/requestBody";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "missing signature" }, { status: 400 });
   }
 
-  const raw = await request.text();
+  const maxBody = 256 * 1024;
+  if (Number(request.headers.get("content-length")) > maxBody) {
+    return NextResponse.json({ error: "request too large" }, { status: 413 });
+  }
+  const raw = await readCapped(request, maxBody);
+  if (raw === null) return NextResponse.json({ error: "request too large" }, { status: 413 });
   let event: Stripe.Event;
   try {
     event = s.webhooks.constructEvent(raw, signature, secret);

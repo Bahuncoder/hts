@@ -1,6 +1,25 @@
 # Security audit — 2026-10-06
 
-Reviewed commit `c8ae65815bb8e61a4264481bf7c5f0441afc2b37`. Application code was not changed. This report and an isolated reproduction suite are the audit deliverables.
+Original audit reviewed commit `c8ae65815bb8e61a4264481bf7c5f0441afc2b37`. The findings below describe that snapshot. Subsequent remediation is now implemented in the workspace.
+
+## Remediation status — 2026-10-06
+
+All six numbered findings are fixed:
+
+| ID | Implemented change |
+| --- | --- |
+| S01 | Production password signup requires email verification. Google identities bind to stable `sub`. Recovery of an unverified account atomically replaces its password and revokes sessions, API keys, and authentication tokens. Verified accounts retain their password. Conflicting subjects cannot adopt an account by matching email. |
+| S02 | One atomic SQL insertion checks and reserves both quota scopes across independent database clients. Unique reservation IDs isolate refunds and make them idempotent. |
+| S03 | Audit, refund-check, checkout, and billing-portal POST handlers enforce same-origin requests before authenticated work. |
+| S04 | Sessions store SHA-256 digests. Migration invalidates legacy plaintext sessions. A database digest cannot authenticate as a cookie. |
+| S05 | API-key insertion checks the active-key cap atomically. |
+| S06 | Checkout bodies are capped at 4 KiB and webhook bodies at 256 KiB, including streamed bodies. |
+
+Next.js and its ESLint configuration are now 16.4.0, sharp is 0.35.5, and source-map-js is 1.2.2. Other affected dependencies were updated. The lint glob chain had no compatible patched braces release; a local fast-glob adapter implements Next's used globSync interface with tinyglobby. Adapter tests cover default roots, absolute brace patterns, and arrays. An isolated clean npm ci and dependency-tree check passed. The refreshed npm audit reports **zero known vulnerabilities**; see `docs/security-audit-2026-10-06/npm-audit-after-fixes.json`. Original scan artifacts remain historical evidence.
+
+Verification: security regressions 11/11; Google authentication 15/15; origin checks 5/5; billing 15/15; API keys 14/14; refund checks 26/26; audit 15/15; proof integrity 11/11; migrations 9/9; authentication races 8/8; repricing/review races 3/3; corrections 8/8; browser draft restoration 22/22. Catalogue-cost and evidence checks, browser password reset/revocation, production signup refusal without mail, and the end-to-end feature journey passed. Lint, TypeScript checking, and the production build passed.
+
+Deployment has not been performed. Deploy the web changes together: schema migration runs automatically and existing sessions must sign in again. Configure email delivery for password signup, or use Google sign-in. Additional observations below remain separate operational follow-ups; deployed infrastructure and real provider settings were not verified.
 
 ## Assessment
 
@@ -25,7 +44,7 @@ Severity describes this application's attack conditions, not a scanner's package
 
 ### S01 — Account pre-hijacking through Google email linking
 
-Locations: `web/src/lib/actions.ts:60`, `web/src/app/api/auth/google/callback/route.ts:62`, `web/src/lib/auth.ts:87`.
+Locations: `web/src/lib/actions.ts:60`, `web/src/app/api/auth/google/callback/route.ts:58`, `web/src/lib/auth.ts:87`.
 
 With no mail provider, signup immediately creates an unverified account and session for any supplied email. Google callback later finds accounts by email alone. For an existing account it marks the email verified, retains the old password hash, and starts another session; it does not revoke the earlier sessions.
 
@@ -58,7 +77,7 @@ Remediation: reserve request and item quotas inside a single database write tran
 
 ### S03 — Missing CSRF origin checks on cookie-authenticated routes
 
-Locations: `web/src/app/api/audit/route.ts:89`, `web/src/app/api/refund-check/route.ts:60`, `web/src/app/api/billing/checkout/route.ts:9`, `web/src/app/api/billing/portal/route.ts:11`.
+Locations: `web/src/app/api/audit/route.ts:86`, `web/src/app/api/refund-check/route.ts:66`, `web/src/app/api/billing/checkout/route.ts:9`, `web/src/app/api/billing/portal/route.ts:11`.
 
 These route handlers use browser sessions without the `sameOrigin()` check used by catalogue cost saving and verification. The audit and refund routes parse JSON from text regardless of media type, and checkout uses `request.json()` without enforcing JSON media type. An attacker can send a simple `text/plain` fetch containing JSON, avoiding a CORS preflight. The response need not be readable for the action to occur.
 
@@ -128,17 +147,17 @@ The newer [Next cache-poisoning advisory](https://github.com/vercel/next.js/secu
 
 ## Verification and reproduction
 
-New probes: `web/tests/security-audit-2026-10-06.mjs`. **Five probes reproduced the documented behavior. PASS means the vulnerability remains present, not that the application is secure.** Run from `web/`:
+Updated regressions: `web/tests/security-audit-2026-10-06.mjs`. The original probes reproduced vulnerabilities; the suite now asserts secure outcomes and adds concurrency, migration, key-limit, and body-cap coverage. PASS now means the expected prevention succeeded. Run from `web/`:
 
 ```sh
-node tests/security-audit-2026-10-06.mjs
+npm run test:security
 ```
 
-The probes use loopback ports 3515–3517, a fresh scratch accounts database, and fake providers. Existing harness safeguards reject tests against an existing database by default. The script is an audit reproduction, intentionally outside `test:integration`; convert it to expected-secure regressions when fixing the findings.
+The probes use loopback ports 3515–3517, a fresh scratch accounts database, and fake providers. Existing harness safeguards reject tests against an existing database by default. The expected-secure suite is available through `test:security`.
 
 Selected existing tests passed: credential/token races (8/8); audit proof and tamper rejection (11/11); catalogue cost persistence, quotas and ownership; repricing/review races (3/3); line corrections (8/8); billing signatures, retries and reconciliation (15/15); B2B authentication/plan/metering (14/14); refund checks and ownership (26/26); evidence export, CSRF and escaping; Google state checks (12/12). Python rate-limiter checks passed 3/3, the private backup check passed 1/1, and the isolated Python API contract/security suite passed 42/42. The catalogue and evidence scripts report successful grouped checks without numerical totals, so no count is invented for them.
 
-## Remediation order
+## Original remediation priorities
 
 1. Close unverified registration/linking and investigate legacy unverified accounts before offering Google sign-in to them.
 2. Make budget reservation transactional and test competing correction/audit callers.
@@ -146,4 +165,4 @@ Selected existing tests passed: credential/token races (8/8); audit proof and ta
 4. Update vulnerable dependencies with compatible versions; repeat vulnerability scans and production regression tests.
 5. Enforce transactional key-count limits and streamed billing/webhook body caps; verify deployed edge controls and timeout/cancellation behavior.
 
-No findings were fixed as part of this audit.
+The original audit made no application changes. Subsequent remediation is recorded at the top of this report.

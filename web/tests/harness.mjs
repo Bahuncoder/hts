@@ -213,6 +213,19 @@ export const json = (res, status, body, headers = {}) => {
   res.end(JSON.stringify(body));
 };
 
+/** Local Resend stand-in for production signup/verification browser tests. */
+export async function fakeMailbox(port) {
+  const mailbox = path.join(scratchDir("htsdesk-mail-"), "mailbox.jsonl");
+  const messages = [];
+  const server = await fakeServer(port, async (req, res) => {
+    const message = JSON.parse(await readBody(req));
+    messages.push(message);
+    fs.appendFileSync(mailbox, JSON.stringify(message) + "\n");
+    return json(res, 200, { id: `fake-mail-${messages.length}` });
+  });
+  return { url: `http://127.0.0.1:${port}/emails`, path: mailbox, messages, close: server.close };
+}
+
 /** A stand-in engine API. /api/changes follows the contract of the real one:
  *  `since` inclusive, `cursor` continues strictly after a "date|document"
  *  position, oldest first ordered by (publication_date, document_number),

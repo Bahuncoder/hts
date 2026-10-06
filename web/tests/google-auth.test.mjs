@@ -32,7 +32,7 @@ const google = await fakeServer(GOOGLE_PORT, async (req, res) => {
     const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
     const profile = profiles.get(token);
     if (!profile) return json(res, 401, { error: "invalid_token" });
-    return json(res, 200, profile);
+    return json(res, 200, { sub: profile.email.toLowerCase(), ...profile });
   }
   return json(res, 404, { error: "not found" });
 });
@@ -125,7 +125,7 @@ await s.check("signing in again with the same Google account reuses it", async (
   assert.equal(rows.rows.length, 1, "no duplicate account");
 });
 
-await s.check("an existing password account is linked and marked verified", async () => {
+await s.check("an unverified password account is reclaimed and its old password removed", async () => {
   await db.execute({
     sql: "INSERT INTO account(id,email,password_hash,created_at) VALUES(?,?,?,?)",
     args: ["existing-1", "existing@example.test", "scrypt$aa$bb", new Date().toISOString()],
@@ -139,7 +139,31 @@ await s.check("an existing password account is linked and marked verified", asyn
   const row = await db.execute({ sql: "SELECT * FROM account WHERE id = ?", args: ["existing-1"] });
   assert.equal(row.rows.length, 1, "no duplicate account created");
   assert.ok(row.rows[0].email_verified_at, "now marked verified via Google");
-  assert.equal(row.rows[0].password_hash, "scrypt$aa$bb", "the existing password, if any, is left alone");
+  assert.notEqual(row.rows[0].password_hash, "scrypt$aa$bb", "unverified credentials are removed");
+  assert.equal(row.rows[0].google_subject, "existing@example.test");
+});
+
+await s.check("verified password accounts keep their password when linking Google", async () => {
+  await db.execute({ sql: "INSERT INTO account(id,email,password_hash,created_at,email_verified_at) VALUES(?,?,?,?,?)",
+    args: ["verified-password", "verified@example.test", "scrypt$aa$bb", new Date().toISOString(), new Date().toISOString()] });
+  profiles.set("verified-code", { sub: "stable-verified-sub", email: "verified@example.test", email_verified: true });
+  assert.ok(hasSessionCookie(await finishFlow(await beginFlow(), { code: "verified-code" })));
+  const row = (await db.execute("SELECT * FROM account WHERE id='verified-password'")).rows[0];
+  assert.equal(row.password_hash, "scrypt$aa$bb");
+  assert.equal(row.google_subject, "stable-verified-sub");
+});
+
+await s.check("a different Google subject cannot inherit an already linked email", async () => {
+  profiles.set("reassigned-code", { sub: "different-sub", email: "verified@example.test", email_verified: true });
+  const res = await finishFlow(await beginFlow(), { code: "reassigned-code" });
+  assert.equal(errorOf(res), "oauth");
+  assert.equal(hasSessionCookie(res), false);
+});
+
+await s.check("the linked Google subject remains the identity when its email changes", async () => {
+  profiles.set("changed-email-code", { sub: "stable-verified-sub", email: "new-verified@example.test", email_verified: true });
+  assert.ok(hasSessionCookie(await finishFlow(await beginFlow(), { code: "changed-email-code" })));
+  assert.equal((await db.execute("SELECT count(*) AS n FROM account WHERE email='new-verified@example.test'")).rows[0].n, 0);
 });
 
 await s.check("an unverified Google email is refused, not silently trusted", async () => {

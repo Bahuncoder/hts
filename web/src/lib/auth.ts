@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { accountById, accountByEmail, createAccount, db, planFor, type Account } from "./store";
 import type { Limits, PlanId } from "./plans";
-import { insertSession } from "./credentialStore";
+import { insertSession, sessionTokenHash } from "./credentialStore";
 import { nextQuery, safeNext } from "./next";
 
 const COOKIE = "htsdesk_session";
@@ -108,7 +108,7 @@ export async function endSession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (token) {
-    await (await db()).execute({ sql: "DELETE FROM session WHERE token = ?", args: [token] });
+    await (await db()).execute({ sql: "DELETE FROM session WHERE token = ?", args: [sessionTokenHash(token)] });
   }
   jar.delete(COOKIE);
 }
@@ -126,12 +126,12 @@ export async function currentViewer(): Promise<Viewer | null> {
   const c = await db();
   const rs = await c.execute({
     sql: "SELECT account_id, expires_at FROM session WHERE token = ?",
-    args: [token],
+    args: [sessionTokenHash(token)],
   });
   const row = rs.rows[0] as unknown as { account_id: string; expires_at: string } | undefined;
   if (!row) return null;
   if (new Date(row.expires_at) < new Date()) {
-    await c.execute({ sql: "DELETE FROM session WHERE token = ?", args: [token] });
+    await c.execute({ sql: "DELETE FROM session WHERE token = ?", args: [sessionTokenHash(token)] });
     return null;
   }
   const account = await accountById(row.account_id);

@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Human review of a saved catalogue line: approve/request changes/reject,
  *  assign, and comment — kept apart from the engine's own computed status.
  *
@@ -66,7 +67,7 @@ try {
     });
     await db.execute({
       sql: "INSERT INTO session VALUES(?,?,?)",
-      args: [`${id}-session`, id, "2099-01-01T00:00:00.000Z"],
+      args: [sessionTokenHash(`${id}-session`), id, "2099-01-01T00:00:00.000Z"],
     });
   }
   await seedAccount("owner");
