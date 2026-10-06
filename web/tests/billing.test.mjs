@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Stripe webhook, driven through the real route.
  *
  *  Starts the production build on port 3200 with a scratch accounts database
@@ -104,14 +105,14 @@ async function signedInAccount() {
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({
     sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-    args: [token, id, new Date(Date.now() + 3_600_000).toISOString()],
+    args: [sessionTokenHash(token), id, new Date(Date.now() + 3_600_000).toISOString()],
   });
   return { id, cookie: `htsdesk_session=${token}` };
 }
 async function checkoutRequest(plan, { cookie } = {}) {
   const res = await fetch(`${app.base}/api/billing/checkout`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    headers: { "content-type": "application/json", origin: app.base, ...(cookie ? { cookie } : {}) },
     body: JSON.stringify({ plan }),
   });
   return { status: res.status, body: await res.json().catch(() => null) };
@@ -119,7 +120,7 @@ async function checkoutRequest(plan, { cookie } = {}) {
 async function portalRequest({ cookie } = {}) {
   const res = await fetch(`${app.base}/api/billing/portal`, {
     method: "POST",
-    headers: { ...(cookie ? { cookie } : {}) },
+    headers: { origin: app.base, ...(cookie ? { cookie } : {}) },
   });
   return { status: res.status, body: await res.json().catch(() => null) };
 }

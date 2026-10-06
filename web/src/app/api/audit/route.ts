@@ -6,6 +6,7 @@ import { LIMITS, windowLabel } from "@/lib/plans";
 import { clientId } from "@/lib/throttle";
 import { signAudit, signedBodyFromEngine, signingSecret, type EngineRequest } from "@/lib/auditProof";
 import { readCapped } from "@/lib/requestBody";
+import { sameOrigin } from "@/lib/requestOrigin";
 
 /** Server-side proxy for the catalogue audit.
  *
@@ -84,6 +85,9 @@ function waitText(seconds: number): string {
 }
 
 export async function POST(request: Request) {
+  // Cookie-authenticated: a browser sends Origin on a cross-origin POST, so a
+  // request from elsewhere is refused before its body is read (audit S03).
+  if (!sameOrigin(request)) return Response.json({ error: "Invalid origin" }, { status: 403 });
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_BODY) return tooLarge();
 

@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** Entry Refund Check (app/api/refund-check, app/api/refund-checks/evidence):
  *  plan gating, the struck-down-IEEPA figure attributed against a real
  *  stated duty_paid, PSC/protest/liquidation timing, metering independent
@@ -62,7 +63,7 @@ async function accountWithSession(plan = "growth") {
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({
     sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-    args: [token, id, new Date(Date.now() + 3_600_000).toISOString()],
+    args: [sessionTokenHash(token), id, new Date(Date.now() + 3_600_000).toISOString()],
   });
   return { id, cookie: `htsdesk_session=${token}` };
 }
@@ -76,7 +77,7 @@ const row = (overrides = {}) => ({
 async function post(cookie, body) {
   const res = await fetch(`${app.base}/api/refund-check`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    headers: { "content-type": "application/json", origin: app.base, ...(cookie ? { cookie } : {}) },
     body: JSON.stringify(body),
   });
   const parsed = await res.json().catch(() => null);
@@ -108,7 +109,7 @@ try {
     assert.equal((await post(a.cookie, { name: "x", items: [] })).status, 400);
     assert.equal((await post(a.cookie, { name: "x" })).status, 400);
     const res = await fetch(`${app.base}/api/refund-check`, {
-      method: "POST", headers: { "content-type": "application/json", cookie: a.cookie }, body: "not json",
+      method: "POST", headers: { "content-type": "application/json", origin: app.base, cookie: a.cookie }, body: "not json",
     });
     assert.equal(res.status, 400);
   });

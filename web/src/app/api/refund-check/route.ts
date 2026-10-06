@@ -6,6 +6,7 @@ import {
 } from "@/lib/refundCheck";
 import { windowLabel } from "@/lib/plans";
 import { audit } from "@/lib/audit";
+import { sameOrigin } from "@/lib/requestOrigin";
 
 /** Entry Refund Check's server-side endpoint. The browser parses and
  *  validates the pasted/uploaded CSV client-side (lib/refundCheckCsv.ts, for
@@ -64,6 +65,8 @@ function waitText(seconds: number): string {
 }
 
 export async function POST(request: Request) {
+  // Cookie-authenticated: refuse a cross-origin POST before any side effect (audit S03).
+  if (!sameOrigin(request)) return NextResponse.json({ detail: "Invalid origin" }, { status: 403 });
   const viewer = await currentViewer();
   if (!viewer) return NextResponse.json({ detail: "Sign in first." }, { status: 401 });
   const { limits } = viewer;

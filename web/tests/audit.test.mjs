@@ -1,3 +1,4 @@
+import { sessionTokenHash } from "./sessionfixture.mjs";
 /** The public audit proxy and the classify page, as shipped.
  *
  *  Production build on 3203 with a scratch database and a fake engine on 3233.
@@ -30,7 +31,7 @@ const items = (n, description = "cotton t-shirt") =>
 async function post(body, { ip = newIp(), cookie, raw } = {}) {
   const res = await fetch(`${app.base}/api/audit`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": ip,
+    headers: { "content-type": "application/json", origin: app.base, "x-forwarded-for": ip,
                ...(cookie ? { cookie } : {}) },
     body: raw ?? JSON.stringify(body),
   });
@@ -46,7 +47,7 @@ async function signedIn(plan = "free") {
   const token = crypto.randomBytes(16).toString("hex");
   await db.execute({
     sql: "INSERT INTO session(token, account_id, expires_at) VALUES(?,?,?)",
-    args: [token, id, new Date(Date.now() + 3_600_000).toISOString()],
+    args: [sessionTokenHash(token), id, new Date(Date.now() + 3_600_000).toISOString()],
   });
   return { id, cookie: `htsdesk_session=${token}`, subject: `account:${id}` };
 }
@@ -65,7 +66,7 @@ function rawPost({ headers, chunks, waitMs = 3000 }) {
   return new Promise((resolve) => {
     const req = http.request({
       host: "127.0.0.1", port: 3203, path: "/api/audit", method: "POST",
-      headers: { "x-forwarded-for": newIp(), "content-type": "application/json", ...headers },
+      headers: { "x-forwarded-for": newIp(), "content-type": "application/json", origin: `http://127.0.0.1:3203`, ...headers },
     });
     const timer = setTimeout(() => { req.destroy(); resolve({ status: "timeout" }); }, waitMs);
     let written = 0;

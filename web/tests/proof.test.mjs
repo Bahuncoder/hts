@@ -41,7 +41,7 @@ let ip = 0;
 async function audit(base = app.base, body = { items }) {
   const res = await fetch(`${base}/api/audit`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip}` },
+    headers: { "content-type": "application/json", origin: base, "x-forwarded-for": `203.0.113.${++ip}` },
     body: JSON.stringify(body),
   });
   return { status: res.status, body: await res.json().catch(() => null), res };

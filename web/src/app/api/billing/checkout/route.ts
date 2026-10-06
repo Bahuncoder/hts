@@ -3,17 +3,29 @@ import { currentViewer } from "@/lib/auth";
 import { PAID_PLANS, priceIdFor, type PlanId } from "@/lib/plans";
 import { siteUrl, stripe } from "@/lib/stripe";
 import { subscriptionFor, upsertSubscription } from "@/lib/store";
+import { sameOrigin } from "@/lib/requestOrigin";
+import { readCapped } from "@/lib/requestBody";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  // Cookie-authenticated: refuse a cross-origin POST before creating anything (audit S03).
+  if (!sameOrigin(request)) return NextResponse.json({ error: "invalid origin" }, { status: 403 });
   const viewer = await currentViewer();
   if (!viewer) return NextResponse.json({ error: "sign in first" }, { status: 401 });
 
   const s = stripe();
   if (!s) return NextResponse.json({ error: "billing not configured" }, { status: 503 });
 
-  const { plan } = (await request.json().catch(() => ({}))) as { plan?: PlanId };
+  if (Number(request.headers.get("content-length")) > 4096) {
+    return NextResponse.json({ error: "request too large" }, { status: 413 });
+  }
+  const raw = await readCapped(request, 4096);
+  if (raw === null) return NextResponse.json({ error: "request too large" }, { status: 413 });
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { parsed = null; }
+  const plan = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? (parsed as { plan?: PlanId }).plan : undefined;
   if (!plan || !PAID_PLANS.includes(plan)) {
     return NextResponse.json({ error: "unknown plan" }, { status: 400 });
   }

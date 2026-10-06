@@ -194,7 +194,7 @@ try {
     const slowApi = call(secret, { items: items(1, "slow") });
     await new Promise((r) => setTimeout(r, 300));
     const web = await fetch(`${app.base}/api/audit`, {
-      method: "POST", headers: { "content-type": "application/json" },
+      method: "POST", headers: { "content-type": "application/json", origin: app.base },
       body: JSON.stringify({ items: items(1) }),
     });
     assert.equal(web.status, 200, "a web audit (a different lease subject entirely) is unaffected");
