@@ -39,7 +39,7 @@ from ops.freshness import SOURCES as FRESHNESS_SOURCES, assess as assess_freshne
 ROOT = Path(__file__).resolve().parent.parent
 
 # Wall-clock ceiling on a single audit, whatever the item count.
-AUDIT_BUDGET_SECONDS = float(os.environ.get("HTSDESK_AUDIT_BUDGET", "45"))
+AUDIT_BUDGET_SECONDS = min(45.0, max(1.0, float(os.environ.get("HTSDESK_AUDIT_BUDGET", "45"))))
 # FastAPI publishes /docs, /redoc and /openapi.json by default. That is a
 # complete map of the surface — every path, every schema — handed to anyone who
 # asks. Useful in development, so it is opt-in rather than removed.
@@ -414,7 +414,7 @@ def _incomplete_message(q) -> str:
 
 
 def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
-                req: AuditRequest) -> dict:
+                req: AuditRequest, deadline: float | None = None) -> dict:
     def refuse(status: str, code: str, message: str) -> dict:
         return {**base, "status": status, "error_code": code, "error": message,
                 "review_reasons": [message], "warnings": [], "incomplete": [],
@@ -436,7 +436,7 @@ def _audit_line(conn, eng: TariffEngine, item: CatalogItem, base: dict,
         if not item.description.strip():
             return refuse("unclassified", "no_description",
                           "No HTS code and no description to classify from.")
-        cls = run_classify(conn, item.description, limit=3, use_reasoning=_REASONING)
+        cls = run_classify(conn, item.description, limit=3, use_reasoning=_REASONING, deadline=deadline)
         if not cls.candidates:
             return refuse("unclassified", "no_candidate",
                           "Could not classify this product from its description.")
@@ -571,7 +571,7 @@ def audit(req: AuditRequest, conn=Depends(db), keyed: bool = Depends(guard("audi
                           "incomplete": [], "scope_unverified": [],
                           "suggested": [], "alternatives": []})
             continue
-        lines.append(_audit_line(conn, eng, item, base, req))
+        lines.append(_audit_line(conn, eng, item, base, req, started + AUDIT_BUDGET_SECONDS))
 
     priced = [ln for ln in lines if ln["status"] in _PRICED]
     total_value = sum((Decimal(str(ln["entered_value"])) for ln in priced), Decimal("0"))

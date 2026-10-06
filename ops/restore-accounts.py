@@ -19,6 +19,42 @@ from pathlib import Path
 DB = Path(os.environ.get("HTSDESK_ACCOUNTS_DB", "/opt/htsdesk/data/accounts.db"))
 
 
+def require_offline(db: Path) -> None:
+    """Refuse a restore while a process has the database or its journal open."""
+    targets = {str(db.resolve()) + suffix for suffix in ("", "-wal", "-shm", "-journal")}
+    proc = Path("/proc")
+    if not proc.is_dir():
+        raise RuntimeError("offline detection requires Linux /proc")
+    for process in proc.iterdir():
+        if not process.name.isdigit() or int(process.name) == os.getpid():
+            continue
+        try:
+            descriptors = list((process / "fd").iterdir())
+        except FileNotFoundError:
+            continue
+        except PermissionError:
+            raise RuntimeError("cannot inspect process descriptors; run restore as root")
+        for descriptor in descriptors:
+            try:
+                target = os.readlink(descriptor).removesuffix(" (deleted)")
+            except FileNotFoundError:
+                continue
+            if target in targets:
+                raise RuntimeError(f"database is open by PID {process.name}; stop the web app first")
+
+
+def snapshot(source: Path, destination: Path) -> None:
+    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.close(fd)
+    src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+    dst = sqlite3.connect(destination)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(f"usage: {argv[0]} <backup.db.gz>", file=sys.stderr)
@@ -47,16 +83,30 @@ def main(argv: list[str]) -> int:
             print("aborted")
             return 1
 
+        try:
+            require_offline(DB)
+        except RuntimeError as exc:
+            print(f"restore: {exc}", file=sys.stderr)
+            return 1
+
         if DB.exists():
             stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-            shutil.copy2(DB, DB.with_name(f"{DB.name}.replaced-{stamp}"))
+            snapshot(DB, DB.with_name(f"{DB.name}.replaced-{stamp}"))
 
         DB.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(raw, DB)
+        # SQLite's backup API replaces contents consistently without swapping
+        # the inode or manually deleting journals. A late opener therefore
+        # cannot retain a detached old database file.
+        fd = os.open(DB, os.O_WRONLY | os.O_CREAT, 0o600)
+        os.close(fd)
         DB.chmod(0o600)
-        # Stale WAL/SHM alongside a replaced database will corrupt it.
-        for suffix in ("-wal", "-shm"):
-            DB.with_name(DB.name + suffix).unlink(missing_ok=True)
+        src_db = sqlite3.connect(raw)
+        dst_db = sqlite3.connect(DB, timeout=5)
+        try:
+            src_db.backup(dst_db)
+        finally:
+            dst_db.close()
+            src_db.close()
 
     print(f"restored {accounts} accounts from {src}")
     print("restart the web app so it reopens the database")

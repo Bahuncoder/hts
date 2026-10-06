@@ -98,8 +98,9 @@ export async function repriceCatalogue(accountId: string, catalogueId: string): 
       if (res.status >= 500) await charge.refund();
       if (!res.ok) return { ok: false, error: "The duty engine could not re-price this catalogue. Try again shortly." };
       engineResponse = await res.json();
-    } catch {
-      await charge.refund();
+    } catch (error) {
+      // A timeout does not establish that the engine stopped doing work.
+      if (!(error instanceof Error && error.name === "TimeoutError")) await charge.refund();
       return { ok: false, error: "The duty engine is unavailable. Try again shortly." };
     }
 

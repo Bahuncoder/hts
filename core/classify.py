@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -326,10 +327,15 @@ def _prompt(query: str, cands: list[Candidate]) -> str:
     return "\n".join(lines)
 
 
-def _reason(query: str, cands: list[Candidate], api_key: str) -> tuple[list[Candidate], list[str]]:
+def _reason(query: str, cands: list[Candidate], api_key: str, *, deadline: float | None = None) -> tuple[list[Candidate], list[str]]:
     import httpx
 
-    resp = httpx.post(
+    remaining = min(8.0, deadline - time.monotonic()) if deadline is not None else 8.0
+    if remaining <= 0:
+        raise TimeoutError("classification deadline exhausted")
+    ends = time.monotonic() + remaining
+    # Bound each HTTP phase and check the total deadline while streaming.
+    with httpx.stream("POST",
         API_URL,
         headers={
             "x-api-key": api_key,
@@ -341,10 +347,17 @@ def _reason(query: str, cands: list[Candidate], api_key: str) -> tuple[list[Cand
             "max_tokens": 2000,
             "messages": [{"role": "user", "content": _prompt(query, cands)}],
         },
-        timeout=90,
-    )
-    resp.raise_for_status()
-    text = "".join(b.get("text", "") for b in resp.json().get("content", []))
+        timeout=max(0.001, remaining / 4),
+    ) as resp:
+        resp.raise_for_status()
+        body = bytearray()
+        for chunk in resp.iter_bytes():
+            if time.monotonic() >= ends:
+                raise TimeoutError("classification deadline exhausted")
+            body.extend(chunk)
+            if len(body) > 1024 * 1024:
+                raise ValueError("reasoning response exceeds limit")
+    text = "".join(b.get("text", "") for b in json.loads(body).get("content", []))
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         return cands, ["model returned no parsable ranking; retrieval order kept"]
@@ -365,7 +378,8 @@ def _reason(query: str, cands: list[Candidate], api_key: str) -> tuple[list[Cand
 
 def classify(conn: sqlite3.Connection, query: str, *, limit: int = 8,
              api_key: str | None = None, use_reasoning: bool = False,
-             exclude_rulings: frozenset[str] = frozenset()) -> Classification:
+             exclude_rulings: frozenset[str] = frozenset(),
+             deadline: float | None = None) -> Classification:
     """Rank candidate codes. Reasoning is opt-in: a caller must pass
     `use_reasoning=True` explicitly. The default is `False` so the paid model
     is never called just because ANTHROPIC_API_KEY happens to be set in the
@@ -385,7 +399,7 @@ def classify(conn: sqlite3.Connection, query: str, *, limit: int = 8,
         )
         return result
     try:
-        result.candidates, missing = _reason(query, cands, key)
+        result.candidates, missing = _reason(query, cands, key, deadline=deadline)
         result.reasoned = True
         result.notes.extend(f"Missing fact: {m}" for m in missing)
     except Exception as exc:                      # degrade, never fail

@@ -149,6 +149,14 @@ try {
     assert.equal(r.body.items[0].protestDeadline, "cannot be determined without a liquidation date");
   });
 
+  await check("scheduled liquidation respects both PSC deadlines", async () => {
+    for (const [age, until, expected] of [[400, 30, "likely closed"], [50, 4, "likely closed"], [50, 15, "likely closed"], [50, 16, "may be available until 15 days before the scheduled liquidation date"]]) {
+      const a = await accountWithSession("starter");
+      const r = await post(a.cookie, { name: "timing", items: [row({ entryDate: isoDaysAgo(age), liquidationDate: isoDaysAgo(-until) })] });
+      assert.equal(r.body.items[0].pscEligible, expected);
+    }
+  });
+
   await check("300-365 days, no liquidation date: PSC likely closed, protest still cannot be determined", async () => {
     const a = await accountWithSession("starter");
     const r = await post(a.cookie, { name: "x", items: [row({ entryDate: isoDaysAgo(340) })] });

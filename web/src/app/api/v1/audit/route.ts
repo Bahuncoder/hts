@@ -117,8 +117,9 @@ export async function POST(request: Request) {
       }
       const body = await res.text();
       return new NextResponse(body, { status: 200, headers: { "content-type": "application/json" } });
-    } catch {
-      await charge.refund();
+    } catch (error) {
+      // A timeout does not establish that the engine stopped doing work.
+      if (!(error instanceof Error && error.name === "TimeoutError")) await charge.refund();
       return fail(502, "engine_unavailable", "The duty engine could not process this request. Try again shortly.");
     }
   } finally {

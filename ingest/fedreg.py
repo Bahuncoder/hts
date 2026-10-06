@@ -29,6 +29,7 @@ import asyncio
 import json
 import re
 import sys
+from urllib.parse import urlparse
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -127,6 +128,44 @@ def _store(conn, docs: list[dict]) -> tuple[int, int]:
     return len(rows), relevant
 
 
+TEXT_HOSTS = frozenset({"www.federalregister.gov", "www.govinfo.gov", "www.gpo.gov"})
+MAX_TEXT_BYTES = 8 * 1024 * 1024
+
+
+def permitted_text_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        return (parsed.scheme == "https" and parsed.hostname in TEXT_HOSTS
+                and parsed.port in (None, 443) and not parsed.username
+                and not parsed.password)
+    except ValueError:
+        return False
+
+
+async def fetch_text(client: httpx.AsyncClient, url: str) -> str | None:
+    # Validate every redirect before making the next request. Never buffer an
+    # unbounded response, including decompressed content.
+    for _ in range(4):
+        if not permitted_text_url(url):
+            return None
+        async with client.stream("GET", url, timeout=15, follow_redirects=False) as response:
+            if response.is_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    return None
+                url = str(response.url.join(location))
+                continue
+            if response.status_code != 200:
+                return None
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > MAX_TEXT_BYTES:
+                    return None
+            return body.decode("utf-8", errors="replace")
+    return None
+
+
 async def enrich(conn, client: httpx.AsyncClient, limit: int) -> tuple[int, int]:
     """Fetch full text for tariff actions and extract the codes they name."""
     rows = conn.execute(
@@ -142,13 +181,13 @@ async def enrich(conn, client: httpx.AsyncClient, limit: int) -> tuple[int, int]
     async def one(doc: str, url: str):
         async with sem:
             try:
-                r = await client.get(url, timeout=45, follow_redirects=True)
+                text = await fetch_text(client, url)
             except httpx.HTTPError:
                 return
             await asyncio.sleep(0.05)
-        if r.status_code != 200:
+        if text is None:
             return
-        codes = sorted({c for c in HTS_RE.findall(r.text) if not c.startswith("99")})
+        codes = sorted({c for c in HTS_RE.findall(text) if not c.startswith("99")})
         updates.append((json.dumps(codes[:400]), doc))
 
     await asyncio.gather(*(one(r["document_number"], r["raw_text_url"]) for r in rows))

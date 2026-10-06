@@ -5,7 +5,10 @@
  *
  *  Citations (verified against primary/secondary sources, not memorized):
  *   - PSC: filable up to 300 days after entry, and not within 15 days of the
- *     scheduled liquidation date, whichever is earlier -- 19 CFR 101.9(b).
+ *     scheduled liquidation date, whichever is earlier -- CBP PSC test rules.
+ *     https://content.govdelivery.com/accounts/USDHSCBP/bulletins/4236480
+ *     Extensions and qualifying suspensions can exempt the 300-day limit;
+ *     those statuses are not collected here, so ask the broker to confirm.
  *   - Liquidation: CBP's normal cycle triggers around 314 days after entry;
  *     the statutory deadline (deemed liquidated at the importer's own
  *     declared rate if CBP does nothing) is one year after entry absent a
@@ -62,7 +65,7 @@ export function computeRefundTiming(
         daysSinceEntry,
         pscEligible: "may be available",
         pscDetail: "A Post Summary Correction may still be available (up to 300 days after entry, "
-          + "and not within 15 days of the scheduled liquidation date -- 19 CFR 101.9(b)). "
+          + "and not within 15 days of the scheduled liquidation date -- CBP PSC test rules). "
           + "Confirm this entry has not already liquidated.",
         protestDeadline: CANNOT_DETERMINE,
         protestDetail: "The 180-day protest window (19 U.S.C. Sec. 1514(c)(3)) runs from the liquidation "
@@ -74,7 +77,7 @@ export function computeRefundTiming(
       return {
         daysSinceEntry,
         pscEligible: "likely closed",
-        pscDetail: "The 300-day Post Summary Correction window (19 CFR 101.9(b)) has likely closed.",
+        pscDetail: "The 300-day Post Summary Correction window (CBP PSC test rules) has likely closed.",
         protestDeadline: CANNOT_DETERMINE,
         protestDetail: "Without a liquidation date, the 180-day protest window (19 U.S.C. Sec. 1514(c)(3)) "
           + "cannot be checked -- provide it, or confirm liquidation status with your broker.",
@@ -84,7 +87,7 @@ export function computeRefundTiming(
     return {
       daysSinceEntry,
       pscEligible: "likely closed",
-      pscDetail: "The 300-day Post Summary Correction window (19 CFR 101.9(b)) has likely closed.",
+      pscDetail: "The 300-day Post Summary Correction window (CBP PSC test rules) has likely closed.",
       protestDeadline: CANNOT_DETERMINE,
       protestDetail: "Absent a suspension, this entry would have deemed-liquidated at your declared rate "
         + "under 19 U.S.C. Sec. 1504(a). If so, a protest (180 days from the actual liquidation date, "
@@ -96,11 +99,20 @@ export function computeRefundTiming(
 
   const daysSinceLiquidation = daysBetween(liquidationDate, today);
   if (daysSinceLiquidation < 0) {
+    const closed = daysSinceEntry >= PSC_WINDOW_DAYS || daysSinceLiquidation >= -15;
+    if (closed) return {
+      daysSinceEntry,
+      pscEligible: "likely closed",
+      pscDetail: "The entry has reached the 300-day limit or is within 15 days of scheduled liquidation. Extensions or qualifying suspensions can change the 300-day limit; confirm the entry status and timing with your broker.",
+      protestDeadline: "not yet applicable -- this entry has not liquidated",
+      protestDetail: "The protest clock starts at actual liquidation, which has not yet occurred on the date given.",
+      disclaimer: DISCLAIMER,
+    };
     return {
       daysSinceEntry,
       pscEligible: "may be available until 15 days before the scheduled liquidation date",
       pscDetail: "This entry has not liquidated as of the date given, so a Post Summary Correction "
-        + "(19 CFR 101.9(b)) may still be possible up until 15 days before liquidation.",
+        + "(CBP PSC test rules) may still be possible up until 15 days before liquidation.",
       protestDeadline: "not yet applicable -- this entry has not liquidated",
       protestDetail: "The 180-day protest clock (19 U.S.C. Sec. 1514(c)(3)) starts at liquidation, which "
         + "has not yet occurred on the date you gave.",
@@ -114,7 +126,7 @@ export function computeRefundTiming(
   return {
     daysSinceEntry,
     pscEligible: "not available -- this entry has already liquidated",
-    pscDetail: "Post Summary Correction is a pre-liquidation mechanism (19 CFR 101.9(b)); this entry's "
+    pscDetail: "Post Summary Correction is a pre-liquidation mechanism (CBP PSC test rules); this entry's "
       + "liquidation date means it is no longer available.",
     protestDeadline: deadlineIso,
     protestDetail: open

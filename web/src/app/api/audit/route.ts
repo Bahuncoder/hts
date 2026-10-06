@@ -164,8 +164,9 @@ export async function POST(request: Request) {
         status: res.status,
         headers: { "content-type": "application/json" },
       });
-    } catch {
-      await charge.refund();
+    } catch (error) {
+      // A timeout does not establish that the engine stopped doing work.
+      if (!(error instanceof Error && error.name === "TimeoutError")) await charge.refund();
       return NextResponse.json(
         { detail: "The duty engine is unavailable. Try again shortly." },
         { status: 502 },
