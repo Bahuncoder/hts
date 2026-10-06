@@ -1,0 +1,19 @@
+[Unit]
+Description=HTSDesk ruling ingest (CBP rulings, weekly)
+# Runs on its own: SQLite takes one writer, and the daily refresh and the
+# Federal Register poll write too (docs/RUNBOOK.md, "Ingest writes and the
+# write lock"). The timer keeps it on a day with no refresh.
+
+[Service]
+Type=oneshot
+User=htsdesk
+WorkingDirectory=/opt/htsdesk
+# A full crawl of up to 60,000 rulings takes hours.
+TimeoutStartSec=12h
+ExecStart=/opt/htsdesk/.venv/bin/python ingest/cross.py --skip-metadata --bodies 60000 --concurrency 6
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/htsdesk/data
