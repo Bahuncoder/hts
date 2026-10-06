@@ -419,10 +419,10 @@ try {
       const page = await newPage();
       await page.goto(`${app.base}/login?next=${encodeURIComponent(evil)}`, { waitUntil: "networkidle" });
       assert.equal(await page.locator("input[name=next]").count(), 0, `${evil}: not even placed in the form`);
+      await page.waitForLoadState("networkidle");
       await page.fill("input[name=email]", email);
       await page.fill("input[name=password]", PASSWORD);
-      await page.click("button[type=submit]");
-      await page.waitForURL(/\/account$/, { timeout: 20000 });
+      await Promise.all([page.waitForURL(/\/account$/, { timeout: 20000 }), page.click("button[type=submit]")]);
       assert.equal(new URL(page.url()).origin, app.base, evil);
     }
   });
@@ -446,11 +446,11 @@ try {
 
   await check("an already signed-in visitor on /login?next= is sent on, but only to an allowed place", async () => {
     const page = await newPage({ token: await seededSession("already") });
-    await page.goto(`${app.base}/login?next=/alerts`);
+    await page.goto(`${app.base}/login?next=/alerts`, { waitUntil: "networkidle" });
     await page.waitForURL(/\/alerts$/);
-    await page.goto(`${app.base}/login?next=${encodeURIComponent("https://evil.example")}`);
+    await page.goto(`${app.base}/login?next=${encodeURIComponent("https://evil.example")}`, { waitUntil: "networkidle" });
     await page.waitForURL(/\/account$/);
-    await page.goto(`${app.base}/signup?next=/catalogues`);
+    await page.goto(`${app.base}/signup?next=/catalogues`, { waitUntil: "networkidle" });
     await page.waitForURL(/\/catalogues$/);
   });
 } finally {
