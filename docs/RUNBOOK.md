@@ -237,6 +237,24 @@ SQLite file directly and cannot see a remote Turso database. Restore is
 deliberately manual — it asks you to type RESTORE, and keeps the file it
 replaces alongside.
 
+## Freshness alerts
+
+`htsdesk-alerts.timer` runs `python3 -m ops.alerts` daily at 10:30 UTC, an hour
+and a half after the refresh. It emails `HTSDESK_OPS_EMAIL` when the data goes
+stale or a refresh fails, and once more when it recovers. Nothing is sent in
+between. A failed refresh also alerts straight away.
+
+Set in `/etc/htsdesk/api.env`: `HTSDESK_OPS_EMAIL`, and one of `RESEND_API_KEY`
+or `POSTMARK_API_KEY`. With no provider or no address, nothing is sent and the
+last state is recorded in `data/alert_state.json` (`last_result` says why).
+
+Limits (days): HTS schedule and notes 45, rulings 30, Federal Register poll 3.
+Change them with `HTSDESK_MAX_BUILD_AGE_DAYS`, `HTSDESK_MAX_INGEST_AGE_DAYS`
+and `HTSDESK_MAX_POLL_AGE_DAYS`.
+
+To test the path without waiting for staleness, run `make alerts` with the
+variables set; it reports what it did as JSON.
+
 ## Health checks
 
 ```bash
@@ -247,8 +265,11 @@ curl -s localhost:8099/api/health | jq
 not enough — the failure that matters is an index that no longer covers its
 table while the table looks fine — so also check:
 
-- `status` is `ok` (it is `degraded` when the precedent index is empty or does
-  not cover every ruling; an unkeyed call reports only the empty case);
+- `status` is `ok` (`degraded` when the precedent index is empty or does not
+  cover every ruling; `stale` when a source is past its age limit or the last
+  refresh failed; an unkeyed call reports only the status);
+- `freshness.stale` is empty and `freshness.last_refresh_failed` is `false`.
+  `freshness.ages_days` shows each source's age against `freshness.max_age_days`;
 - `index_complete` is `true` and `index.rulings_indexed == index.rulings`;
 - `engine_current` is `true` (or `null` before the first quote). `false` means
   the engine has not yet reloaded the database's `dataset_revision`;

@@ -1,0 +1,18 @@
+[Unit]
+Description=HTSDesk data freshness alert (emails HTSDESK_OPS_EMAIL when data goes stale)
+
+[Service]
+Type=oneshot
+User=htsdesk
+WorkingDirectory=/opt/htsdesk
+# HTSDESK_OPS_EMAIL and one provider key (RESEND_API_KEY or POSTMARK_API_KEY)
+# live here, beside the API's own secrets.
+EnvironmentFile=/etc/htsdesk/api.env
+ExecStart=/opt/htsdesk/.venv/bin/python -m ops.alerts
+
+# Reads the database and the refresh status; writes only its own state file.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/htsdesk/data

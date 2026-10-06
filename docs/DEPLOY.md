@@ -45,8 +45,8 @@ printf 'ANTHROPIC_API_KEY=sk-ant-...\nHTSDESK_ENABLE_REASONING=0\nHTSDESK_ADMIN_
 chmod 600 /etc/htsdesk/api.env
 
 cp deploy/htsdesk-api.service /etc/systemd/system/
-cp deploy/htsdesk-ingest.{service,timer} deploy/htsdesk-diff.{service,timer} /etc/systemd/system/
-systemctl enable --now htsdesk-api htsdesk-ingest.timer htsdesk-diff.timer
+cp deploy/htsdesk-ingest.{service,timer} deploy/htsdesk-diff.{service,timer} deploy/htsdesk-alerts.{service,timer} /etc/systemd/system/
+systemctl enable --now htsdesk-api htsdesk-ingest.timer htsdesk-diff.timer htsdesk-alerts.timer
 ```
 
 Put nginx in front using `deploy/nginx.conf` (edit the hostname), then issue a
@@ -105,6 +105,11 @@ its engine when the dataset revision changes; see `docs/RUNBOOK.md`.
 
 Ruling ingest is separate and incremental — the corpus only grows at the
 margin, so run `ingest/cross.py` weekly rather than daily.
+
+`htsdesk-alerts.timer` checks freshness daily and emails the operator when the
+data goes stale or a refresh fails; see `docs/RUNBOOK.md` (Freshness alerts).
+Note that no timer runs `ingest/cross.py` yet: the weekly ruling ingest has to
+be scheduled by hand until one is added, and rulings go stale without it.
 
 **Re-verify the user-fee constants every October.** MPF's floor and cap are
 inflation-adjusted each fiscal year under 19 CFR 24.22(k); they are declared as

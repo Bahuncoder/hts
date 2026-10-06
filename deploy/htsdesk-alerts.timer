@@ -1,0 +1,11 @@
+[Unit]
+Description=Check HTSDesk data freshness daily
+
+[Timer]
+# An hour and a half after the refresh, so a refresh that just ran is judged
+# on its own result rather than on yesterday's.
+OnCalendar=*-*-* 10:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
