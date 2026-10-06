@@ -16,6 +16,12 @@ services; nothing here has been checked on the deployed system yet.
 
 ## Done in the repository
 
+- Security audit findings S01 to S06 fixed, with regression suites
+  (`web/tests/security-audit-2026-10-06.mjs`, `origin`, `budget-race`,
+  `apikey-limit-race`). Dependencies patched; live npm audit: zero known
+  vulnerabilities.
+- Production build passes (`npm run build`).
+
 - Freshness judgement and health status `stale` (`ops/freshness.py`, `/api/health`), tests 9/9.
 - Operator alerts by email, one per change plus recovery, and an alert on failed refresh (`ops/alerts.py`), tests 6/6.
 - Refresh records each outcome (`data/refresh_status.json`), tests 10/10.

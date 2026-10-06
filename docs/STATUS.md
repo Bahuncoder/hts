@@ -1,9 +1,20 @@
 # Build status
 
-Last updated 2026-10-04. The independent audit in `PROJECT-AUDIT.md` (2026-09-19)
+Last updated 2026-10-06. The independent audit in `PROJECT-AUDIT.md` (2026-09-19)
 is the last full audit; everything below it in this file reflects work done since.
 This is the single place readiness is stated; if it disagrees with another
 document, this one has been updated more recently or the other is wrong.
+
+**Update, 2026-10-06.** The security audit (`SECURITY-AUDIT-2026-10-06.md`) is
+fixed in code: Google sign-in no longer adopts an unverified password account,
+quota checks and charges are one atomic step, cookie-authenticated POST routes
+refuse other origins, sessions are stored as digests (existing users sign in
+again after deployment), API-key limits are enforced in the insert, and webhook
+and checkout bodies are capped. Dependencies are patched; npm audit reports zero
+known vulnerabilities. Data freshness is judged and alerted on (`ops/freshness.py`,
+`ops/alerts.py`, `/api/health` reports `stale`), and the ruling ingest runs
+weekly from a timer. None of this is deployed. What remains before launch is in
+`LAUNCH-CHECKLIST.md`.
 
 **Freemium: a free plan, plus paid Starter/Growth plans.** The engine's
 calculation integrity, refresh pipeline and notification recovery were
