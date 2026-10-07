@@ -21,7 +21,10 @@ import { createClient } from "@libsql/client";
 import { chromium } from "playwright-core";
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const PORT = 3488;
+// A port not shared with any other test file: calculator-flow.test.mjs
+// used to share 3488 with this file, and a timing-dependent shutdown race
+// between the two let this test proceed against the wrong server.
+const PORT = 3489;
 const BASE = `http://127.0.0.1:${PORT}`;
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "htsdesk-review-"));
 const dbPath = path.join(scratch, "accounts.db");
